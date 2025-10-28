@@ -11,11 +11,13 @@ import { ClipboardIcon } from './icons/ClipboardIcon';
 import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
 import { formatTimeAgo } from '../utils';
 import { ClockIcon } from './icons/ClockIcon';
+import { BriefcaseIcon } from './icons/BriefcaseIcon';
 
 interface EarnPageProps {
   user: MemberUser;
   onUpdateUser: (updatedUser: Partial<User>) => Promise<void>;
   onNavigateToRedemption: () => void;
+  onNavigateToInvestments: () => void;
 }
 
 const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; description: string }> = ({ title, value, icon, description }) => (
@@ -42,7 +44,7 @@ const PayoutStatusBadge: React.FC<{ status: PayoutRequest['status'] }> = ({ stat
 };
 
 
-const COMMODITIES = ["Bread (Loaf)", "Milk (1L)", "Cooking Oil (2L)", "Maize Meal (10kg)", "Sugar (2kg)", "Eggs (Dozen)"];
+const COMMODITIES = ["Bread (Loaf)", "Milk (1L)", "Cooking Oil (2L)", "Maize Meal (10kg)", "Sugar (2kg)", "Eggs (Dozen)", "Other"];
 
 const RedemptionStatus: React.FC<{ cycle: RedemptionCycle | null, onNavigate: () => void }> = ({ cycle, onNavigate }) => {
     if (!cycle) {
@@ -91,11 +93,11 @@ const RedemptionStatus: React.FC<{ cycle: RedemptionCycle | null, onNavigate: ()
 };
 
 
-export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNavigateToRedemption }) => {
+export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNavigateToRedemption, onNavigateToInvestments }) => {
     const { addToast } = useToast();
     const [isLoading, setIsLoading] = useState<{ [key: string]: boolean }>({});
     const [priceData, setPriceData] = useState({ commodity: COMMODITIES[0], price: '', shop: '' });
-    const [knowledge, setKnowledge] = useState('');
+    const [otherCommodity, setOtherCommodity] = useState('');
     const [isCopied, setIsCopied] = useState(false);
     
     // Payout state
@@ -108,6 +110,7 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
     const canCheckIn = !user.lastDailyCheckin || (new Date().getTime() - user.lastDailyCheckin.toDate().getTime()) > 24 * 60 * 60 * 1000;
 
     const referralLink = `${window.location.origin}?ref=${user.referralCode}`;
+    const referralEarnings = user.referralEarnings ?? 0;
 
     useEffect(() => {
         api.getCurrentRedemptionCycle().then(setCycle);
@@ -161,39 +164,23 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
     
     const handlePriceSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!priceData.price || !priceData.shop) {
-            addToast("Please fill in both price and shop name.", "error");
+        const commodityToSubmit = priceData.commodity === 'Other' ? otherCommodity : priceData.commodity;
+
+        if (!priceData.price || !priceData.shop || !commodityToSubmit.trim()) {
+            addToast("Please fill in commodity, price, and shop name.", "error");
             return;
         }
         setIsLoading(prev => ({ ...prev, price: true }));
         try {
-            await api.submitPriceVerification(user.id, priceData.commodity, parseFloat(priceData.price), priceData.shop);
+            await api.submitPriceVerification(user.id, commodityToSubmit, parseFloat(priceData.price), priceData.shop);
             await onUpdateUser({}); // Just to trigger a user data refresh
             addToast('Price submitted! +15 CCAP awarded.', 'success');
             setPriceData({ commodity: COMMODITIES[0], price: '', shop: '' });
+            setOtherCommodity('');
         } catch (error) {
             addToast("Failed to submit price.", "error");
         } finally {
             setIsLoading(prev => ({ ...prev, price: false }));
-        }
-    };
-    
-    const handleKnowledgeSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!knowledge.trim()) {
-            addToast("Knowledge contribution cannot be empty.", "error");
-            return;
-        }
-        setIsLoading(prev => ({ ...prev, knowledge: true }));
-        try {
-            await api.submitKnowledgeContribution(user.id, knowledge);
-            await onUpdateUser({});
-            addToast('Knowledge shared! +25 CCAP awarded.', 'success');
-            setKnowledge('');
-        } catch (error) {
-            addToast("Failed to share knowledge.", "error");
-        } finally {
-            setIsLoading(prev => ({ ...prev, knowledge: false }));
         }
     };
 
@@ -205,7 +192,7 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
         }
         setIsLoading(prev => ({ ...prev, payout: true }));
         try {
-            await api.requestPayout(user, payoutData.ecocashName, payoutData.ecocashNumber, user.referralEarnings);
+            await api.requestPayout(user, payoutData.ecocashName, payoutData.ecocashNumber, referralEarnings ?? 0);
             await onUpdateUser({ referralEarnings: 0 });
             addToast('Payout request submitted successfully!', 'success');
             setPayoutData({ ecocashName: '', ecocashNumber: '' });
@@ -231,6 +218,27 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
             </div>
             
             <RedemptionStatus cycle={cycle} onNavigate={onNavigateToRedemption} />
+
+            <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                <h2 className="text-xl font-semibold text-white flex items-center mb-2">
+                    <BriefcaseIcon className="h-6 w-6 mr-3 text-yellow-400" />
+                    Venture Equity (VEQ)
+                </h2>
+                <p className="text-gray-400 mb-4">Your ownership in community ventures. Redeem your shares or watch your investments grow.</p>
+                <div className="bg-slate-900/50 p-4 rounded-lg flex items-center justify-between">
+                    <div>
+                        <p className="text-sm text-gray-400">Your Holdings</p>
+                        <p className="text-lg font-semibold text-white">
+                            {user.ventureEquity?.length > 0 
+                                ? `Invested in ${user.ventureEquity.length} venture(s)` 
+                                : 'No investments yet'}
+                        </p>
+                    </div>
+                    <button onClick={onNavigateToInvestments} className="px-4 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-600 font-semibold text-sm">
+                        Manage Investments
+                    </button>
+                </div>
+            </div>
 
             {/* Daily Check-in */}
             <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
@@ -259,30 +267,29 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
                             </div>
                             <div>
                                 <label htmlFor="price" className="block text-sm font-medium text-gray-300">Price (USD)</label>
-                                <input type="number" step="0.01" id="price" value={priceData.price} onChange={e => setPriceData(p => ({...p, price: e.target.value}))} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
+                                <input type="number" step="0.01" id="price" value={priceData.price} onChange={e => setPriceData(p => ({...p, price: e.target.value}))} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
                             </div>
                         </div>
+                        {priceData.commodity === 'Other' && (
+                             <div className="animate-fade-in">
+                                <label htmlFor="otherCommodity" className="block text-sm font-medium text-gray-300">Specify Commodity Name <span className="text-red-400">*</span></label>
+                                <input
+                                    type="text"
+                                    id="otherCommodity"
+                                    value={otherCommodity}
+                                    onChange={e => setOtherCommodity(e.target.value)}
+                                    className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"
+                                    required
+                                />
+                            </div>
+                        )}
                         <div>
                             <label htmlFor="shop" className="block text-sm font-medium text-gray-300">Shop Name & Location</label>
-                            <input type="text" id="shop" value={priceData.shop} onChange={e => setPriceData(p => ({...p, shop: e.target.value}))} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
+                            <input type="text" id="shop" value={priceData.shop} onChange={e => setPriceData(p => ({...p, shop: e.target.value}))} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
                         </div>
                         <div className="text-right">
                              <button type="submit" disabled={isLoading.price} className="px-6 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-600 font-semibold disabled:bg-slate-600">
                                 {isLoading.price ? <LoaderIcon className="h-5 w-5 animate-spin"/> : 'Submit Price'}
-                            </button>
-                        </div>
-                    </form>
-                 </div>
-
-                 {/* Knowledge Contribution */}
-                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                     <h3 className="text-xl font-semibold text-white">Share Knowledge (+25 CCAP)</h3>
-                    <p className="text-gray-400 mt-1 mb-4">Contribute valuable information, a business tip, or a useful local insight to the commons knowledge base.</p>
-                    <form onSubmit={handleKnowledgeSubmit}>
-                        <textarea value={knowledge} onChange={e => setKnowledge(e.target.value)} rows={4} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" placeholder="Share something valuable..."></textarea>
-                         <div className="text-right mt-4">
-                             <button type="submit" disabled={isLoading.knowledge} className="px-6 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-600 font-semibold disabled:bg-slate-600">
-                                {isLoading.knowledge ? <LoaderIcon className="h-5 w-5 animate-spin"/> : 'Share Knowledge'}
                             </button>
                         </div>
                     </form>
@@ -311,13 +318,13 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
                     </div>
                     <div>
                         <h3 className="text-lg font-semibold text-white">Available Earnings</h3>
-                        <p className="text-3xl font-bold text-green-400">${(user.referralEarnings || 0).toFixed(2)}</p>
-                         {(user.referralEarnings || 0) > 0 && (
+                        <p className="text-3xl font-bold text-green-400">${referralEarnings.toFixed(2)}</p>
+                         {referralEarnings > 0 && (
                             <form onSubmit={handlePayoutRequest} className="mt-4 space-y-3">
                                 <input type="text" value={payoutData.ecocashName} onChange={e => setPayoutData(p => ({...p, ecocashName: e.target.value}))} placeholder="Ecocash Full Name" required className="block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
                                 <input type="tel" value={payoutData.ecocashNumber} onChange={e => setPayoutData(p => ({...p, ecocashNumber: e.target.value}))} placeholder="Ecocash Phone Number" required className="block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
                                 <button type="submit" disabled={isLoading.payout} className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold disabled:bg-slate-600">
-                                    {isLoading.payout ? 'Processing...' : `Request Payout ($${user.referralEarnings.toFixed(2)})`}
+                                    {isLoading.payout ? 'Processing...' : `Request Payout ($${referralEarnings.toFixed(2)})`}
                                 </button>
                             </form>
                          )}

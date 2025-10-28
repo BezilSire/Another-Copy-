@@ -31,7 +31,7 @@ export const AIVenturePitchAssistant: React.FC<AIVenturePitchAssistantProps> = (
     const [targetMarket, setTargetMarket] = useState('');
     const [step2Result, setStep2Result] = useState<{ personas: any[], requiredSkills: string[] } | null>(null);
     const [pitchDeck, setPitchDeck] = useState<{ title: string; slides: { title: string; content: string }[] } | null>(
-        user.pitchDeckTitle && user.pitchDeckSlides ? { title: user.pitchDeckTitle, slides: user.pitchDeckSlides } : null
+        user.pitchDeckTitle && Array.isArray(user.pitchDeckSlides) ? { title: user.pitchDeckTitle, slides: user.pitchDeckSlides } : null
     );
     const [fundingGoalUsd, setFundingGoalUsd] = useState(0);
 
@@ -246,7 +246,7 @@ export const AIVenturePitchAssistant: React.FC<AIVenturePitchAssistantProps> = (
                             <h2 className="text-2xl font-bold text-white">{pitchDeck.title}</h2>
                         </div>
                         <div className="mt-4 space-y-4">
-                            {pitchDeck.slides.map((slide, index) => (
+                            {pitchDeck.slides && pitchDeck.slides.map((slide, index) => (
                                 <div key={index} className="pt-4 border-t border-slate-700">
                                     <div className="flex justify-between items-start"><h3 className="text-lg font-semibold text-green-400">{slide.title}</h3><button onClick={() => handleCopy(slide.content, index)} className="text-slate-400 hover:text-white transition-colors" title="Copy content">{copiedSlide === index ? <ClipboardCheckIcon className="h-5 w-5 text-green-400" /> : <ClipboardIcon className="h-5 w-5" />}</button></div>
                                     <p className="text-gray-300 whitespace-pre-line mt-1">{slide.content}</p>

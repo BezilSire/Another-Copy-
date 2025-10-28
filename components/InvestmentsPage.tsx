@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+// FIX: Added Distribution to type imports
 import { MemberUser, Venture, Distribution, VentureEquityHolding, User } from '../types';
 import { api } from '../services/apiService';
 import { LoaderIcon } from './icons/LoaderIcon';
@@ -23,10 +24,12 @@ const VentureHoldingCard: React.FC<VentureHoldingCardProps> = ({ holding, user, 
         const fetchData = async () => {
             setIsLoading(true);
             try {
+                // FIX: Corrected API call from getVentureDetails to getVentureById
                 const ventureDetails = await api.getVentureById(holding.ventureId);
                 setVenture(ventureDetails);
                 if (ventureDetails) {
-                    const userDists = await api.getDistributionsForUserInVenture(user, holding.ventureId, holding.shares, ventureDetails.totalSharesIssued);
+                    // FIX: Pass user.id instead of the full user object
+                    const userDists = await api.getDistributionsForUserInVenture(user.id, holding.ventureId, holding.shares, ventureDetails.totalSharesIssued);
                     setDistributions(userDists);
                 }
             } catch (error) {
@@ -36,12 +39,12 @@ const VentureHoldingCard: React.FC<VentureHoldingCardProps> = ({ holding, user, 
             }
         };
         fetchData();
-    }, [holding, user]);
+    }, [holding.ventureId, holding.shares, user.id]);
 
-    const equityPercentage = venture ? (holding.shares / venture.totalSharesIssued) * 100 : 0;
+    const equityPercentage = venture && venture.totalSharesIssued > 0 ? (holding.shares / venture.totalSharesIssued) * 100 : 0;
     
     const userTotalDistributed = useMemo(() => {
-        if (!venture) return 0;
+        if (!venture || venture.totalSharesIssued === 0) return 0;
         const userShareFraction = holding.shares / venture.totalSharesIssued;
         return distributions.reduce((sum, dist) => sum + (dist.totalAmount * userShareFraction), 0);
     }, [distributions, venture, holding.shares]);
@@ -90,7 +93,7 @@ const VentureHoldingCard: React.FC<VentureHoldingCardProps> = ({ holding, user, 
                 <div className="px-4 pb-4 animate-fade-in">
                     <ul className="space-y-2 mt-2 text-sm">
                         {distributions.map(dist => {
-                            const userShare = (dist.totalAmount / venture.totalSharesIssued) * holding.shares;
+                            const userShare = venture.totalSharesIssued > 0 ? (dist.totalAmount / venture.totalSharesIssued) * holding.shares : 0;
                             return (
                                 <li key={dist.id} className="flex justify-between items-center bg-slate-700/50 p-2 rounded-md">
                                     <div>
@@ -111,9 +114,10 @@ const VentureHoldingCard: React.FC<VentureHoldingCardProps> = ({ holding, user, 
 interface InvestmentsPageProps {
   user: MemberUser;
   onViewProfile: (userId: string) => void;
+  onNavigateToMarketplace: () => void;
 }
 
-export const InvestmentsPage: React.FC<InvestmentsPageProps> = ({ user }) => {
+export const MyInvestmentsPage: React.FC<InvestmentsPageProps> = ({ user, onNavigateToMarketplace }) => {
   const holdings = user.ventureEquity || [];
   const [redeemModalHolding, setRedeemModalHolding] = useState<VentureEquityHolding | null>(null);
 
@@ -128,10 +132,31 @@ export const InvestmentsPage: React.FC<InvestmentsPageProps> = ({ user }) => {
             />
         )}
       <h1 className="text-3xl font-bold text-white">My Investments (VEQ)</h1>
-      <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+      
+      <div className="bg-slate-900/50 p-6 rounded-lg border border-slate-700 space-y-3">
         <h2 className="text-lg font-semibold text-gray-200">What is Venture Equity (VEQ)?</h2>
-        <p className="text-sm text-gray-400 mt-1">VEQ represents your direct ownership stake in ventures created within the Ubuntium Commons. You earn it by proposing successful projects or contributing your skills. As these ventures generate profit, a portion is distributed to you based on the shares you hold.</p>
+        <p className="text-sm text-gray-400">
+            Venture Equity (VEQ) represents your direct ownership stake—in the form of shares—in community-led businesses launched through the Ubuntium platform. It's the primary way to turn your contributions into long-term, wealth-generating assets.
+        </p>
+        <h3 className="text-md font-semibold text-gray-300 pt-2 border-t border-slate-800">How do you earn VEQ?</h3>
+        <p className="text-sm text-gray-400">
+            The primary way to acquire VEQ is by investing your <strong>Civic Capital (CCAP)</strong> into ventures listed on the Venture Marketplace. This option becomes available during the bi-monthly <strong>Redemption Cycle</strong>. When you choose to invest, your CCAP is converted into shares in the venture of your choice, solidifying your stake in its success.
+        </p>
+        <h3 className="text-md font-semibold text-gray-300 pt-2 border-t border-slate-800">What happens when you invest?</h3>
+        <p className="text-sm text-gray-400">
+            The CCAP you invest is consumed and transferred to the venture's funding pool. In exchange, you receive a corresponding number of VEQ shares. As the venture becomes operational and generates profit, a portion of those profits is distributed back to you and other shareholders, providing a potential return on your investment. This creates a powerful cycle where your civic contributions fuel economic growth that you directly benefit from.
+        </p>
       </div>
+
+       <div className="bg-slate-900/50 p-6 rounded-lg border border-slate-700 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div>
+                <h2 className="text-lg font-semibold text-white">Grow Your Portfolio</h2>
+                <p className="text-sm text-gray-300 mt-1">Explore new community ventures seeking funding and convert your CCAP into long-term assets.</p>
+            </div>
+            <button onClick={onNavigateToMarketplace} className="w-full sm:w-auto flex-shrink-0 px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold">
+                Explore the Marketplace
+            </button>
+        </div>
 
       {holdings.length > 0 ? (
         <div className="space-y-4">
@@ -143,7 +168,7 @@ export const InvestmentsPage: React.FC<InvestmentsPageProps> = ({ user }) => {
         <div className="text-center py-16 bg-slate-800 rounded-lg">
             <TrendingUpIcon className="h-12 w-12 mx-auto text-slate-600 mb-4" />
             <h3 className="font-semibold text-lg text-white">You have no Venture Equity yet.</h3>
-            <p className="text-gray-400 max-w-md mx-auto mt-1">Propose a venture or contribute to a community project to earn VEQ and own a piece of the new economy.</p>
+            <p className="text-gray-400 max-w-md mx-auto mt-1">Visit the Venture Marketplace to invest your CCAP in community projects and start building your VEQ portfolio.</p>
         </div>
       )}
     </div>

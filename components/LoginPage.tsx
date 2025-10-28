@@ -1,11 +1,16 @@
 import React, { useState } from 'react';
-import { User } from '../types';
 import { LogoIcon } from './icons/LogoIcon';
 import { EyeIcon } from './icons/EyeIcon';
 import { EyeOffIcon } from './icons/EyeOffIcon';
 
+// FIX: Define a specific type for login credentials as the User type doesn't contain a password.
+type LoginCredentials = {
+  email: string;
+  password?: string; // Password might not be needed for all login methods in the future.
+};
+
 interface LoginPageProps {
-  onLogin: (user: Pick<User, 'email' | 'password'>) => Promise<void>;
+  onLogin: (credentials: LoginCredentials) => Promise<void>;
   onSwitchToSignup: () => void;
   onSwitchToPublicSignup: () => void;
   onSwitchToForgotPassword: () => void;

@@ -1,310 +1,181 @@
-import { GoogleGenAI, Type } from "@google/genai";
-import type { Chat, Content } from "@google/genai";
+import { GoogleGenAI, Type, Chat } from '@google/genai';
+// FIX: Added Bounty to imports
+import { User, Post, PublicUserProfile, Bounty } from '../types';
 
-// FIX: Initialize GoogleGenAI with the API key from environment variables.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-let chat: Chat;
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
 
-export const generateWelcomeMessage = async (name: string, circle: string): Promise<string> => {
-  const model = "gemini-2.5-flash";
-  const prompt = `Generate a short, welcoming, and inspiring message for a new member named "${name}" who has just joined the "${circle}" Circle of the Ubuntium Global Commons. The message should be under 200 characters and reflect the philosophy of "I am because we are".`;
+// --- ChatBot Functions ---
+let chat: Chat | null = null;
 
-  try {
-    const response = await ai.models.generateContent({
-      model: model,
-      contents: prompt,
-    });
-
-    return response.text;
-  } catch (error) {
-    console.error("Error generating welcome message with Gemini:", error);
-    // Fallback message in case of API error.
-    return `Welcome to the Ubuntium Global Commons, ${name}! We are thrilled to have you join the ${circle} Circle. I am because we are.`;
-  }
-};
-
-export const initializeChat = (history?: Content[]) => {
-  const model = "gemini-2.5-flash";
-  const systemInstruction = "You are a helpful assistant for the Ubuntium Global Commons, a community focused on mutual support and economic empowerment based on the philosophy of Ubuntu ('I am because we are'). Your goal is to provide helpful, concise, and friendly information about the commons, its structure (like Circles), its digital asset ($UBT), and its mission. Be supportive and encouraging. Do not provide financial advice.";
-  
+export const initializeChat = (history?: any[]) => {
   chat = ai.chats.create({
-    model,
+    model: 'gemini-2.5-flash',
+    history: history || [],
     config: {
-      systemInstruction
-    },
-    ...(history && { history }) // Pass history if it exists
+      systemInstruction: 'You are a helpful assistant for the Ubuntium Global Commons, a community-driven economic platform. Be concise and helpful.'
+    }
   });
 };
 
-export const getChatBotResponse = async (prompt: string): Promise<string> => {
+export const getChatBotResponse = async (message: string): Promise<string> => {
   if (!chat) {
     initializeChat();
   }
-  const response = await chat.sendMessage({ message: prompt });
+  const response = await chat!.sendMessage({ message });
   return response.text;
 };
 
-export const elaborateBusinessIdea = async (businessIdea: string): Promise<{ suggestedNames: string[], detailedPlan: string, impactAnalysis: { score: number, reasoning: string } }> => {
-    const model = 'gemini-2.5-pro';
-    const prompt = `
-      Analyze the following business idea for the African / Zimbabwean market: "${businessIdea}".
-      
-      Perform the following tasks:
-      1.  Suggest 3 creative and relevant business names.
-      2.  Write a detailed, elaborated plan for the product or service.
-      3.  Provide an "Impact Analysis" for the local community. This analysis should include a score from 1 to 10 (where 10 is "highly essential") and a brief reasoning for the score.
 
-      Return the response as a single JSON object. Do not include markdown code fences.
-    `;
+// --- Post Impact Evaluation ---
+export const evaluatePostImpact = async (content: string, type: string): Promise<{ impactScore: number; reasoning: string; suggestionsForImprovement: string; ccapAward: number; }> => {
+  const responseSchema = {
+    type: Type.OBJECT,
+    properties: {
+      impactScore: { type: Type.INTEGER, description: 'A score from 1-10 on the potential impact of this post.' },
+      reasoning: { type: Type.STRING, description: 'A brief, one-sentence justification for the score.' },
+      suggestionsForImprovement: { type: Type.STRING, description: 'If the score is below 7, provide 1-2 concrete suggestions for how the user can improve the post. Otherwise, this is an empty string.' },
+      ccapAward: { type: Type.INTEGER, description: 'The amount of CCAP to award. If score < 7, award 0. If 7, award 5. If 8, award 10. If 9, award 20. If 10, award 35.' },
+    },
+    required: ['impactScore', 'reasoning', 'suggestionsForImprovement', 'ccapAward'],
+  };
+  
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: `Analyze the following user post for its potential impact within a community-driven economic commons. The post type is "${type}". Content: "${content}". Provide a score from 1-10 on its potential for creating value, collaboration, or opportunity. If the score is below 7, provide specific suggestions for improvement. Also determine a CCAP award based on the score: score < 7 -> 0 CCAP; score 7 -> 5 CCAP; score 8 -> 10 CCAP; score 9 -> 20 CCAP; score 10 -> 35 CCAP.`,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema,
+    },
+  });
 
-    try {
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        suggestedNames: {
-                            type: Type.ARRAY,
-                            items: { type: Type.STRING },
-                            description: "Three suggested business names."
-                        },
-                        detailedPlan: {
-                            type: Type.STRING,
-                            description: "An elaborated plan for the product or service."
-                        },
-                        impactAnalysis: {
-                            type: Type.OBJECT,
-                            properties: {
-                                score: { 
-                                    type: Type.NUMBER,
-                                    description: "An impact score from 1 to 10."
-                                },
-                                reasoning: { 
-                                    type: Type.STRING,
-                                    description: "The reasoning behind the impact score."
-                                }
-                            },
-                            required: ["score", "reasoning"]
-                        }
-                    },
-                    required: ["suggestedNames", "detailedPlan", "impactAnalysis"]
-                }
-            }
-        });
-        
-        const jsonString = response.text.trim();
-        return JSON.parse(jsonString);
-    } catch (error) {
-        console.error("Failed to parse AI response for business idea elaboration:", error);
-        throw new Error("The AI failed to analyze the idea. Please try again.");
-    }
+  const json = JSON.parse(response.text);
+  return json;
 };
 
-export const analyzeTargetMarket = async (detailedPlan: string, targetMarket: string): Promise<{ personas: { name: string, demographics: string, needs: string, painPoints: string }[], requiredSkills: string[] }> => {
-    const model = 'gemini-2.5-pro';
-    const prompt = `
-        Based on the following detailed business plan and target market description, perform two tasks:
-        1. Generate 2 detailed client personas that represent the ideal customers.
-        2. Identify and list the top 5 most essential skills required to successfully build and run this business.
-
-        Business Plan: "${detailedPlan}"
-        Target Market Description: "${targetMarket}"
-
-        Return the response as a single JSON object. Do not include markdown code fences.
-    `;
-
-    try {
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        personas: {
-                            type: Type.ARRAY,
-                            description: "An array of 2 client persona objects.",
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    name: { type: Type.STRING },
-                                    demographics: { type: Type.STRING },
-                                    needs: { type: Type.STRING },
-                                    painPoints: { type: Type.STRING }
-                                },
-                                required: ["name", "demographics", "needs", "painPoints"]
-                            }
-                        },
-                        requiredSkills: {
-                            type: Type.ARRAY,
-                            description: "An array of strings listing the top 5 essential skills.",
-                            items: { type: Type.STRING }
-                        }
-                    },
-                    required: ["personas", "requiredSkills"]
-                }
-            }
-        });
-
-        const jsonString = response.text.trim();
-        return JSON.parse(jsonString);
-    } catch (error) {
-        console.error("Failed to parse AI response for market analysis:", error);
-        throw new Error("The AI failed to analyze the market. Please try again.");
-    }
-};
-
-export const generatePitchDeck = async (businessIdea: string, lookingFor: string[]): Promise<{ title: string; slides: { title: string; content: string }[] }> => {
-    const model = 'gemini-2.5-pro';
-    const prompt = `
-      Create a 5-slide pitch deck for a business idea. The idea is: "${businessIdea}".
-      The founder is looking for: ${lookingFor.join(', ')}.
-
-      The pitch deck should have the following slides:
-      1. Title Slide: A compelling title for the business idea.
-      2. Problem: What problem is this business solving?
-      3. Solution: How does this business solve the problem?
-      4. The Ask: What does the founder need (e.g., funding, partners, skills)? Be specific based on what they are looking for.
-      5. Vision: What is the long-term vision for this business and its impact on the community?
-
-      For each slide, provide a 'title' and 'content'. The content should be a concise paragraph.
-      Return the response as a JSON object with the structure: { "title": "...", "slides": [{ "title": "...", "content": "..." }] }.
-      Do not include markdown code fences (\`\`\`json ... \`\`\`) in the JSON response, only the raw JSON object.
-    `;
-
-    const response = await ai.models.generateContent({
-        model,
-        contents: prompt,
-        config: {
-            responseMimeType: 'application/json',
-        }
-    });
-
-    try {
-        const jsonString = response.text.trim();
-        const parsed = JSON.parse(jsonString);
-        if (parsed.title && Array.isArray(parsed.slides)) {
-            return parsed;
-        }
-        throw new Error("Invalid JSON structure from AI");
-    } catch (error) {
-        console.error("Failed to parse AI response for pitch deck:", error, response.text);
-        throw new Error("The AI failed to generate a valid pitch deck. Please try refining your idea and generating again.");
-    }
-};
-
+// --- Project Launchpad ---
 export const generateProjectIdea = async (): Promise<any> => {
-    const model = 'gemini-2.5-pro';
-    const prompt = `
-      You are an expert business analyst and startup consultant specializing in micro-enterprises for the Zimbabwean market, operating within the framework of the Ubuntium Global Commons philosophy ("I am because we are"). Your goal is to generate a viable, small-scale project idea with a startup cost between $200 and $500 that can be launched by a member of the commons.
+  const responseSchema = {
+    type: Type.OBJECT,
+    properties: {
+      projectName: { type: Type.STRING },
+      category: { type: Type.STRING },
+      justification: { type: Type.OBJECT, properties: { opportunity: { type: Type.STRING }, dataBackedReasoning: { type: Type.STRING } } },
+      requirements: { type: Type.OBJECT, properties: { equipment: { type: Type.ARRAY, items: { type: Type.STRING } }, materials: { type: Type.ARRAY, items: { type: Type.STRING } }, skills: { type: Type.ARRAY, items: { type: Type.STRING } } } },
+      budgetBreakdown: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { item: { type: Type.STRING }, cost: { type: Type.NUMBER }, notes: { type: Type.STRING } } } },
+      totalEstimatedCost: { type: Type.NUMBER },
+      executionPlan: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { step: { type: Type.INTEGER }, action: { type: Type.STRING }, details: { type: Type.STRING } } } },
+      timeline: { type: Type.OBJECT, properties: { setup: { type: Type.STRING }, launch: { type: Type.STRING } } },
+      financials: { type: Type.OBJECT, properties: { pricingStrategy: { type: Type.STRING }, breakEvenAnalysis: { type: Type.STRING }, marketingStrategy: { type: Type.STRING } } },
+      riskAnalysis: { type: Type.OBJECT, properties: { challenges: { type: Type.ARRAY, items: { type: Type.STRING } }, mitigation: { type: Type.ARRAY, items: { type: Type.STRING } } } },
+      scalability: { type: Type.STRING },
+      commonsFeedbackLoop: { type: Type.STRING },
+      externalResources: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, url: { type: Type.STRING } } } },
+    },
+  };
   
-      The project must be essential, highly needed by the local community, and designed to generate profit while also feeding value back into the commons.
-  
-      Employ systems thinking to analyze how the project interacts with the local economy and the commons. Use first-principles thinking to break down the business into its most fundamental components.
-  
-      Provide a detailed analysis in a single JSON object. Do not include markdown code fences.
-    `;
-    
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: `Generate a robust, real-world business idea that can be launched in Zimbabwe with a budget between $200 and $500. The business should be from a diverse sector (not just solar/energy). Provide a comprehensive plan including justification, requirements, budget, execution plan, timeline, financials, risk analysis, scalability, and how it can create value within a community commons. Also include links to external resources if possible.`,
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema,
+    },
+  });
+
+  return JSON.parse(response.text);
+};
+
+
+// --- AI Venture Pitch Assistant ---
+export const elaborateBusinessIdea = async (idea: string): Promise<{ suggestedNames: string[], detailedPlan: string, impactAnalysis: { score: number, reasoning: string } }> => {
     const responseSchema = {
         type: Type.OBJECT,
         properties: {
-            projectName: { type: Type.STRING },
-            justification: {
-                type: Type.OBJECT,
-                properties: {
-                    opportunity: { type: Type.STRING, description: "Detailed explanation of why this project is a significant opportunity in Zimbabwe right now, citing specific market needs, gaps, or trends. Be logical and provide strong reasoning." },
-                    dataBackedReasoning: { type: Type.STRING, description: "Provide data points or logical deductions to support the opportunity. E.g., 'With over 60% of households experiencing power cuts, demand for alternative lighting is high.'" }
-                },
-                required: ["opportunity", "dataBackedReasoning"]
-            },
-            requirements: {
-                type: Type.OBJECT,
-                properties: {
-                    equipment: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    materials: { type: Type.ARRAY, items: { type: Type.STRING } },
-                    skills: { type: Type.ARRAY, items: { type: Type.STRING } }
-                },
-                required: ["equipment", "materials", "skills"]
-            },
-            budgetBreakdown: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        item: { type: Type.STRING },
-                        cost: { type: Type.NUMBER },
-                        notes: { type: Type.STRING }
-                    },
-                    required: ["item", "cost", "notes"]
-                }
-            },
-            totalEstimatedCost: { type: Type.NUMBER },
-            executionPlan: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        step: { type: Type.NUMBER },
-                        action: { type: Type.STRING },
-                        details: { type: Type.STRING }
-                    },
-                    required: ["step", "action", "details"]
-                }
-            },
-            timeline: {
-                type: Type.OBJECT,
-                properties: {
-                    setup: { type: Type.STRING },
-                    launch: { type: Type.STRING }
-                },
-                required: ["setup", "launch"]
-            },
-            financials: {
-                type: Type.OBJECT,
-                properties: {
-                    pricingStrategy: { type: Type.STRING },
-                    breakEvenAnalysis: { type: Type.STRING }
-                },
-                required: ["pricingStrategy", "breakEvenAnalysis"]
-            },
-            commonsFeedbackLoop: { type: Type.STRING, description: "Explain how this project strengthens the Ubuntium Global Commons." },
-            externalResources: {
-                type: Type.ARRAY,
-                items: {
-                    type: Type.OBJECT,
-                    properties: {
-                        title: { type: Type.STRING },
-                        url: { type: Type.STRING }
-                    },
-                    required: ["title", "url"]
-                }
-            }
+            suggestedNames: { type: Type.ARRAY, items: { type: Type.STRING } },
+            detailedPlan: { type: Type.STRING },
+            impactAnalysis: { type: Type.OBJECT, properties: { score: { type: Type.INTEGER }, reasoning: { type: Type.STRING } } },
         },
-        required: [
-            "projectName", "justification", "requirements", "budgetBreakdown",
-            "totalEstimatedCost", "executionPlan", "timeline", "financials",
-            "commonsFeedbackLoop", "externalResources"
-        ]
     };
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `A user has a business idea: "${idea}". Elaborate this into a detailed 2-paragraph plan. Suggest 3 creative names for the venture. Provide an "Impact Score" from 1-10 on its potential for community value and a brief justification.`,
+        config: { responseMimeType: 'application/json', responseSchema },
+    });
+    return JSON.parse(response.text);
+};
 
-    try {
-        const response = await ai.models.generateContent({
-            model,
-            contents: prompt,
-            config: {
-                responseMimeType: 'application/json',
-                responseSchema
-            }
-        });
-        
-        const jsonString = response.text.trim();
-        return JSON.parse(jsonString);
-    } catch (error) {
-        console.error("Failed to parse AI response for project idea:", error);
-        throw new Error("The AI failed to generate a project idea. Please try again.");
-    }
+export const analyzeTargetMarket = async (detailedPlan: string, targetMarketDescription: string): Promise<{ personas: any[], requiredSkills: string[] }> => {
+    const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+            personas: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, demographics: { type: Type.STRING }, needs: { type: Type.STRING }, painPoints: { type: Type.STRING } } } },
+            requiredSkills: { type: Type.ARRAY, items: { type: Type.STRING } }
+        }
+    };
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `For the business plan "${detailedPlan}" targeting "${targetMarketDescription}", create 2 detailed user personas. Also, list the top 3-5 essential skills required to launch this venture (e.g., "Marketing", "Agriculture").`,
+        config: { responseMimeType: 'application/json', responseSchema },
+    });
+    return JSON.parse(response.text);
+};
+
+export const generatePitchDeck = async (detailedPlan: string, lookingFor: string[]): Promise<{ title: string; slides: { title: string; content: string }[] }> => {
+    const responseSchema = {
+        type: Type.OBJECT,
+        properties: {
+            title: { type: Type.STRING },
+            slides: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, content: { type: Type.STRING } } } },
+        },
+    };
+    const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: `Based on this plan: "${detailedPlan}", generate a 5-slide pitch deck. The slides should be: 1. The Problem, 2. Our Solution, 3. Target Market, 4. Business Model, 5. The Ask (mentioning they are looking for: ${lookingFor.join(', ')}).`,
+        config: { responseMimeType: 'application/json', responseSchema },
+    });
+    return JSON.parse(response.text);
+};
+
+export const generateWelcomeMessage = async (name: string, circle: string): Promise<string> => {
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: `Generate a short, friendly, and inspiring welcome message for a new member named "${name}" joining the Ubuntium Global Commons from the "${circle}" circle. Keep it under 280 characters. Be warm and encouraging.`,
+    config: {
+      temperature: 0.8,
+    },
+  });
+  return response.text;
+};
+
+// FIX: Added generatePersonalizedBriefing function
+export const generatePersonalizedBriefing = async (user: User, posts: Post[], bounties: Bounty[]): Promise<string> => {
+  const postSummaries = posts.map(p => `- "${p.content.substring(0, 100)}..." by ${p.authorName} (Type: ${p.types})`).join('\n');
+  const bountySummaries = bounties.map(b => `- "${b.title}" for ${b.reward} CCAP. Skills: ${b.requiredSkills.join(', ')}.`).join('\n');
+
+  const prompt = `
+    You are a helpful assistant for the Ubuntium Global Commons. Your task is to generate a concise, personalized daily briefing for a user.
+    The user's name is ${user.name} and their role is ${user.role}. Their interests include: ${user.interests || 'not specified'}.
+
+    Here is a summary of recent activity in the commons:
+    
+    **Recent Posts:**
+    ${postSummaries.length > 0 ? postSummaries : "No new posts."}
+
+    **Available Bounties:**
+    ${bountySummaries.length > 0 ? bountySummaries : "No open bounties right now."}
+
+    Based on the user's profile and the recent activity, generate a friendly and engaging briefing in Markdown format.
+    - Start with a warm greeting.
+    - Highlight 1-2 posts or bounties that seem most relevant to the user's interests, if any.
+    - Keep it short and scannable. Use bolding for emphasis.
+    - End with an encouraging message.
+    - Do not make up information not present in the summaries.
+  `;
+
+  const response = await ai.models.generateContent({
+    model: 'gemini-2.5-flash',
+    contents: prompt,
+  });
+
+  return response.text;
 };

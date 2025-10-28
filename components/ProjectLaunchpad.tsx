@@ -11,9 +11,11 @@ import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
 import { UsersIcon } from './icons/UsersIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
 import { TrendingUpIcon } from './icons/TrendingUpIcon';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
 interface ProjectData {
   projectName: string;
+  category: string;
   justification: {
     opportunity: string;
     dataBackedReasoning: string;
@@ -33,13 +35,19 @@ interface ProjectData {
   financials: {
     pricingStrategy: string;
     breakEvenAnalysis: string;
+    marketingStrategy: string;
   };
+  riskAnalysis: {
+    challenges: string[];
+    mitigation: string[];
+  };
+  scalability: string;
   commonsFeedbackLoop: string;
   externalResources: { title: string; url: string }[];
 }
 
-const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode }> = ({ title, icon, children }) => (
-    <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
+const InfoCard: React.FC<{ title: string; icon: React.ReactNode; children: React.ReactNode; className?: string }> = ({ title, icon, children, className }) => (
+    <div className={`bg-slate-900/50 p-4 rounded-lg border border-slate-700 h-full ${className}`}>
         <div className="flex items-center space-x-3 mb-3">
             <div className="bg-slate-700 p-2 rounded-full">{icon}</div>
             <h3 className="text-lg font-semibold text-white">{title}</h3>
@@ -105,8 +113,11 @@ export const ProjectLaunchpad: React.FC = () => {
 
             {project && (
                 <div className="space-y-6 animate-fade-in">
-                    <div className="flex justify-between items-center">
-                        <h1 className="text-3xl font-bold text-white">{project.projectName}</h1>
+                    <div className="flex justify-between items-start flex-wrap gap-4">
+                        <div className="flex items-center gap-4">
+                            <h1 className="text-3xl font-bold text-white">{project.projectName}</h1>
+                            <span className="bg-green-600/20 text-green-300 px-3 py-1 rounded-full text-sm font-semibold">{project.category}</span>
+                        </div>
                          <button onClick={handleGenerate} disabled={isLoading} className="inline-flex items-center px-4 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-600 font-semibold text-sm disabled:bg-slate-600">
                             {isLoading ? <LoaderIcon className="h-5 w-5 animate-spin"/> : <SparkleIcon className="h-5 w-5 mr-2"/>}
                             <span>{isLoading ? '' : 'Suggest Another'}</span>
@@ -153,31 +164,50 @@ export const ProjectLaunchpad: React.FC = () => {
                         </ol>
                     </InfoCard>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <InfoCard title="Financials" icon={<TrendingUpIcon className="h-5 w-5 text-green-400"/>}>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <InfoCard title="Financials & Marketing" icon={<TrendingUpIcon className="h-5 w-5 text-green-400"/>}>
                              <div className="flex justify-between items-start">
                                 <h4 className="font-semibold text-gray-200">Pricing Strategy</h4>
                                 <CopyButton text={project.financials.pricingStrategy}/>
                             </div>
                             <p>{project.financials.pricingStrategy}</p>
-                            <div className="flex justify-between items-start pt-2">
+                            <div className="flex justify-between items-start pt-3 mt-3 border-t border-slate-700/50">
                                 <h4 className="font-semibold text-gray-200">Break-Even Analysis</h4>
                                 <CopyButton text={project.financials.breakEvenAnalysis}/>
                             </div>
                             <p>{project.financials.breakEvenAnalysis}</p>
+                            <div className="flex justify-between items-start pt-3 mt-3 border-t border-slate-700/50">
+                                <h4 className="font-semibold text-gray-200">Marketing Strategy</h4>
+                                <CopyButton text={project.financials.marketingStrategy}/>
+                            </div>
+                            <p>{project.financials.marketingStrategy}</p>
                         </InfoCard>
-                         <InfoCard title="Commons Feedback Loop" icon={<UsersIcon className="h-5 w-5 text-green-400"/>}>
-                             <p>{project.commonsFeedbackLoop}</p>
+                         <InfoCard title="Risks & Scalability" icon={<AlertTriangleIcon className="h-5 w-5 text-yellow-400"/>}>
+                             <h4 className="font-semibold text-gray-200">Potential Challenges</h4>
+                            <ul className="list-disc list-inside space-y-1">
+                                {project.riskAnalysis.challenges.map((challenge, i) => <li key={i}>{challenge}</li>)}
+                            </ul>
+                            <h4 className="font-semibold text-gray-200 mt-3 pt-3 border-t border-slate-700/50">Mitigation Strategies</h4>
+                            <ul className="list-disc list-inside space-y-1">
+                                {project.riskAnalysis.mitigation.map((strategy, i) => <li key={i}>{strategy}</li>)}
+                            </ul>
+                             <h4 className="font-semibold text-gray-200 mt-3 pt-3 border-t border-slate-700/50">Scalability</h4>
+                            <p>{project.scalability}</p>
                         </InfoCard>
                     </div>
 
-                    {project.externalResources.length > 0 && (
-                        <InfoCard title="External Resources" icon={<GlobeIcon className="h-5 w-5 text-green-400"/>}>
-                            <ul className="list-disc list-inside">
-                                {project.externalResources.map(res => <li key={res.url}><a href={res.url} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">{res.title}</a></li>)}
-                            </ul>
+                    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                        <InfoCard title="Commons Feedback Loop" icon={<UsersIcon className="h-5 w-5 text-green-400"/>}>
+                             <p>{project.commonsFeedbackLoop}</p>
                         </InfoCard>
-                    )}
+                        {project.externalResources.length > 0 && (
+                            <InfoCard title="External Resources" icon={<GlobeIcon className="h-5 w-5 text-green-400"/>}>
+                                <ul className="list-disc list-inside">
+                                    {project.externalResources.map(res => <li key={res.url}><a href={res.url} target="_blank" rel="noopener noreferrer" className="text-green-400 hover:underline">{res.title}</a></li>)}
+                                </ul>
+                            </InfoCard>
+                        )}
+                    </div>
                 </div>
             )}
         </div>

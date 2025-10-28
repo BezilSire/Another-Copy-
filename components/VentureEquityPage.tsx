@@ -25,7 +25,7 @@ const VentureHoldingCard: React.FC<VentureHoldingCardProps> = ({ holding, userId
                 const ventureDetails = await api.getVentureById(holding.ventureId);
                 setVenture(ventureDetails);
                 if (ventureDetails) {
-                    const userDists = await api.getDistributionsForUserInVenture(holding.ventureId, userId, holding.shares, ventureDetails.totalSharesIssued);
+                    const userDists = await api.getDistributionsForUserInVenture(userId, holding.ventureId, holding.shares, ventureDetails.totalSharesIssued);
                     setDistributions(userDists);
                 }
             } catch (error) {

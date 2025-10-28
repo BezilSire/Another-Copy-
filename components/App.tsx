@@ -1,7 +1,3 @@
-
-
-
-
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -18,10 +14,7 @@ import { useAuth } from './contexts/AuthContext';
 import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { AppInstallBanner } from './components/AppInstallBanner';
 import { useProfileCompletionReminder } from './hooks/useProfileCompletionReminder';
-import { PublicProfile } from './components/PublicProfile';
 import { CompleteProfilePage } from './components/CompleteProfilePage';
-import { ChatBot } from './components/ChatBot';
-import { SparkleIcon } from './components/icons/SparkleIcon';
 import { UbtVerificationPage } from './components/UbtVerificationPage';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { KnowledgeBasePage } from './components/KnowledgeBasePage';
@@ -35,26 +28,22 @@ const App: React.FC = () => {
   const isOnline = useOnlineStatus();
   const [hasSyncedOnConnect, setHasSyncedOnConnect] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
+  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
 
   // State for Agent Dashboard UI
   const [agentView, setAgentView] = useState<AgentView>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-
-  // Global state for viewing a user profile from anywhere (e.g., search)
-  const [globalViewingProfileId, setGlobalViewingProfileId] = useState<string | null>(null);
   
-  // State to trigger opening a chat from a global component like PublicProfile
-  const [initialChat, setInitialChat] = useState<{ target: Conversation, role: User['role']} | null>(null);
-  const onInitialChatConsumed = () => setInitialChat(null);
-  
-  // State for the AI Chat Bot
-  const [isChatBotOpen, setIsChatBotOpen] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
-
 
   // Hook to remind users to complete their profile
   useProfileCompletionReminder(currentUser);
 
+  useEffect(() => {
+    const handleResize = () => setIsDesktop(window.innerWidth >= 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   useEffect(() => {
     const fetchBroadcasts = async () => {
@@ -72,17 +61,15 @@ const App: React.FC = () => {
             setUnreadNotificationCount(notifications.filter(n => !n.read).length);
         }, (error) => {
             console.error('Error listening for notifications:', error);
-            addToast('Could not retrieve notifications.', 'error');
+            // Don't toast on this error, as it can be noisy due to index requirements
         });
         return () => unsubNotifications();
     }
   }, [currentUser, addToast]);
 
   useEffect(() => {
-    // When the user comes online, check if a sync is needed.
     if (isOnline && !hasSyncedOnConnect) {
       addToast("You're back online! Syncing data...", "info");
-      // This is a background task that should only be run by admins to avoid permission errors for other users.
       if (currentUser?.role === 'admin') {
         api.processPendingWelcomeMessages().then(count => {
           if (count > 0) {
@@ -90,10 +77,8 @@ const App: React.FC = () => {
           }
         });
       }
-      // Mark as synced to prevent re-syncing on every online event within the same session.
       setHasSyncedOnConnect(true);
     } else if (!isOnline) {
-      // Reset the sync flag when the user goes offline.
       setHasSyncedOnConnect(false);
     }
   }, [isOnline, hasSyncedOnConnect, addToast, currentUser]);
@@ -124,26 +109,6 @@ const App: React.FC = () => {
     addToast('Profile complete! Welcome to the commons.', 'success');
   };
 
-  const handleStartChat = async (targetUserId: string) => {
-    if (!currentUser || currentUser.role === 'agent') {
-        addToast("Messaging is not available for agents.", "info");
-        return;
-    }
-    try {
-        const targetUser = await api.getPublicUserProfile(targetUserId);
-        if (!targetUser) {
-            addToast("Could not find user to chat with.", "error");
-            return;
-        }
-        const newConvo = await api.startChat(currentUser.id, targetUserId, currentUser.name, targetUser.name);
-        setGlobalViewingProfileId(null); // Close profile view
-        setInitialChat({ target: newConvo, role: currentUser.role });
-    } catch (error) {
-        addToast("Failed to start chat.", "error");
-    }
-  };
-
-
   const renderContent = () => {
     if (isLoadingAuth) {
       return <div className="text-center p-10 text-gray-400">Loading...</div>;
@@ -153,7 +118,7 @@ const App: React.FC = () => {
       return <AuthPage />;
     }
 
-    if (currentUser.status === 'pending') {
+    if (currentUser.status === 'pending' && currentUser.role !== 'agent') {
         return (
             <div className="p-4 sm:p-6 lg:p-8 flex items-center justify-center min-h-[calc(100vh-100px)]">
                 <UbtVerificationPage user={currentUser} onLogout={requestLogout} />
@@ -164,23 +129,7 @@ const App: React.FC = () => {
     if (!currentUser.isProfileComplete) {
         return <div className="p-4 sm:p-6 lg:p-8"><CompleteProfilePage user={currentUser} onProfileComplete={handleProfileComplete} /></div>;
     }
-
-    if (globalViewingProfileId) {
-        return (
-            <div className="p-4 sm:p-6 lg:p-8">
-                <PublicProfile 
-                    userId={globalViewingProfileId}
-                    currentUser={currentUser}
-                    onBack={() => setGlobalViewingProfileId(null)}
-                    onStartChat={handleStartChat}
-                    onViewProfile={setGlobalViewingProfileId}
-                />
-            </div>
-        );
-    }
     
-    const isDesktop = window.innerWidth >= 768; // md breakpoint
-
     if (currentUser.role === 'admin') {
       return (
         <div className="p-4 sm:p-6 lg:p-8">
@@ -190,9 +139,6 @@ const App: React.FC = () => {
                 onSendBroadcast={handleSendBroadcast} 
                 onUpdateUser={updateUser}
                 unreadCount={unreadNotificationCount}
-                onViewProfile={setGlobalViewingProfileId}
-                initialChat={initialChat}
-                onInitialChatConsumed={onInitialChatConsumed}
             />
         </div>
       );
@@ -219,7 +165,6 @@ const App: React.FC = () => {
                     onUpdateUser={updateUser} 
                     activeView={agentView}
                     setActiveView={setAgentView}
-                    onViewProfile={setGlobalViewingProfileId}
                 />
             </main>
             {!isDesktop && (
@@ -243,9 +188,7 @@ const App: React.FC = () => {
                 broadcasts={broadcasts} 
                 onUpdateUser={updateUser}
                 unreadCount={unreadNotificationCount}
-                onViewProfile={setGlobalViewingProfileId}
-                initialChat={initialChat}
-                onInitialChatConsumed={onInitialChatConsumed}
+                onLogout={requestLogout}
             />
         </div>
     );
@@ -253,24 +196,11 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white dark">
-      <Header user={currentUser} onLogout={requestLogout} onViewProfile={setGlobalViewingProfileId} />
+      {/* Header is now simpler as profile view logic is in dashboards */}
+      <Header user={currentUser} onLogout={requestLogout} />
       {renderContent()}
       <ToastContainer />
       <AppInstallBanner />
-      {currentUser && (
-        <>
-          <ChatBot isOpen={isChatBotOpen} onClose={() => setIsChatBotOpen(false)} currentUser={currentUser} />
-          {!isChatBotOpen && (
-            <button
-              onClick={() => setIsChatBotOpen(true)}
-              className="fixed bottom-6 right-6 z-30 w-16 h-16 bg-green-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-green-500 transform transition-transform hover:scale-110 animate-fade-in"
-              aria-label="Open AI Assistant"
-            >
-              <SparkleIcon className="h-8 w-8" />
-            </button>
-          )}
-        </>
-      )}
        <ConfirmationDialog
         isOpen={isLogoutConfirmOpen}
         onClose={() => setIsLogoutConfirmOpen(false)}

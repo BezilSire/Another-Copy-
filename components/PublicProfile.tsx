@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Member, Post, PublicUserProfile } from '../types';
+import { User, Member, Post, PublicUserProfile, FilterType } from '../types';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
@@ -41,7 +41,7 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
     const [isLoading, setIsLoading] = useState(true);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'activity' | 'about' | 'card' | 'venture'>('activity');
-    const [typeFilter, setTypeFilter] = useState<Post['types'] | 'all'>('all');
+    const [typeFilter, setTypeFilter] = useState<FilterType>('all');
     const { addToast } = useToast();
 
     useEffect(() => {

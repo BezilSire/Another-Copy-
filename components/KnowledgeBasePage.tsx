@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { User } from '../types';
 import { api } from '../services/apiService';
@@ -11,6 +10,7 @@ import { GlobeIcon } from './icons/GlobeIcon';
 import { DollarSignIcon } from './icons/DollarSignIcon';
 import { LogoIcon } from './icons/LogoIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
+import { DatabaseIcon } from './icons/DatabaseIcon';
 
 const knowledgeContent = [
   {
@@ -100,6 +100,34 @@ const circleSystemContent = {
       text: "The 100-Member Circle System redefines economics itself:\n\nAn economy is not money changing hands; it is people exchanging contribution.\n\nHere, fairness is not a sentiment; it is infrastructure.\nLeadership is not assigned; it is verified through action.\nInstitutions are no longer central authorities but distributed Circles of responsibility.\n\nIn this model, the Commons replaces bureaucracy, the Skill Wallet replaces the résumé, and the measure of progress becomes the number of lives directly improved."
     }
   ]
+};
+
+const economicEngineContent = {
+    icon: <DatabaseIcon className="h-8 w-8 text-green-400" />,
+    title: "The Economic Engine: How CCAP Becomes Real-World Capital",
+    intro: "This section breaks down the revolutionary mechanism that converts the digital commons' internal value (Civic Capital - CCAP) into tangible, real-world impact. It is the bridge between community contribution and entrepreneurial action.",
+    sections: [
+        {
+            title: "1. The Core Principle: CCAP is Not Money, It's Influence",
+            text: "The most crucial concept is that members do not directly 'pay' a venture with CCAP. Instead, committing CCAP to a venture is a vote of confidence. It is a powerful signal to the Commons' central treasury that a project has earned the backing and trust of the community.\n\nThe system acts as a community-run venture capital fund, where CCAP is the voting mechanism that unlocks real financial resources."
+        },
+        {
+            title: "2. The Mechanism: The Community Value Pool (CVP)",
+            text: "To facilitate this, the Ubuntium system formalizes a central treasury called the Community Value Pool (CVP).\n\nWhat is the CVP?\nThe CVP is a real-money fund (held in USD or a stable equivalent) managed by the Ubuntium Global Commons platform. It is the financial engine that converts the community's collective will—expressed through CCAP investments—into actual capital.\n\nHow is the CVP Funded?\nThis is the key to the model's sustainability. The CVP is funded from several self-replenishing sources:\n1. Initial Seeding: A portion of initial funds can seed the CVP.\n2. Membership Fees: A percentage of all new member registration fees automatically flows into the CVP.\n3. Transaction Fees: A tiny percentage fee on future internal marketplace transactions can continuously replenish the CVP.\n4. Profits from Commons-Owned Ventures: Successful ventures pay a small percentage of their profits back to the Commons, directly refilling the CVP and creating a powerful, self-sustaining loop.\n5. External Grants & Partnerships: The Commons can secure funding from impact investors, with funds being channeled into the CVP."
+        },
+        {
+            title: "3. The Step-by-Step Flow: From Idea to Real Money",
+            text: "1. The Venture Sets a Real-World Funding Goal: A founder specifies their need in real money (e.g., '$500 USD'). The system calculates the equivalent CCAP target based on the current CCAP-to-USD rate.\n\n2. Members 'Invest' their CCAP: Members commit their earned CCAP to the project, reducing their personal balance and signaling their support. The project's funding bar updates in real-time.\n\n3. The CCAP Funding Goal is Met: Once the total pledged CCAP reaches the target, the community has officially endorsed the project.\n\n4. The Commons Releases Real Capital from the CVP: This is the critical moment. The platform verifies the goal and triggers a real-world financial transaction, disbursing the required USD from the CVP to the venture founder.\n\n5. VEQ Shares are Issued & CCAP is Burned: The invested CCAP is removed from circulation ('burned'). In its place, Venture Equity (VEQ) shares are created and distributed to the investors, proportional to their CCAP contribution. Their civic contribution is now a tangible financial asset."
+        },
+        {
+            title: "4. Why This Model is So Effective",
+            text: "1. Protects the Economy: It prevents 'bank runs.' CCAP cannot be cashed out on a whim; its value is channeled productively into new ventures, ensuring system stability.\n\n2. Rewards True Contribution: To invest, you must first earn CCAP through valuable actions. Influence cannot be bought with outside money, keeping the system meritocratic.\n\n3. Aligns All Incentives: Every member is now incentivized for ventures to succeed, because profits flow back to the CVP, which increases the value and power of everyone's future CCAP.\n\n4. Democratizes Venture Capital: It removes traditional gatekeepers. If the community believes in an idea, it gets funded. Period. It is the purest form of grassroots, democratic financing."
+        },
+        {
+            title: "5. Philosophical Implication: A New Economic Definition",
+            text: "This model makes the Venture Marketplace the most powerful engine in the app. It is where the digital and physical worlds meet, and where member contributions are forged into real-world enterprise.\n\nIt redefines economics: an economy is not just money changing hands; it is a community exchanging and validating contribution."
+        }
+    ]
 };
 
 interface KnowledgeBasePageProps {
@@ -216,6 +244,21 @@ export const KnowledgeBasePage: React.FC<KnowledgeBasePageProps> = ({ currentUse
                             <p className="text-gray-300 whitespace-pre-line leading-relaxed mb-4">{circleSystemContent.intro}</p>
                             <div className="mt-4 border border-slate-700 rounded-lg">
                                 {circleSystemContent.sections.map((section, index) => (
+                                    <AccordionItem key={index} title={section.title} content={section.text} />
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="bg-slate-800 p-6 rounded-lg shadow-lg flex flex-col sm:flex-row items-start gap-6">
+                        <div className="flex-shrink-0 bg-slate-700 p-4 rounded-full">
+                            {economicEngineContent.icon}
+                        </div>
+                        <div className="flex-1 w-full">
+                            <h2 className="text-xl font-bold text-white mb-2">{economicEngineContent.title}</h2>
+                            <p className="text-gray-300 whitespace-pre-line leading-relaxed mb-4">{economicEngineContent.intro}</p>
+                            <div className="mt-4 border border-slate-700 rounded-lg">
+                                {economicEngineContent.sections.map((section, index) => (
                                     <AccordionItem key={index} title={section.title} content={section.text} />
                                 ))}
                             </div>

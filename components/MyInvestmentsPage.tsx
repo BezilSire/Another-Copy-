@@ -6,6 +6,7 @@ import { TrendingUpIcon } from './icons/TrendingUpIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { formatTimeAgo } from '../utils';
 import { VeqRedemptionModal } from './VeqRedemptionModal';
+import { BriefcaseIcon } from './icons/BriefcaseIcon';
 
 interface VentureHoldingCardProps {
     holding: VentureEquityHolding;
@@ -26,7 +27,8 @@ const VentureHoldingCard: React.FC<VentureHoldingCardProps> = ({ holding, user, 
                 const ventureDetails = await api.getVentureById(holding.ventureId);
                 setVenture(ventureDetails);
                 if (ventureDetails) {
-                    const userDists = await api.getDistributionsForUserInVenture(user, holding.ventureId, holding.shares, ventureDetails.totalSharesIssued);
+                    // FIX: Pass user.id instead of full user object
+                    const userDists = await api.getDistributionsForUserInVenture(user.id, holding.ventureId, holding.shares, ventureDetails.totalSharesIssued);
                     setDistributions(userDists);
                 }
             } catch (error) {
@@ -36,7 +38,7 @@ const VentureHoldingCard: React.FC<VentureHoldingCardProps> = ({ holding, user, 
             }
         };
         fetchData();
-    }, [holding.ventureId, holding.shares, user]);
+    }, [holding.ventureId, holding.shares, user.id]);
 
     const equityPercentage = venture && venture.totalSharesIssued > 0 ? (holding.shares / venture.totalSharesIssued) * 100 : 0;
     
@@ -133,15 +135,15 @@ export const MyInvestmentsPage: React.FC<MyInvestmentsPageProps> = ({ user, onNa
       <div className="bg-slate-900/50 p-6 rounded-lg border border-slate-700 space-y-3">
         <h2 className="text-lg font-semibold text-gray-200">What is Venture Equity (VEQ)?</h2>
         <p className="text-sm text-gray-400">
-            Venture Equity (VEQ) represents your direct ownership stake—in the form of shares—in community-led businesses launched through the Ubuntium platform. It's a way to turn your contributions into long-term assets.
+            Venture Equity (VEQ) represents your direct ownership stake—in the form of shares—in community-led businesses launched through the Ubuntium platform. It's the primary way to turn your contributions into long-term, wealth-generating assets.
         </p>
         <h3 className="text-md font-semibold text-gray-300 pt-2 border-t border-slate-800">How do you earn VEQ?</h3>
         <p className="text-sm text-gray-400">
-            The primary way to acquire VEQ is by investing your <strong>Civic Capital (CCAP)</strong> into ventures listed on the Venture Marketplace. This option becomes available during the bi-monthly <strong>Redemption Cycle</strong>. When you choose to invest, your CCAP is converted into shares in the venture of your choice.
+            The primary way to acquire VEQ is by investing your <strong>Civic Capital (CCAP)</strong> into ventures listed on the Venture Marketplace. This option becomes available during the bi-monthly <strong>Redemption Cycle</strong>. When you choose to invest, your CCAP is converted into shares in the venture of your choice, solidifying your stake in its success.
         </p>
         <h3 className="text-md font-semibold text-gray-300 pt-2 border-t border-slate-800">What happens when you invest?</h3>
         <p className="text-sm text-gray-400">
-            The CCAP you invest is consumed and transferred to the venture's funding pool. In exchange, you receive a corresponding number of VEQ shares. As the venture becomes operational and generates profit, a portion of those profits is distributed back to you and other shareholders, providing a potential return on your investment.
+            The CCAP you invest is consumed and transferred to the venture's funding pool. In exchange, you receive a corresponding number of VEQ shares. As the venture becomes operational and generates profit, a portion of those profits is distributed back to you and other shareholders, providing a potential return on your investment. This creates a powerful cycle where your civic contributions fuel economic growth that you directly benefit from.
         </p>
       </div>
 
@@ -151,7 +153,7 @@ export const MyInvestmentsPage: React.FC<MyInvestmentsPageProps> = ({ user, onNa
                 <p className="text-sm text-gray-300 mt-1">Explore new community ventures seeking funding and convert your CCAP into long-term assets.</p>
             </div>
             <button onClick={onNavigateToMarketplace} className="w-full sm:w-auto flex-shrink-0 px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold">
-                Go to Marketplace
+                Explore the Marketplace
             </button>
         </div>
 
@@ -165,7 +167,7 @@ export const MyInvestmentsPage: React.FC<MyInvestmentsPageProps> = ({ user, onNa
         <div className="text-center py-16 bg-slate-800 rounded-lg">
             <TrendingUpIcon className="h-12 w-12 mx-auto text-slate-600 mb-4" />
             <h3 className="font-semibold text-lg text-white">You have no Venture Equity yet.</h3>
-            <p className="text-gray-400 max-w-md mx-auto mt-1">Explore the Venture Marketplace to invest your CCAP, or propose your own project to earn VEQ.</p>
+            <p className="text-gray-400 max-w-md mx-auto mt-1">Visit the Venture Marketplace to invest your CCAP in community projects and start building your VEQ portfolio.</p>
         </div>
       )}
     </div>

@@ -19,7 +19,8 @@ export const ProfileCompletionMeter: React.FC<ProfileCompletionMeterProps> = ({ 
 
     if (fieldsToCheck.length === 0) return 0;
 
-    const filledCount = fieldsToCheck.reduce((count, field) => {
+    // FIX: Add explicit <number> generic to reduce to solve TS error where `count` type was not being inferred correctly.
+    const filledCount = fieldsToCheck.reduce<number>((count, field) => {
       const value = profileData[field];
       return count + (value && String(value).trim() !== '' ? 1 : 0);
     }, 0);

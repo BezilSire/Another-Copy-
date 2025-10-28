@@ -6,15 +6,19 @@ import { api } from '../services/apiService';
 import { auth, db } from '../services/firebase';
 import { User, Agent, NewPublicMemberData, MemberUser, Member } from '../types';
 
+// FIX: Define specific credential types as User/Agent don't have passwords.
+type LoginCredentials = { email: string; password: string };
+type AgentSignupCredentials = Pick<Agent, 'name' | 'email' | 'circle'> & { password: string };
+
 // Define the shape of the context value
 interface AuthContextType {
   currentUser: User | null;
   firebaseUser: FirebaseUser | null;
   isLoadingAuth: boolean;
   isProcessingAuth: boolean;
-  login: (credentials: Pick<User, 'email' | 'password'>) => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => Promise<void>;
-  agentSignup: (credentials: Pick<Agent, 'name' | 'email' | 'password' | 'circle'>) => Promise<void>;
+  agentSignup: (credentials: AgentSignupCredentials) => Promise<void>;
   memberSignup: (memberData: NewPublicMemberData, password: string) => Promise<void>;
   memberActivate: (member: Member, password: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
@@ -91,24 +95,27 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [addToast, isProcessingAuth]); // isProcessingAuth is crucial to prevent race conditions during signup.
 
-  const login = useCallback(async (credentials: Pick<User, 'email' | 'password'>) => {
+  const login = useCallback(async (credentials: LoginCredentials) => {
+    setIsProcessingAuth(true);
     try {
-      const user = await api.login(credentials.email, credentials.password);
-      if (user) {
-        addToast('Logged in successfully!', 'success');
-      } else {
-        addToast('Login failed: User profile not found.', 'error');
-        await api.logout();
-        throw new Error("Login failed: Profile not found.");
-      }
+      await api.login(credentials.email, credentials.password);
+      // On success, the onAuthStateChanged listener will handle fetching the user document.
+      // This makes the login process resilient to network issues.
+      addToast('Logged in successfully!', 'success');
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      if (errorMessage.includes("suspended")) {
-        addToast('This account has been suspended.', 'error');
-      } else if (!errorMessage.includes("Profile not found")) {
+      const firebaseError = error as { code?: string; message?: string };
+      const errorCode = firebaseError.code || '';
+
+      if (errorCode.includes('auth/invalid-credential') || errorCode.includes('auth/wrong-password') || errorCode.includes('auth/user-not-found')) {
         addToast('Invalid credentials. Please check your email and password.', 'error');
+      } else if (errorCode.includes('auth/network-request-failed')) {
+        addToast('Network error. Please check your connection and try again.', 'error');
+      } else {
+        addToast(`Login failed: ${firebaseError.message || 'An unknown error occurred.'}`, 'error');
       }
-      throw error;
+      throw error; // Re-throw to signal failure to the caller component
+    } finally {
+      setIsProcessingAuth(false);
     }
   }, [addToast]);
 
@@ -120,12 +127,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     addToast('You have been logged out.', 'info');
   }, [addToast, currentUser]);
 
-  const agentSignup = useCallback(async (credentials: Pick<Agent, 'name' | 'email' | 'password' | 'circle'>) => {
+  const agentSignup = useCallback(async (credentials: AgentSignupCredentials) => {
     setIsProcessingAuth(true);
     try {
       await api.signup(credentials.name, credentials.email, credentials.password, credentials.circle);
       addToast(`Account created successfully! Welcome.`, 'success');
     } catch (error) {
+      // FIX: Improved error message handling
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
       addToast(`Signup failed: ${errorMessage}`, 'error');
       throw error;

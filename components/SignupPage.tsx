@@ -4,8 +4,13 @@ import { LogoIcon } from './icons/LogoIcon';
 import { EyeIcon } from './icons/EyeIcon';
 import { EyeOffIcon } from './icons/EyeOffIcon';
 
+// FIX: Define a specific type for signup credentials as the Agent type doesn't contain a password.
+type SignupCredentials = Pick<Agent, 'name' | 'email' | 'circle'> & {
+  password: string;
+};
+
 interface SignupPageProps {
-  onSignup: (user: Pick<Agent, 'name' | 'email' | 'password' | 'circle'>) => Promise<void>;
+  onSignup: (credentials: SignupCredentials) => Promise<void>;
   onSwitchToLogin: () => void;
 }
 

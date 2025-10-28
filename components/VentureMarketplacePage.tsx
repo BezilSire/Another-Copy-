@@ -4,6 +4,9 @@ import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { BriefcaseIcon } from './icons/BriefcaseIcon';
+import { formatTimeAgo } from '../utils';
+import { ConfirmationDialog } from './ConfirmationDialog';
+import { TrashIcon } from './icons/TrashIcon';
 
 interface VentureMarketplaceCardProps {
     venture: Venture;
@@ -11,7 +14,7 @@ interface VentureMarketplaceCardProps {
 }
 
 const VentureMarketplaceCard: React.FC<VentureMarketplaceCardProps> = ({ venture, onClick }) => {
-    const fundingProgress = (venture.fundingRaisedCcap / venture.fundingGoalCcap) * 100;
+    const fundingProgress = (venture.fundingGoalCcap / venture.fundingGoalCcap) * 100;
 
     return (
         <div onClick={onClick} className="w-full h-full bg-slate-800 p-5 rounded-lg shadow-md hover:bg-slate-700/50 hover:ring-2 hover:ring-green-500 transition-all duration-200 cursor-pointer flex flex-col justify-between">
@@ -43,6 +46,43 @@ const VentureMarketplaceCard: React.FC<VentureMarketplaceCardProps> = ({ venture
     );
 };
 
+const VentureStatusBadge: React.FC<{ status: Venture['status'] }> = ({ status }) => {
+  const base = 'px-2.5 py-0.5 rounded-full text-xs font-medium capitalize';
+  const styles: {[key: string]: string} = {
+    fundraising: 'bg-blue-800 text-blue-300',
+    operational: 'bg-green-800 text-green-300',
+    fully_funded: 'bg-purple-800 text-purple-300',
+    completed: 'bg-slate-700 text-slate-300',
+    on_hold: 'bg-orange-800 text-orange-300',
+    pending_approval: 'bg-yellow-800 text-yellow-300', // Backward compatibility
+  };
+  const style = styles[status as string] || 'bg-gray-700 text-gray-300';
+  return <span className={`${base} ${style}`}>{status.replace(/_/g, ' ')}</span>;
+};
+
+const MyVentureStatusCard: React.FC<{ venture: Venture, onDelete: (venture: Venture) => void }> = ({ venture, onDelete }) => {
+    return (
+        <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 flex justify-between items-center">
+            <div>
+                <h4 className="font-bold text-white">{venture.name}</h4>
+                <p className="text-xs text-gray-400">Submitted {formatTimeAgo(venture.createdAt.toDate().toISOString())}</p>
+            </div>
+            <div className="flex items-center space-x-4">
+                <VentureStatusBadge status={venture.status} />
+                {(venture.status === 'fundraising' || (venture.status as string) === 'pending_approval') && (
+                    <button 
+                        onClick={(e) => { e.stopPropagation(); onDelete(venture); }}
+                        className="text-red-500 hover:text-red-400"
+                        title="Delete Venture"
+                    >
+                        <TrashIcon className="h-4 w-4" />
+                    </button>
+                )}
+            </div>
+        </div>
+    );
+};
+
 
 interface VentureMarketplacePageProps {
   currentUser: User;
@@ -51,24 +91,60 @@ interface VentureMarketplacePageProps {
 
 export const VentureMarketplacePage: React.FC<VentureMarketplacePageProps> = ({ currentUser, onViewProfile }) => {
     const [ventures, setVentures] = useState<Venture[]>([]);
+    const [myVentures, setMyVentures] = useState<Venture[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const { addToast } = useToast();
+    const [deletingVenture, setDeletingVenture] = useState<Venture | null>(null);
 
     useEffect(() => {
         setIsLoading(true);
-        api.getFundraisingVentures()
-            .then(setVentures)
-            .catch(() => addToast("Could not load ventures from the marketplace.", "error"))
-            .finally(() => setIsLoading(false));
-    }, [addToast]);
+        const unsubMyVentures = api.listenForUserVentures(currentUser.id, setMyVentures, (err) => {
+            console.error("Could not load user's ventures:", err)
+        });
+
+        const unsubMarketplace = api.listenForFundraisingVentures((data) => {
+            setVentures(data);
+            setIsLoading(false);
+        }, (err) => {
+            addToast("Could not load ventures from the marketplace.", "error");
+            console.error(err);
+            setIsLoading(false);
+        });
+            
+        return () => {
+            unsubMyVentures();
+            unsubMarketplace();
+        }
+    }, [currentUser.id, addToast]);
     
     // For now, clicking a card will view the owner's profile. A dedicated venture details page can be a future enhancement.
     const handleSelectVenture = (venture: Venture) => {
         onViewProfile(venture.ownerId);
     };
 
+    const handleConfirmDelete = async () => {
+        if (!deletingVenture) return;
+        try {
+            await api.deleteVenture(currentUser, deletingVenture.id);
+            addToast("Venture deleted successfully.", 'success');
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : 'Failed to delete venture.', 'error');
+        } finally {
+            setDeletingVenture(null);
+        }
+    };
+
     return (
         <div className="space-y-6">
+            {myVentures.length > 0 && (
+                <div className="bg-slate-800 p-5 rounded-lg shadow-lg">
+                    <h2 className="text-xl font-semibold text-white mb-4">My Venture Submissions</h2>
+                    <div className="space-y-2">
+                        {myVentures.map(v => <MyVentureStatusCard key={v.id} venture={v} onDelete={setDeletingVenture} />)}
+                    </div>
+                </div>
+            )}
+
             {isLoading ? (
                 <div className="flex justify-center items-center h-48"><LoaderIcon className="h-8 w-8 animate-spin text-green-500" /></div>
             ) : ventures.length > 0 ? (
@@ -84,6 +160,14 @@ export const VentureMarketplacePage: React.FC<VentureMarketplacePageProps> = ({ 
                     <p>There are no community ventures seeking funding at this time. Check back soon!</p>
                 </div>
             )}
+             <ConfirmationDialog
+                isOpen={!!deletingVenture}
+                onClose={() => setDeletingVenture(null)}
+                onConfirm={handleConfirmDelete}
+                title="Delete Venture"
+                message={`Are you sure you want to permanently delete "${deletingVenture?.name}"? This action cannot be undone.`}
+                confirmButtonText="Delete"
+            />
         </div>
     );
 };

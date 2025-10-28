@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Post } from '../types';
 import { XCircleIcon } from './icons/XCircleIcon';
 
@@ -10,23 +10,72 @@ interface EditPostModalProps {
 }
 
 export const EditPostModal: React.FC<EditPostModalProps> = ({ isOpen, onClose, post, onSave }) => {
-  const [content, setContent] = useState(post.content);
+  const [content, setContent] = useState('');
   const [isSaving, setIsSaving] = useState(false);
+  const editorRef = useRef<HTMLDivElement>(null);
+
+  const sanitizeHtml = (html: string): string => {
+    if (!html) return '';
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = html;
+    const allElements = tempDiv.querySelectorAll('*');
+    allElements.forEach(el => {
+      el.removeAttribute('style');
+    });
+    return tempDiv.innerHTML;
+  };
 
   useEffect(() => {
-    setContent(post.content);
-  }, [post]);
+    if (isOpen && post) {
+      const sanitizedContent = sanitizeHtml(post.content);
+      setContent(sanitizedContent);
+      if (editorRef.current) {
+        editorRef.current.innerHTML = sanitizedContent;
+      }
+    }
+  }, [isOpen, post]);
+
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor || !isOpen) return;
+
+    const handlePaste = (e: ClipboardEvent) => {
+      e.preventDefault();
+      const text = e.clipboardData?.getData('text/plain');
+      if (text) {
+        document.execCommand('insertText', false, text);
+      }
+    };
+
+    editor.addEventListener('paste', handlePaste);
+    return () => {
+      editor.removeEventListener('paste', handlePaste);
+    };
+  }, [isOpen]);
+
+  const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+    setContent(e.currentTarget.innerHTML);
+  };
+
+  const handleFormatClick = (command: string, value?: string) => {
+    editorRef.current?.focus();
+    document.execCommand(command, false, value);
+    if (editorRef.current) {
+      const event = new Event('input', { bubbles: true });
+      editorRef.current.dispatchEvent(event);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!editorRef.current?.textContent?.trim()) return;
+    setIsSaving(true);
+    await onSave(post.id, content);
+    setIsSaving(false); // Parent will close, but good practice to reset
+  };
 
   if (!isOpen) {
     return null;
   }
-
-  const handleSave = async () => {
-    if (!content.trim()) return;
-    setIsSaving(true);
-    await onSave(post.id, content);
-    setIsSaving(false);
-  };
 
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
@@ -44,12 +93,22 @@ export const EditPostModal: React.FC<EditPostModalProps> = ({ isOpen, onClose, p
               </button>
             </div>
             <div className="mt-4">
-              <textarea
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
-                className="w-full bg-slate-700 p-2 rounded-md text-white focus:ring-green-500 focus:border-green-500"
-                rows={5}
-              />
+              <div className="border border-slate-700 rounded-md">
+                <div className="flex items-center space-x-1 p-2 bg-slate-900 border-b border-slate-700">
+                  <button type="button" title="Heading 1" onClick={() => handleFormatClick('formatBlock', '<h1>')} className="px-2 py-1 text-sm font-bold text-gray-300 hover:bg-slate-700 rounded">H1</button>
+                  <button type="button" title="Heading 2" onClick={() => handleFormatClick('formatBlock', '<h2>')} className="px-2 py-1 text-sm font-bold text-gray-300 hover:bg-slate-700 rounded">H2</button>
+                  <button type="button" title="Bold" onClick={() => handleFormatClick('bold')} className="px-2 py-1 text-sm font-bold text-gray-300 hover:bg-slate-700 rounded w-8">B</button>
+                  <button type="button" title="Italic" onClick={() => handleFormatClick('italic')} className="px-2 py-1 text-sm font-bold italic text-gray-300 hover:bg-slate-700 rounded w-8">I</button>
+                </div>
+                <div
+                  ref={editorRef}
+                  contentEditable="true"
+                  onInput={handleInput}
+                  className="w-full bg-slate-800 p-3 text-white text-base focus:outline-none wysiwyg-editor"
+                  style={{ minHeight: '150px', maxHeight: '40vh', overflowY: 'auto' }}
+                  dangerouslySetInnerHTML={{ __html: content }}
+                />
+              </div>
             </div>
           </div>
           <div className="bg-slate-800 border-t border-slate-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">

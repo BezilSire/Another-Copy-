@@ -1,16 +1,28 @@
-
-
 import React, { useState, useEffect } from 'react';
-import { Agent, User } from '../types';
+import { Agent, User, PayoutRequest } from '../types';
 import { useToast } from '../contexts/ToastContext';
 import { ProfileCompletionMeter } from './ProfileCompletionMeter';
 import { HelpCircleIcon } from './icons/HelpCircleIcon';
 import { BookOpenIcon } from './icons/BookOpenIcon';
+import { api } from '../services/apiService';
+import { DollarSignIcon } from './icons/DollarSignIcon';
+import { LoaderIcon } from './icons/LoaderIcon';
+import { formatTimeAgo } from '../utils';
 
 interface AgentProfileProps {
   agent: Agent;
   onUpdateUser: (updatedUser: Partial<User>) => Promise<void>;
 }
+
+const PayoutStatusBadge: React.FC<{ status: PayoutRequest['status'] }> = ({ status }) => {
+    const baseClasses = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize';
+    switch (status) {
+        case 'pending': return <span className={`${baseClasses} bg-yellow-800 text-yellow-300`}>Pending</span>;
+        case 'completed': return <span className={`${baseClasses} bg-green-800 text-green-300`}>Completed</span>;
+        case 'rejected': return <span className={`${baseClasses} bg-red-800 text-red-300`}>Rejected</span>;
+        default: return null;
+    }
+};
 
 export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser }) => {
   const [formData, setFormData] = useState({
@@ -24,6 +36,10 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
   });
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
+  
+  const [payoutData, setPayoutData] = useState({ ecocashName: '', ecocashNumber: '' });
+  const [isRequestingPayout, setIsRequestingPayout] = useState(false);
+  const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
 
   useEffect(() => {
     // Sync form data if the agent prop changes (e.g., after a save)
@@ -36,6 +52,9 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
         address: agent.address || '',
         bio: agent.bio || '',
     });
+
+    const unsub = api.listenForUserPayouts(agent.id, setPayouts, console.error);
+    return () => unsub();
   }, [agent]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -66,6 +85,30 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
       addToast('Failed to update profile. Please try again.', 'error');
     } finally {
       setIsSaving(false);
+    }
+  };
+
+  const handlePayoutRequest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const amount = agent.commissionBalance || 0;
+    if (amount <= 0) {
+        addToast('No commission balance to withdraw.', 'info');
+        return;
+    }
+    if (!payoutData.ecocashName || !payoutData.ecocashNumber) {
+        addToast('Please provide your Ecocash details.', 'error');
+        return;
+    }
+    setIsRequestingPayout(true);
+    try {
+        await api.requestCommissionPayout(agent, payoutData.ecocashName, payoutData.ecocashNumber, amount);
+        // User balance will update via snapshot listener
+        addToast('Payout request submitted successfully!', 'success');
+        setPayoutData({ ecocashName: '', ecocashNumber: '' });
+    } catch (error) {
+        addToast(error instanceof Error ? error.message : "Failed to request payout.", "error");
+    } finally {
+        setIsRequestingPayout(false);
     }
   };
   
@@ -203,6 +246,47 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
           </button>
         </div>
       </form>
+
+      <div className="mt-8 pt-6 border-t border-slate-700">
+          <h3 className="text-lg font-medium text-gray-200 flex items-center mb-4">
+            <DollarSignIcon className="h-5 w-5 mr-2" />
+            Commission Earnings
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div className="bg-slate-900/50 p-4 rounded-lg">
+                <p className="text-sm text-gray-400">Available Balance</p>
+                <p className="text-3xl font-bold text-green-400">${(agent.commissionBalance || 0).toFixed(2)}</p>
+                {(agent.commissionBalance || 0) > 0 && (
+                    <form onSubmit={handlePayoutRequest} className="mt-4 space-y-3">
+                        <input type="text" value={payoutData.ecocashName} onChange={e => setPayoutData(p => ({...p, ecocashName: e.target.value}))} placeholder="Ecocash Full Name" required className="block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
+                        <input type="tel" value={payoutData.ecocashNumber} onChange={e => setPayoutData(p => ({...p, ecocashNumber: e.target.value}))} placeholder="Ecocash Phone Number" required className="block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
+                        <button type="submit" disabled={isRequestingPayout} className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold disabled:bg-slate-600">
+                            {isRequestingPayout ? 'Processing...' : `Request Payout`}
+                        </button>
+                    </form>
+                )}
+              </div>
+              <div>
+                <h4 className="text-md font-semibold text-gray-300 mb-2">Payout History</h4>
+                 {payouts.length > 0 ? (
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                        {payouts.map(p => (
+                            <div key={p.id} className="flex justify-between items-center bg-slate-700/50 p-3 rounded-md">
+                                <div>
+                                    <p className="font-semibold text-gray-200">
+                                       ${p.amount.toFixed(2)} - {p.type}
+                                    </p>
+                                    <p className="text-xs text-gray-400">{formatTimeAgo(p.requestedAt.toDate().toISOString())}</p>
+                                </div>
+                                <PayoutStatusBadge status={p.status} />
+                            </div>
+                        ))}
+                    </div>
+                ) : <p className="text-sm text-gray-500">No payout history.</p>}
+              </div>
+          </div>
+      </div>
+
 
       <div className="mt-8 pt-6 border-t border-slate-700">
           <h3 className="text-lg font-medium text-gray-200 flex items-center">

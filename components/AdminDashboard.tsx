@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Admin, Agent, Member, Broadcast, Report, User, MemberUser, Conversation, NotificationItem, Post, PayoutRequest, Venture, CommunityValuePool } from '../types';
+import { Admin, Agent, Member, Broadcast, Report, User, MemberUser, Conversation, NotificationItem, Post, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PublicUserProfile } from '../types';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
 import { MemberList } from './MemberList';
@@ -34,6 +34,7 @@ import { VenturesAdminPage } from './VenturesAdminPage';
 import { DatabaseIcon } from './icons/DatabaseIcon';
 import { EconomyAdminPage } from './EconomyAdminPage';
 import { Dashboard } from './Dashboard';
+import { PublicProfile } from './PublicProfile';
 
 
 type AdminView = 'dashboard' | 'users' | 'feed' | 'connect' | 'reports' | 'profile' | 'notifications' | 'proposals' | 'payouts' | 'sustenance' | 'ventures' | 'economy';
@@ -45,16 +46,14 @@ interface AdminDashboardProps {
   onSendBroadcast: (message: string) => Promise<void>;
   onUpdateUser: (updatedUser: Partial<User>) => Promise<void>;
   unreadCount: number;
-  onViewProfile: (userId: string | null) => void;
-  initialChat: { target: Conversation; role: User['role'] } | null;
-  onInitialChatConsumed: () => void;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts, onSendBroadcast, onUpdateUser, unreadCount, onViewProfile, initialChat, onInitialChatConsumed }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts, onSendBroadcast, onUpdateUser, unreadCount }) => {
   const [view, setView] = useState<AdminView>('dashboard');
   const [userView, setUserView] = useState<UserSubView>('agents');
   
   const [chatTarget, setChatTarget] = useState<Conversation | null>(null);
+  const [initialChat, setInitialChat] = useState<Conversation | null>(null);
 
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -65,11 +64,14 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
   const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
   const [ventures, setVentures] = useState<Venture[]>([]);
   const [cvp, setCvp] = useState<CommunityValuePool | null>(null);
+  const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   
-  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [loadedStreamCount, setLoadedStreamCount] = useState(0);
   const [loadingErrors, setLoadingErrors] = useState<string[]>([]);
-
   const { addToast } = useToast();
+  
+  const totalStreams = 9;
+  const isInitialLoading = loadedStreamCount < totalStreams;
 
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
@@ -77,54 +79,49 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
   const [dialogState, setDialogState] = useState<{ isOpen: boolean; member: Member | null; action: 'reset' | 'clear' }>({ isOpen: false, member: null, action: 'reset' });
   const [roleChangeDialog, setRoleChangeDialog] = useState<{ isOpen: boolean; user: User | null; newRole: User['role'] | null }>({ isOpen: false, user: null, newRole: null });
   const [verificationModalState, setVerificationModalState] = useState<{ isOpen: boolean, member: Member | null }>({ isOpen: false, member: null });
-  const [typeFilter, setTypeFilter] = useState<Post['types'] | 'all'>('all');
+  const [typeFilter, setTypeFilter] = useState<PostFilterType>('all');
+  
+  const onInitialChatConsumed = () => setInitialChat(null);
 
   useEffect(() => {
-    if (initialChat && initialChat.role === user.role) {
-        setChatTarget(initialChat.target);
+    if (initialChat) {
+        setChatTarget(initialChat);
         setView('connect');
         onInitialChatConsumed();
     }
-  }, [initialChat, user.role, onInitialChatConsumed]);
+  }, [initialChat]);
 
   useEffect(() => {
-    const errors = new Set<string>();
-    const streams = ['users', 'members', 'agents', 'pending', 'reports', 'conversations', 'payouts', 'ventures', 'cvp'];
-    const loadedStreams = new Set<string>();
+    // Reset loading state for each new cycle (e.g., if user object changes)
+    setLoadedStreamCount(0);
+    setLoadingErrors([]);
 
-    const checkAllLoaded = () => {
-        if (loadedStreams.size === streams.length) {
-            setIsInitialLoading(false);
-        }
-    };
-
-    const handleStreamLoaded = (streamName: string) => {
-        if (!loadedStreams.has(streamName)) {
-            loadedStreams.add(streamName);
-            checkAllLoaded();
-        }
+    const handleStreamLoaded = () => {
+        setLoadedStreamCount(prev => prev + 1);
     };
 
     const handleError = (dataType: string, error: Error) => {
         console.error(`Error loading ${dataType}:`, error);
         const message = `Could not load ${dataType}. This might be a permissions issue.`;
-        if (!errors.has(message)) {
-            errors.add(message);
-            setLoadingErrors(Array.from(errors));
-            addToast(message, 'error');
-        }
-        handleStreamLoaded(dataType);
+        setLoadingErrors(prevErrors => {
+            if (!prevErrors.includes(message)) {
+                addToast(message, 'error');
+                return [...prevErrors, message];
+            }
+            return prevErrors;
+        });
+        handleStreamLoaded(); // Count as "loaded" even on error to prevent infinite loading
     };
 
-    const unsubUsers = api.listenForAllUsers(user, (data) => { setAllUsers(data); handleStreamLoaded('users'); }, (e) => handleError('all users', e));
-    const unsubMembers = api.listenForAllMembers(user, (data) => { setMembers(data); handleStreamLoaded('members'); }, (e) => handleError('members', e));
-    const unsubAgents = api.listenForAllAgents(user, (data) => { setAgents(data); handleStreamLoaded('agents'); }, (e) => handleError('agents', e));
-    const unsubPending = api.listenForPendingMembers(user, (data) => { setPendingMembers(data); handleStreamLoaded('pending'); }, (e) => handleError('pending members', e));
-    const unsubReports = api.listenForReports(user, (data) => { setReports(data); handleStreamLoaded('reports'); }, (e) => handleError('reports', e));
-    const unsubConversations = api.listenForConversations(user.id, (data) => { setConversations(data); handleStreamLoaded('conversations'); }, (e) => handleError('conversations', e));
-    const unsubPayouts = api.listenForPayoutRequests(user, (data) => { setPayouts(data); handleStreamLoaded('payouts'); }, (e) => handleError('payouts', e));
-    const unsubVentures = api.listenForVentures(user, (data) => { setVentures(data); handleStreamLoaded('ventures'); }, (e) => handleError('ventures', e));
-    const unsubCvp = api.listenForCVP(user, (data) => { setCvp(data); handleStreamLoaded('cvp'); }, (e) => handleError('cvp', e));
+    const unsubUsers = api.listenForAllUsers(user, (data) => { setAllUsers(data); handleStreamLoaded(); }, (e) => handleError('all users', e));
+    const unsubMembers = api.listenForAllMembers(user, (data) => { setMembers(data); handleStreamLoaded(); }, (e) => handleError('members', e));
+    const unsubAgents = api.listenForAllAgents(user, (data) => { setAgents(data); handleStreamLoaded(); }, (e) => handleError('agents', e));
+    const unsubPending = api.listenForPendingMembers(user, (data) => { setPendingMembers(data); handleStreamLoaded(); }, (e) => handleError('pending members', e));
+    const unsubReports = api.listenForReports(user, (data) => { setReports(data); handleStreamLoaded(); }, (e) => handleError('reports', e));
+    const unsubConversations = api.listenForConversations(user.id, (data) => { setConversations(data); handleStreamLoaded(); }, (e) => handleError('conversations', e));
+    const unsubPayouts = api.listenForPayoutRequests(user, (data) => { setPayouts(data); handleStreamLoaded(); }, (e) => handleError('payouts', e));
+    const unsubVentures = api.listenForVentures(user, (data) => { setVentures(data); handleStreamLoaded(); }, (e) => handleError('ventures', e));
+    const unsubCvp = api.listenForCVP(user, (data) => { setCvp(data); handleStreamLoaded(); }, (e) => handleError('cvp', e));
 
 
     return () => {
@@ -140,6 +137,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
     };
   }, [user, addToast]);
 
+
   // Clear the initial chat target when navigating away from the connect page
   useEffect(() => {
     if (view !== 'connect') {
@@ -147,11 +145,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
     }
   }, [view]);
   
-  const handleStartChat = async (targetUser: User) => {
+  const handleStartChat = async (targetUserId: string) => {
     try {
-        const newConvo = await api.startChat(user.id, targetUser.id, user.name, targetUser.name);
+        const targetUser = await api.getPublicUserProfile(targetUserId);
+        if (!targetUser) {
+            addToast("Could not find user to chat with.", "error");
+            return;
+        }
+        const newConvo = await api.startChat(user.id, targetUserId, user.name, targetUser.name);
+        setViewingProfileId(null); // Close profile if open
         setChatTarget(newConvo);
-        onViewProfile(null); // Close profile if open
         setView('connect');
     } catch (error) {
         addToast("Failed to start chat.", "error");
@@ -176,10 +179,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
           case 'NEW_POST_PROPOSAL':
           case 'NEW_POST_GENERAL':
           case 'NEW_POST_OFFER':
-              // For post likes, navigate to liker's profile. For new member/post, show that user/post.
-              // As admins can't easily view a single post, we'll navigate to the user profile for now.
+          case 'KNOWLEDGE_APPROVED':
               const targetId = item.itemType === 'notification' ? item.causerId : item.link;
-              onViewProfile(targetId);
+              setViewingProfileId(targetId);
               break;
           default:
               addToast("Navigation for this notification is not available.", "info");
@@ -352,6 +354,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
         </button>
     );
 
+    if (viewingProfileId) {
+        return (
+            <PublicProfile 
+                userId={viewingProfileId}
+                currentUser={user}
+                onBack={() => setViewingProfileId(null)}
+                onStartChat={handleStartChat}
+                onViewProfile={setViewingProfileId}
+            />
+        );
+    }
+
     const renderUsersView = () => (
         <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
             <div className="flex justify-between items-center mb-4">
@@ -375,7 +389,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
                                 {(paginatedItems as (Agent & { memberCount: number, commission: number })[]).map(agent => (
                                     <tr key={agent.id}>
                                         <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-white sm:pl-0">
-                                            <button onClick={() => onViewProfile(agent.id)} className="hover:underline">{agent.name}</button>
+                                            <button onClick={() => setViewingProfileId(agent.id)} className="hover:underline">{agent.name}</button>
                                         </td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{agent.email}</td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{agent.circle}</td>
@@ -388,7 +402,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
                     </div>
                 )}
                 {userView === 'members' && (
-                    <MemberList members={(filteredItems as Member[])} isAdminView onMarkAsComplete={handleMarkComplete} onResetQuota={(m) => setDialogState({isOpen: true, member: m, action: 'reset'})} onClearDistressPost={(m) => setDialogState({isOpen: true, member: m, action: 'clear'})} onSelectMember={(m) => m.payment_status === 'pending_verification' && setVerificationModalState({ isOpen: true, member: m })} onViewProfile={onViewProfile} onStartChat={(user) => handleStartChat(user)}/>
+                    <MemberList members={(filteredItems as Member[])} isAdminView onMarkAsComplete={handleMarkComplete} onResetQuota={(m) => setDialogState({isOpen: true, member: m, action: 'reset'})} onClearDistressPost={(m) => setDialogState({isOpen: true, member: m, action: 'clear'})} onSelectMember={(m) => m.payment_status === 'pending_verification' && setVerificationModalState({ isOpen: true, member: m })} onViewProfile={setViewingProfileId} onStartChat={(user) => handleStartChat(user.id)} />
                 )}
                 {userView === 'roles' && (
                      <div className="flow-root">
@@ -398,7 +412,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
                                 {(paginatedItems as User[]).map(u => (
                                     <tr key={u.id}>
                                         <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-white sm:pl-0">
-                                            <button onClick={() => onViewProfile(u.id)} className="hover:underline">{u.name}</button>
+                                            <button onClick={() => setViewingProfileId(u.id)} className="hover:underline">{u.name}</button>
                                         </td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{u.email}</td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400 capitalize">{u.role}</td>
@@ -450,25 +464,25 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
             case 'users': return renderUsersView();
             case 'feed': return (
                 <>
-                    <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} />
+                    <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView />
                     <PostsFeed 
                         user={user} 
                         feedType="all" 
                         isAdminView 
-                        onViewProfile={onViewProfile}
+                        onViewProfile={setViewingProfileId}
                         typeFilter={typeFilter}
                     />
                 </>
             );
-            case 'connect': return <ConnectPage user={user} initialTarget={chatTarget} onViewProfile={onViewProfile} />;
-            case 'reports': return <div className="bg-slate-800 p-6 rounded-lg shadow-lg"><ReportsView reports={reports} onViewProfile={onViewProfile} onResolve={(reportId, postId, authorId) => api.resolvePostReport(user, reportId, postId, authorId)} onDismiss={(reportId) => api.dismissReport(user, reportId)}/></div>;
+            case 'connect': return <ConnectPage user={user} initialTarget={chatTarget} onViewProfile={setViewingProfileId} />;
+            case 'reports': return <div className="bg-slate-800 p-6 rounded-lg shadow-lg"><ReportsView reports={reports} onViewProfile={setViewingProfileId} onResolve={(reportId, postId, authorId) => api.resolvePostReport(user, reportId, postId, authorId)} onDismiss={(reportId) => api.dismissReport(user, reportId)}/></div>;
             case 'proposals': return <ProposalsAdminPage user={user} />;
             case 'payouts': return <PayoutsAdminPage payouts={payouts} />;
             case 'sustenance': return <SustenanceAdminPage user={user} />;
             case 'ventures': return <VenturesAdminPage user={user} ventures={ventures} />;
             case 'economy': return <EconomyAdminPage user={user} cvp={cvp} users={allUsers} />;
             case 'profile': return <AdminProfile user={user} onUpdateUser={onUpdateUser} />;
-            case 'notifications': return <NotificationsPage user={user} onNavigate={handleNavigate} onViewProfile={onViewProfile} />;
+            case 'notifications': return <NotificationsPage user={user} onNavigate={handleNavigate} onViewProfile={setViewingProfileId} />;
             default: return <Dashboard 
                 user={user}
                 users={allUsers}
@@ -495,7 +509,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
             );
         }
 
-        if (loadingErrors.length > 0) {
+        if (loadingErrors.length > 0 && !isInitialLoading) {
             return (
                 <div className="p-6 bg-red-900/50 border border-red-700 rounded-lg text-center">
                     <h2 className="text-2xl font-bold text-red-400">Data Loading Error</h2>

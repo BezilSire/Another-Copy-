@@ -31,7 +31,7 @@ const CommentItem: React.FC<{
                 <div className="bg-slate-700/50 rounded-lg px-3 py-2">
                     <div className="flex items-center justify-between">
                          <span className="font-semibold text-sm text-white">{comment.authorName}</span>
-                        <p className="text-xs text-gray-500">{formatTimeAgo(comment.timestamp.toDate().toISOString())}</p>
+                        <p className="text-xs text-gray-500">{comment.timestamp ? formatTimeAgo(comment.timestamp.toDate().toISOString()) : 'sending...'}</p>
                     </div>
                     <p className="text-sm text-gray-300 whitespace-pre-wrap break-words">
                         <MarkdownRenderer content={comment.content} />
@@ -55,11 +55,15 @@ const CommentSection: React.FC<{ parentId: string, currentUser: User }> = ({ par
     const [comments, setComments] = useState<Comment[]>([]);
     const [newComment, setNewComment] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const { addToast } = useToast();
 
     useEffect(() => {
-        const unsubscribe = api.listenForComments(parentId, setComments, 'proposals');
+        const unsubscribe = api.listenForComments(parentId, setComments, 'proposals', (error) => {
+            console.error("Failed to load comments for proposal:", error);
+            addToast("Could not load comments for this proposal.", "error");
+        });
         return () => unsubscribe();
-    }, [parentId]);
+    }, [parentId, addToast]);
 
     const handleCommentSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -77,6 +81,7 @@ const CommentSection: React.FC<{ parentId: string, currentUser: User }> = ({ par
             setNewComment('');
         } catch (error) {
             console.error("Failed to post comment:", error);
+            addToast("Failed to post comment.", "error");
         } finally {
             setIsSubmitting(false);
         }
