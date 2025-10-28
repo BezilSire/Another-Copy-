@@ -50,7 +50,17 @@ export const AuthPage: React.FC = () => {
             setView('memberSignup');
         }
     } catch (error) {
-        addToast('An error occurred during lookup. Please try again.', 'error');
+        console.error("Member lookup failed:", error);
+        const firebaseError = error as { code?: string; message?: string };
+        let message = 'An error occurred during lookup. Please try again.';
+
+        if (firebaseError.code === 'failed-precondition') {
+            message = 'Lookup failed. A database index is required. Please contact an administrator to resolve this.';
+        } else if (firebaseError.code === 'permission-denied') {
+            message = 'Lookup failed due to a permissions issue. Please contact an administrator to resolve this.';
+        }
+        
+        addToast(message, 'error');
     }
   };
 

@@ -114,22 +114,29 @@ export const api = {
         
         const welcomeMessage = await generateWelcomeMessage(memberData.full_name, memberData.circle);
 
+        // Use a batch write to ensure atomicity for database operations
+        const batch = writeBatch(db);
+
+        const memberRef = doc(membersCollection); // Create a reference with a new ID
+
         const newMemberDoc: Omit<Member, 'id'> = {
             ...memberData, uid: user.uid, agent_id: 'PUBLIC_SIGNUP', agent_name: 'Self-Registered',
             date_registered: new Date().toISOString(), payment_status: 'pending_verification', registration_amount: 10,
             welcome_message: welcomeMessage, membership_card_id: `UGC-M-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
         };
-        
-        const memberRef = await addDoc(membersCollection, newMemberDoc);
+        batch.set(memberRef, newMemberDoc);
         
         const referralCode = generateReferralCode();
-        const newUser: Omit<MemberUser, 'id'> = {
+        const userRef = doc(db, 'users', user.uid);
+        const newUserDoc: Omit<MemberUser, 'id'> = {
             name: memberData.full_name, email: memberData.email, phone: memberData.phone, address: memberData.address,
             national_id: memberData.national_id, role: 'member', status: 'pending', circle: memberData.circle,
             createdAt: Timestamp.now(), lastSeen: Timestamp.now(), isProfileComplete: false, member_id: memberRef.id,
             credibility_score: 100, distress_calls_available: 1, referralCode, referredBy: memberData.referralCode || '',
         };
-        await setDoc(doc(db, 'users', user.uid), newUser);
+        batch.set(userRef, newUserDoc);
+        
+        await batch.commit();
     },
     activateMemberAccount: async (member: Member, password: string): Promise<void> => {
          if (!member.email) throw new Error("Member email is missing.");

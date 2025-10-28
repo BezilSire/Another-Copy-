@@ -133,9 +133,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await api.signup(credentials.name, credentials.email, credentials.password, credentials.circle);
       addToast(`Account created successfully! Welcome.`, 'success');
     } catch (error) {
-      // FIX: Improved error message handling
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      addToast(`Signup failed: ${errorMessage}`, 'error');
+      const firebaseError = error as { code?: string; message?: string };
+      let message = `Signup failed: ${firebaseError.message || 'Please try again.'}`;
+      
+      switch (firebaseError.code) {
+          case 'auth/email-already-in-use':
+              message = 'An account with this email address already exists.';
+              break;
+          case 'auth/invalid-email':
+              message = 'Please enter a valid email address.';
+              break;
+          case 'auth/weak-password':
+              message = 'Password is too weak. It must be at least 6 characters.';
+              break;
+          case 'permission-denied':
+              message = 'Account created, but failed to save profile due to a permissions issue. Please contact support.';
+              break;
+      }
+      addToast(message, 'error');
       throw error;
     } finally {
       setIsProcessingAuth(false);
@@ -148,8 +163,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await api.memberSignup(memberData, password);
         addToast(`Registration submitted! An admin will review your application.`, 'success');
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-        addToast(`Signup failed: ${errorMessage}`, 'error');
+        const firebaseError = error as { code?: string; message?: string };
+        let message = `Signup failed: ${firebaseError.message || 'Please try again.'}`;
+
+        switch (firebaseError.code) {
+            case 'auth/email-already-in-use':
+                message = 'An account with this email address already exists.';
+                break;
+            case 'auth/invalid-email':
+                message = 'Please enter a valid email address.';
+                break;
+            case 'auth/weak-password':
+                message = 'Password is too weak. It must be at least 6 characters.';
+                break;
+            case 'permission-denied':
+                message = 'Account created, but failed to save profile due to a permissions issue. Please contact support.';
+                break;
+        }
+        addToast(message, 'error');
         throw error;
     } finally {
         setIsProcessingAuth(false);
@@ -162,8 +193,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await api.activateMemberAccount(member, password);
         addToast(`Account activated! Welcome to the commons.`, 'success');
     } catch (error) {
-        const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-        addToast(`Activation failed: ${errorMessage}`, 'error');
+        const firebaseError = error as { code?: string; message?: string };
+        let message = `Activation failed: ${firebaseError.message || 'Please try again.'}`;
+
+        switch (firebaseError.code) {
+            case 'auth/email-already-in-use':
+                message = 'An account for this email already exists. Please contact support.';
+                break;
+            case 'auth/weak-password':
+                message = 'Password is too weak. It must be at least 6 characters.';
+                break;
+            case 'permission-denied':
+                message = 'Account created, but failed to link to your member profile due to a permissions issue. Please contact support.';
+                break;
+        }
+        addToast(message, 'error');
         throw error;
     } finally {
         setIsProcessingAuth(false);
