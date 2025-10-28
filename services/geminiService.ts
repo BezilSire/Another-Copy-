@@ -2,7 +2,13 @@ import { GoogleGenAI, Type, Chat } from '@google/genai';
 // FIX: Added Bounty to imports
 import { User, Post, PublicUserProfile, Bounty } from '../types';
 
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY! });
+const GEMINI_API_KEY = process.env.API_KEY;
+
+if (!GEMINI_API_KEY) {
+  throw new Error("Gemini API Key is missing. Ensure the `API_KEY` environment variable is set in your project settings.");
+}
+
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 // --- ChatBot Functions ---
 let chat: Chat | null = null;
@@ -162,7 +168,7 @@ export const generatePersonalizedBriefing = async (user: User, posts: Post[], bo
     ${postSummaries.length > 0 ? postSummaries : "No new posts."}
 
     **Available Bounties:**
-    ${bountySummaries.length > 0 ? bountySummaries : "No open bounties right now."}
+    ${bountySummaries.length > 0 ? bounties : "No open bounties right now."}
 
     Based on the user's profile and the recent activity, generate a friendly and engaging briefing in Markdown format.
     - Start with a warm greeting.
