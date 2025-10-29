@@ -54,7 +54,7 @@ const PostTypeButton: React.FC<{
     </div>
 );
 
-const MAX_POST_LENGTH = 1000;
+const MAX_POST_LENGTH = 10000;
 
 export const NewPostModal: React.FC<NewPostModalProps> = ({ isOpen, onClose, user, onPostCreated }) => {
   const [content, setContent] = useState('');
