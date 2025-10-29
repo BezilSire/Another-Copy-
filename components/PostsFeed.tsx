@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Post, User, Comment, Activity, PublicUserProfile, FilterType } from '../types';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
@@ -174,6 +174,17 @@ export const PostItem: React.FC<{
     const isDistressPost = post.types === 'distress';
     const isAdminPost = post.authorRole === 'admin';
     const [showComments, setShowComments] = useState(false);
+    const [isExpanded, setIsExpanded] = useState(false);
+
+    const textContentLength = useMemo(() => {
+        if (typeof document === 'undefined') return 0;
+        const div = document.createElement('div');
+        div.innerHTML = post.content || '';
+        return (div.textContent || div.innerText || '').length;
+    }, [post.content]);
+
+    const TRUNCATE_THRESHOLD = 350; // characters
+    const needsTruncation = textContentLength > TRUNCATE_THRESHOLD;
   
     const typeStyles: Record<string, { icon: React.ReactNode; borderColor: string; title: string }> = {
         proposal: {
@@ -252,9 +263,15 @@ export const PostItem: React.FC<{
                 </div>
             )}
 
-            <div className="text-white mt-4 text-base wysiwyg-content">
+            <div className={`text-white mt-4 text-base wysiwyg-content ${needsTruncation && !isExpanded ? 'line-clamp-6' : ''}`}>
                 <MarkdownRenderer content={post.content} />
             </div>
+
+            {needsTruncation && (
+                <button onClick={() => setIsExpanded(prev => !prev)} className="text-sm font-semibold text-green-400 hover:text-green-300 mt-2 transition-colors">
+                    {isExpanded ? 'Show less' : 'Read more...'}
+                </button>
+            )}
 
             <div className="mt-4 flex justify-between items-center text-gray-400 border-t border-b border-slate-700/50">
                 <ActionButton icon={<ThumbsUpIcon className="h-5 w-5"/>} label={post.upvotes.length > 0 ? post.upvotes.length.toString() : 'Like'} onClick={() => onUpvote(post.id)} isActive={hasUpvoted} activeColor="text-green-400" />

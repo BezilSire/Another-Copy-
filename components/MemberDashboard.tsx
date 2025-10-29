@@ -22,9 +22,9 @@ import { NewPostModal } from './NewPostModal';
 import { DistressCallDialog } from './DistressCallDialog';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
-import { PlusIcon } from './icons/PlusIcon';
 import { SirenIcon } from './icons/SirenIcon';
 import { NotificationsPage } from './NotificationsPage';
+import { FloatingActionMenu } from './FloatingActionMenu';
 
 
 type MemberView = 
@@ -166,24 +166,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcas
         {renderContent()}
       </main>
 
-       {/* Floating Action Buttons */}
-      <div className="fixed bottom-24 right-6 space-y-4 z-20">
-          <button
-              onClick={() => setIsDistressModalOpen(true)}
-              disabled={user.distress_calls_available <= 0}
-              className="flex items-center justify-center h-16 w-16 rounded-full bg-red-600 text-white shadow-lg hover:bg-red-700 disabled:bg-slate-500 disabled:cursor-not-allowed transition-transform transform hover:scale-110"
-              title={`Send Distress Call (${user.distress_calls_available} remaining)`}
-          >
-              <SirenIcon className="h-8 w-8"/>
-          </button>
-          <button
-              onClick={() => setIsNewPostModalOpen(true)}
-              className="flex items-center justify-center h-16 w-16 rounded-full bg-green-600 text-white shadow-lg hover:bg-green-700 transition-transform transform hover:scale-110"
-              title="Create a New Post"
-          >
-              <PlusIcon className="h-8 w-8"/>
-          </button>
-      </div>
+      <FloatingActionMenu
+        user={user}
+        onNewPostClick={() => setIsNewPostModalOpen(true)}
+        onDistressClick={() => setIsDistressModalOpen(true)}
+      />
 
       <MemberBottomNav activeView={view as any} setActiveView={handleNavigation} unreadNotificationCount={unreadCount} onLogout={onLogout} />
 
@@ -202,22 +189,3 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcas
     </>
   );
 };
-
-// Add PlusIcon component if it doesn't exist
-const PlusIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="3"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    {...props}
-  >
-    <line x1="12" y1="5" x2="12" y2="19" />
-    <line x1="5" y1="12" x2="19" y2="12" />
-  </svg>
-);
