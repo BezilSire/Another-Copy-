@@ -155,7 +155,12 @@ export const FloatingActionMenu: React.FC<FloatingActionMenuProps> = ({ onNewPos
           style={{ transform: isOpen ? 'translateY(0)' : 'translateY(20px)', transitionDelay: isOpen ? '50ms' : '0ms' }}
         >
            <button
-              onClick={onDistressClick}
+              onClick={() => {
+                onDistressClick();
+                setIsOpen(false);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
               disabled={distressCallsAvailable <= 0}
               className={`${subButtonStyle} bg-red-600 hover:bg-red-700 disabled:bg-slate-500 disabled:cursor-not-allowed`}
               title={`Send Distress Call (${distressCallsAvailable} remaining)`}
@@ -170,7 +175,12 @@ export const FloatingActionMenu: React.FC<FloatingActionMenuProps> = ({ onNewPos
           style={{ transform: isOpen ? 'translateY(0)' : 'translateY(20px)' }}
         >
           <button
-              onClick={onNewPostClick}
+              onClick={() => {
+                onNewPostClick();
+                setIsOpen(false);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
               className={`${subButtonStyle} bg-green-600 hover:bg-green-700`}
               title="Create a New Post"
           >
