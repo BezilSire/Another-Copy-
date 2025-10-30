@@ -9,9 +9,6 @@ interface VentureDetailsAdminProps {
   onBack: () => void;
 }
 
-// FIX: Changed interface extending a union type to a type intersection.
-// 'User' is a union type (Admin | Agent | etc.), which interfaces cannot extend.
-// A type alias with an intersection achieves the same goal.
 type BackerDetails = User & {
     shares: number;
 };
@@ -29,7 +26,7 @@ export const VentureDetailsAdmin: React.FC<VentureDetailsAdminProps> = ({ ventur
                         const holding = user.ventureEquity?.find(h => h.ventureId === venture.id);
                         return { ...user, shares: holding ? holding.shares : 0 };
                     });
-                    setBackers(backerDetails);
+                    setBackers(backerDetails as BackerDetails[]);
                 } catch (error) {
                     console.error("Failed to fetch backers:", error);
                 }

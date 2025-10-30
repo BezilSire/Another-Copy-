@@ -103,7 +103,7 @@ export const api = {
         const newAgent: Omit<Agent, 'id'> = {
             name, email, role: 'agent', status: 'active', circle, agent_code: agentCode,
             referralCode: referralCode, createdAt: Timestamp.now(), lastSeen: Timestamp.now(),
-            isProfileComplete: false, commissionBalance: 0, referralEarnings: 0,
+            isProfileComplete: false, hasCompletedInduction: true, commissionBalance: 0, referralEarnings: 0,
         };
         await setDoc(doc(db, 'users', user.uid), newAgent);
     },
@@ -111,13 +111,22 @@ export const api = {
         const userCredential = await createUserWithEmailAndPassword(auth, memberData.email, password);
         const { user } = userCredential;
         
+        let referredByAdmin = false;
+        if (memberData.referralCode) {
+            const q = query(usersCollection, where('referralCode', '==', memberData.referralCode), limit(1));
+            const snapshot = await getDocs(q);
+            if (!snapshot.empty) {
+                const referrer = snapshot.docs[0].data() as User;
+                if (referrer.role === 'admin') {
+                    referredByAdmin = true;
+                }
+            }
+        }
+
         const welcomeMessage = await generateWelcomeMessage(memberData.full_name, memberData.circle);
 
-        // Use a batch write to ensure atomicity for database operations
         const batch = writeBatch(db);
-
-        const memberRef = doc(membersCollection); // Create a reference with a new ID
-
+        const memberRef = doc(membersCollection);
         const newMemberDoc: Omit<Member, 'id'> = {
             ...memberData, uid: user.uid, agent_id: 'PUBLIC_SIGNUP', agent_name: 'Self-Registered',
             date_registered: new Date().toISOString(), payment_status: 'pending_verification', registration_amount: 10,
@@ -132,10 +141,24 @@ export const api = {
             national_id: memberData.national_id, role: 'member', status: 'pending', circle: memberData.circle,
             createdAt: Timestamp.now(), lastSeen: Timestamp.now(), isProfileComplete: false, member_id: memberRef.id,
             credibility_score: 100, distress_calls_available: 1, referralCode, referredBy: memberData.referralCode || '',
+            hasCompletedInduction: referredByAdmin,
         };
         batch.set(userRef, newUserDoc);
         
         await batch.commit();
+
+        if (referredByAdmin) {
+            await addDoc(payoutsCollection, {
+                userId: user.uid,
+                userName: memberData.full_name,
+                type: 'admin_referral_bonus',
+                amount: 5,
+                status: 'pending',
+                requestedAt: serverTimestamp(),
+                ecocashName: '',
+                ecocashNumber: '',
+            });
+        }
     },
     activateMemberAccount: async (member: Member, password: string): Promise<void> => {
          if (!member.email) throw new Error("Member email is missing.");
@@ -147,6 +170,7 @@ export const api = {
             name: member.full_name, email: member.email, phone: member.phone, role: 'member',
             status: 'active', circle: member.circle, createdAt: Timestamp.now(), lastSeen: Timestamp.now(),
             isProfileComplete: false, member_id: member.id, credibility_score: 100, distress_calls_available: 1, referralCode,
+            hasCompletedInduction: false,
          };
 
          const batch = writeBatch(db);
@@ -233,16 +257,42 @@ export const api = {
         });
         return users;
     },
-    getSearchableUsers: async (user: User): Promise<PublicUserProfile[]> => {
-        let q;
-        if (user.role === 'admin') {
-            q = query(usersCollection, limit(500));
-        } else {
-            // Members and Agents can only see other users in their circle to prevent permission errors.
-            q = query(usersCollection, where('circle', '==', user.circle), limit(200));
+    searchUsers: async (searchQuery: string, currentUser: User): Promise<PublicUserProfile[]> => {
+        if (!searchQuery.trim()) return [];
+        
+        const lowerCaseQuery = searchQuery.toLowerCase();
+        const q = query(
+            usersCollection,
+            where('name', '>=', lowerCaseQuery),
+            where('name', '<=', lowerCaseQuery + '\uf8ff'),
+            limit(20)
+        );
+
+        try {
+            const snapshot = await getDocs(q);
+            const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile));
+            return users.filter(u => u.id !== currentUser.id);
+        } catch (error) {
+            console.error("Error searching users:", error);
+            // This error likely means a composite index is needed.
+            if ((error as any).code === 'failed-precondition') {
+                throw new Error("User search is not configured. Please contact an admin to enable it.");
+            }
+            throw new Error("Could not perform search at this time.");
         }
+    },
+    getChatContacts: async (currentUser: User): Promise<User[]> => {
+        const q = query(usersCollection, where('status', '==', 'active'));
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(d => ({ id: d.id, ...d.data() }) as PublicUserProfile);
+        const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
+        // Filter out the current user from the list of contacts
+        return users.filter(u => u.id !== currentUser.id);
+    },
+    getSearchableUsers: async (currentUser: User): Promise<PublicUserProfile[]> => {
+        const q = query(usersCollection, where('status', '==', 'active'), orderBy('createdAt', 'desc'), limit(100));
+        const snapshot = await getDocs(q);
+        const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile));
+        return users.filter(u => u.id !== currentUser.id);
     },
 
     // Admin
@@ -288,12 +338,22 @@ export const api = {
     updateMemberProfile: (memberId: string, data: Partial<Member>) => updateDoc(doc(db, 'members', memberId), data),
     listenForReferredUsers: (userId: string, callback: (users: PublicUserProfile[]) => void, onError: (error: Error) => void) => {
         return onSnapshot(doc(usersCollection, userId), async (userSnap) => {
-            if (!userSnap.exists()) return;
-            const referralCode = userSnap.data().referralCode;
-            if (!referralCode) return;
-            const q = query(usersCollection, where('referredBy', '==', referralCode));
-            const referredSnapshot = await getDocs(q);
-            callback(referredSnapshot.docs.map(d => ({id: d.id, ...d.data()}) as PublicUserProfile));
+            try {
+                if (!userSnap.exists()) {
+                    callback([]);
+                    return;
+                }
+                const referralCode = userSnap.data().referralCode;
+                if (!referralCode) {
+                    callback([]);
+                    return;
+                }
+                const q = query(usersCollection, where('referredBy', '==', referralCode));
+                const referredSnapshot = await getDocs(q);
+                callback(referredSnapshot.docs.map(d => ({id: d.id, ...d.data()}) as PublicUserProfile));
+            } catch (error) {
+                onError(error as Error);
+            }
         }, onError);
     },
     approveMember: async (admin: User, member: Member) => {
@@ -492,42 +552,131 @@ export const api = {
     dismissReport: (admin: User, reportId: string) => updateDoc(doc(reportsCollection, reportId), { status: 'resolved' }),
     
     // Connect/Chat
-    listenForConversations: (userId: string, callback: (convos: Conversation[]) => void, onError: (error: Error) => void) => 
-        onSnapshot(
-            query(conversationsCollection, where('members', 'array-contains', userId)), 
-            (snapshot) => {
-                const conversations = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
-                // Sort client-side to avoid index requirement
-                conversations.sort((a, b) => {
-                    const timeA = a.lastMessageTimestamp?.toMillis() || 0;
-                    const timeB = b.lastMessageTimestamp?.toMillis() || 0;
-                    return timeB - timeA;
-                });
-                callback(conversations);
-            },
-            onError
-        ),
-    startChat: async (currentUserId: string, targetUserId: string, currentUserName: string, targetUserName: string): Promise<Conversation> => {
+    listenForConversations: (user: User, callback: (convos: Conversation[]) => void, onError: (error: Error) => void) => {
+      // FIX: The admin-specific query was causing permission errors. 
+      // This unified approach securely fetches conversations for all users, including admins,
+      // based on the `conversationIds` stored in their user document.
+      return onSnapshot(doc(usersCollection, user.id), async (userDoc) => {
+          if (!userDoc.exists()) {
+              callback([]);
+              return;
+          }
+          const userData = userDoc.data() as User;
+          const conversationIds = userData.conversationIds || [];
+          if (conversationIds.length === 0) {
+              callback([]);
+              return;
+          }
+          try {
+              const conversationPromises = [];
+              // Fetch conversations in chunks of 30, the maximum for an 'in' query.
+              for (let i = 0; i < conversationIds.length; i += 30) {
+                  const chunk = conversationIds.slice(i, i + 30);
+                  const q = query(conversationsCollection, where('__name__', 'in', chunk));
+                  conversationPromises.push(getDocs(q));
+              }
+              const snapshots = await Promise.all(conversationPromises);
+              const conversations: Conversation[] = [];
+              snapshots.forEach(snapshot => {
+                  snapshot.docs.forEach(doc => {
+                      if (doc.exists()) {
+                          conversations.push({ id: doc.id, ...doc.data() } as Conversation);
+                      }
+                  });
+              });
+              // Sort client-side to avoid needing a composite index.
+              conversations.sort((a, b) => (b.lastMessageTimestamp?.toMillis() || 0) - (a.lastMessageTimestamp?.toMillis() || 0));
+              callback(conversations);
+          } catch (err) {
+              console.error("Error fetching conversations by ID:", err);
+              onError(err as Error);
+          }
+      }, onError);
+    },
+    startChat: async (currentUser: User, targetUser: PublicUserProfile): Promise<Conversation> => {
+        const { id: currentUserId, name: currentUserName } = currentUser;
+        const { id: targetUserId, name: targetUserName } = targetUser;
+    
         const convoId = [currentUserId, targetUserId].sort().join('_');
         const convoRef = doc(conversationsCollection, convoId);
         const convoSnap = await getDoc(convoRef);
-        if (convoSnap.exists()) return { id: convoSnap.id, ...convoSnap.data() } as Conversation;
-
-        const newConvo: Omit<Conversation, 'id'> = {
+    
+        if (convoSnap.exists()) {
+            if (!currentUser.conversationIds?.includes(convoId)) {
+                await updateDoc(doc(usersCollection, currentUserId), { conversationIds: arrayUnion(convoId) });
+            }
+            return { id: convoSnap.id, ...convoSnap.data() } as Conversation;
+        }
+    
+        const newConvoData: Omit<Conversation, 'id'> = {
             members: [currentUserId, targetUserId],
             memberNames: { [currentUserId]: currentUserName, [targetUserId]: targetUserName },
-            lastMessage: "Conversation started", lastMessageTimestamp: Timestamp.now(),
-            lastMessageSenderId: currentUserId, readBy: [currentUserId], isGroup: false
+            lastMessage: `${currentUserName} started the conversation.`,
+            lastMessageTimestamp: Timestamp.now(),
+            lastMessageSenderId: currentUserId,
+            readBy: [currentUserId],
+            isGroup: false,
         };
-        await setDoc(convoRef, newConvo);
-        return { id: convoId, ...newConvo };
+        
+        const notification: Omit<Notification, 'id' | 'timestamp'> = {
+            userId: targetUserId,
+            message: `You have a new chat request from ${currentUserName}.`,
+            type: 'NEW_CHAT',
+            link: convoId,
+            causerId: currentUserId,
+            causerName: currentUserName,
+            read: false,
+        };
+    
+        const batch = writeBatch(db);
+        batch.set(convoRef, newConvoData);
+        batch.update(doc(usersCollection, currentUserId), { conversationIds: arrayUnion(convoId) });
+        batch.update(doc(usersCollection, targetUserId), { conversationIds: arrayUnion(convoId) });
+        batch.set(doc(collection(db, 'users', targetUserId, 'notifications')), { ...notification, timestamp: serverTimestamp() });
+        
+        await batch.commit();
+    
+        return { id: convoId, ...newConvoData };
     },
-    createGroupChat: async (name: string, memberIds: string[], memberNames: {[key: string]: string}) => {
+    createGroupChat: async (name: string, members: (User | PublicUserProfile)[], currentUser: User) => {
+        const newGroupRef = doc(collection(db, 'conversations'));
+        const memberIds = members.map(m => m.id);
+        const memberNames = members.reduce((acc, member) => {
+            acc[member.id] = member.name;
+            return acc;
+        }, {} as {[key: string]: string});
+    
         const newGroup: Omit<Conversation, 'id'> = {
-            name, members: memberIds, memberNames, lastMessage: "Group created", lastMessageTimestamp: Timestamp.now(),
-            lastMessageSenderId: memberIds[0], readBy: [memberIds[0]], isGroup: true
+            name,
+            members: memberIds,
+            memberNames,
+            lastMessage: `${currentUser.name} created the group.`,
+            lastMessageTimestamp: Timestamp.now(),
+            lastMessageSenderId: currentUser.id,
+            readBy: [currentUser.id],
+            isGroup: true,
+            adminIds: [currentUser.id],
         };
-        await addDoc(conversationsCollection, newGroup);
+        
+        const batch = writeBatch(db);
+        batch.set(newGroupRef, newGroup);
+
+        memberIds.forEach(id => {
+            batch.update(doc(usersCollection, id), { conversationIds: arrayUnion(newGroupRef.id) });
+            if (id !== currentUser.id) {
+                const notification: Omit<Notification, 'id' | 'timestamp'> = {
+                    userId: id,
+                    message: `${currentUser.name} added you to the group "${name}".`,
+                    type: 'NEW_CHAT',
+                    link: newGroupRef.id,
+                    causerId: currentUser.id,
+                    causerName: currentUser.name,
+                    read: false,
+                };
+                 batch.set(doc(collection(db, 'users', id, 'notifications')), { ...notification, timestamp: serverTimestamp() });
+            }
+        });
+        await batch.commit();
     },
     listenForMessages: (convoId: string, callback: (messages: Message[]) => void) => onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Message)))),
     sendMessage: async (convoId: string, message: Omit<Message, 'id' | 'timestamp'>, convo: Conversation) => {
@@ -539,21 +688,24 @@ export const api = {
             lastMessage: message.text, lastMessageTimestamp: serverTimestamp(),
             lastMessageSenderId: message.senderId, readBy: [message.senderId]
         });
+
+        convo.members.forEach(memberId => {
+            if (memberId !== message.senderId) {
+                const notifRef = doc(collection(db, 'users', memberId, 'notifications'));
+                const notification: Omit<Notification, 'id' | 'timestamp'> = {
+                    userId: memberId,
+                    message: `New message from ${message.senderName}`,
+                    type: 'NEW_MESSAGE',
+                    link: convoId,
+                    causerId: message.senderId,
+                    causerName: message.senderName,
+                    read: false,
+                };
+                 batch.set(notifRef, { ...notification, timestamp: serverTimestamp() });
+            }
+        });
+
         await batch.commit();
-    },
-    getChatContacts: async (user: User, excludeSelf = false): Promise<User[]> => {
-        let q;
-        if (user.role === 'admin') {
-            q = query(usersCollection, where('role', 'in', ['member', 'agent', 'admin']));
-        } else {
-            // Members and Agents can only see other users in their circle for now.
-            // This prevents permission errors and is a sensible security default.
-            q = query(usersCollection, where('circle', '==', user.circle));
-        }
-        const snapshot = await getDocs(q);
-        let users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
-        if (excludeSelf) users = users.filter(u => u.id !== user.id);
-        return users;
     },
     getGroupMembers: async (memberIds: string[]): Promise<MemberUser[]> => {
         if (memberIds.length === 0) return [];
@@ -561,8 +713,20 @@ export const api = {
         const snapshot = await getDocs(q);
         return snapshot.docs.map((d => ({ id: d.id, ...d.data()}) as MemberUser));
     },
-    updateGroupMembers: (convoId: string, newMemberIds: string[], newMemberNames: {[key: string]: string}) => updateDoc(doc(conversationsCollection, convoId), { members: newMemberIds, memberNames: newMemberNames }),
-    leaveGroup: (convoId: string, userId: string) => updateDoc(doc(conversationsCollection, convoId), { members: arrayRemove(userId) }),
+    updateGroupMembers: (convoId: string, newMemberIds: string[], newMemberNames: {[key: string]: string}) => {
+        const batch = writeBatch(db);
+        batch.update(doc(conversationsCollection, convoId), { members: newMemberIds, memberNames: newMemberNames });
+        newMemberIds.forEach(id => {
+            batch.update(doc(usersCollection, id), { conversationIds: arrayUnion(convoId) });
+        });
+        return batch.commit();
+    },
+    leaveGroup: (convoId: string, userId: string) => {
+        const batch = writeBatch(db);
+        batch.update(doc(conversationsCollection, convoId), { members: arrayRemove(userId) });
+        batch.update(doc(usersCollection, userId), { conversationIds: arrayRemove(convoId) });
+        return batch.commit();
+    },
 
     // Notifications & Activity
     listenForNotifications: (userId: string, callback: (notifs: Notification[]) => void, onError: (error: Error) => void) => 
@@ -570,7 +734,6 @@ export const api = {
             query(collection(db, 'users', userId, 'notifications'), limit(50)), 
             (s) => {
                 const notifications = s.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
-                // Sort client-side to avoid index requirement which can throw permission errors
                 notifications.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
                 callback(notifications);
             }, 
@@ -627,10 +790,24 @@ export const api = {
         const d = snapshot.docs[0];
         return {id: d.id, ...d.data()} as RedemptionCycle;
     },
-    listenForUserPayouts: (userId: string, callback: (payouts: PayoutRequest[]) => void, onError: (error: Error) => void) => onSnapshot(query(payoutsCollection, where('userId', '==', userId), orderBy('requestedAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), onError),
+    listenForUserPayouts: (userId: string, callback: (payouts: PayoutRequest[]) => void, onError: (error: Error) => void) => {
+        const q = query(payoutsCollection, where('userId', '==', userId));
+        return onSnapshot(q, (snapshot) => {
+            const payouts = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest));
+            payouts.sort((a, b) => {
+                const timeA = a.requestedAt?.toMillis() || 0;
+                const timeB = b.requestedAt?.toMillis() || 0;
+                return timeB - timeA;
+            });
+            callback(payouts);
+        }, onError);
+    },
     requestPayout: (user: User, ecocashName: string, ecocashNumber: string, amount: number) => addDoc(payoutsCollection, {
         userId: user.id, userName: user.name, type: 'referral', amount, ecocashName, ecocashNumber,
         status: 'pending', requestedAt: serverTimestamp(),
+    }),
+    claimBonusPayout: (payoutId: string, ecocashName: string, ecocashNumber: string) => updateDoc(doc(payoutsCollection, payoutId), {
+        ecocashName, ecocashNumber
     }),
     requestCommissionPayout: (user: User, ecocashName: string, ecocashNumber: string, amount: number) => {
         return runTransaction(db, async (t) => {
@@ -720,7 +897,7 @@ export const api = {
     },
 
     // Ventures
-    getVentureMembers: async (count: number): Promise<{ users: User[] }> => {
+    getCollaborators: async (count: number): Promise<{ users: User[] }> => {
         const q = query(usersCollection, where('role', '==', 'member'), where('isLookingForPartners', '==', true), limit(count));
         const snapshot = await getDocs(q);
         return { users: snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User)) };

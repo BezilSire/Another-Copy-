@@ -10,6 +10,7 @@ import { GlobalSearch } from './GlobalSearch';
 interface HeaderProps {
   user: User | null;
   onLogout: () => void;
+  onViewProfile: (userId: string) => void;
 }
 
 const OfflineIndicator: React.FC = () => (
@@ -19,7 +20,7 @@ const OfflineIndicator: React.FC = () => (
     </div>
 );
 
-export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
+export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile }) => {
   const isOnline = useOnlineStatus();
 
   return (
@@ -36,8 +37,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout }) => {
           
           {user && (
             <div className="flex-1 flex justify-center px-4">
-               {/* Search component is self-contained or uses context now */}
-               <GlobalSearch />
+               <GlobalSearch onViewProfile={onViewProfile} />
             </div>
           )}
 

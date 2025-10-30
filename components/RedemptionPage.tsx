@@ -67,7 +67,6 @@ export const RedemptionPage: React.FC<RedemptionPageProps> = ({ user, onUpdateUs
             if (!cycle) {
                 throw new Error("Redemption cycle not loaded.");
             }
-            // FIX: Pass all required arguments to the redeemCcapForCash function.
             await api.redeemCcapForCash(user, payoutData.ecocashName, payoutData.ecocashNumber, usdtValue, ccapToRedeem, cycle.ccap_to_usd_rate);
             await onUpdateUser({ lastCycleChoice: 'redeemed' });
             addToast('Redemption request submitted!', 'success');

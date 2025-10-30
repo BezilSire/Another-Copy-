@@ -18,7 +18,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
 
   useEffect(() => {
     const oneOnOnePartnerIds = conversations
-      .filter(c => !c.isGroup)
+      .filter(c => !c.isGroup && Array.isArray(c.members))
       .map(c => c.members.find(id => id !== currentUser.id))
       .filter((id): id is string => !!id);
     
@@ -31,24 +31,27 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
   }, [conversations, currentUser.id]);
   
   const getOtherMember = (convo: Conversation) => {
-    if (convo.isGroup) return { name: convo.name, id: null };
+    if (convo.isGroup) return { name: convo.name || 'Group Chat', id: null };
+    if (!Array.isArray(convo.members)) {
+      return { name: 'Invalid Chat', id: null };
+    }
     const otherMemberId = convo.members.find(id => id !== currentUser.id);
+    const memberNames = convo.memberNames || {};
     return { 
-        name: convo.memberNames[otherMemberId || ''] || 'Unknown User',
+        name: memberNames[otherMemberId || ''] || 'Unknown User',
         id: otherMemberId || null
     };
   };
 
   return (
     <div className="flex flex-col h-full">
-        <div className="p-4 border-b border-slate-700">
-            <h2 className="text-xl font-bold text-white">Conversations</h2>
-        </div>
+        {/* The header is now part of the parent ConnectPage */}
         <div className="flex-1 overflow-y-auto">
             {conversations.length > 0 ? (
                 <ul>
                     {conversations.map(convo => {
-                        const isUnread = !convo.readBy.includes(currentUser.id) && convo.lastMessageSenderId !== currentUser.id;
+                        // FIX: Add guard for convo.readBy to prevent crash on malformed data
+                        const isUnread = !(convo.readBy || []).includes(currentUser.id) && convo.lastMessageSenderId !== currentUser.id;
                         const isSelected = convo.id === selectedConversationId;
                         const partner = getOtherMember(convo);
                         const isOnline = partner.id ? onlineStatuses[partner.id] : false;
@@ -82,7 +85,7 @@ export const ConversationList: React.FC<ConversationListProps> = ({ conversation
                                         </button>
                                         <p className={`text-xs flex-shrink-0 ${isUnread ? 'text-green-400' : 'text-gray-500'}`}>{convo.lastMessageTimestamp ? formatTimeAgo(convo.lastMessageTimestamp.toDate().toISOString()) : ''}</p>
                                     </div>
-                                    <p className={`text-sm truncate ${isUnread ? 'text-gray-300 font-medium' : 'text-gray-400'}`}>{convo.lastMessage}</p>
+                                    <p className={`text-sm truncate ${isUnread ? 'text-gray-300 font-medium' : 'text-gray-400'}`}>{convo.lastMessage || ''}</p>
                                 </div>
                                 {isUnread && <div className="w-2.5 h-2.5 bg-green-500 rounded-full flex-shrink-0 ml-2"></div>}
                             </button>

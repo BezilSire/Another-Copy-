@@ -4,7 +4,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { MemberDashboard } from './components/MemberDashboard';
 import { AuthPage } from './components/AuthPage';
 import { Header } from './components/Header';
-import { User, Agent, Broadcast, MemberUser, Admin } from './types';
+import { User, Agent, Broadcast, MemberUser, Admin, Conversation } from './types';
 import { useToast } from './contexts/ToastContext';
 import { ToastContainer } from './components/Toast';
 import { api } from './services/apiService';
@@ -18,6 +18,12 @@ import { CompleteProfilePage } from './components/CompleteProfilePage';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { VerifyEmailPage } from './components/VerifyEmailPage';
 import { UbtVerificationPage } from './components/UbtVerificationPage';
+import { CommonsInduction } from './components/CommonsInduction';
+import { ConnectPage } from './components/ConnectPage';
+import { PublicProfile } from './components/PublicProfile';
+import { MemberSearchModal } from './components/MemberSearchModal';
+import { CreateGroupModal } from './components/CreateGroupModal';
+import { arrayUnion } from 'firebase/firestore';
 
 
 type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge';
@@ -31,13 +37,15 @@ const App: React.FC = () => {
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
 
-  // State for Agent Dashboard UI
+  // UI State
   const [agentView, setAgentView] = useState<AgentView>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
-  
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
+  const [chatTarget, setChatTarget] = useState<Conversation | 'main' | null>(null);
+  const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
+  const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+  const [isNewGroupModalOpen, setIsNewGroupModalOpen] = useState(false);
 
-  // Hook to remind users to complete their profile
   useProfileCompletionReminder(currentUser);
 
   useEffect(() => {
@@ -60,13 +68,26 @@ const App: React.FC = () => {
         fetchBroadcasts();
         const unsubNotifications = api.listenForNotifications(currentUser.id, (notifications) => {
             setUnreadNotificationCount(notifications.filter(n => !n.read).length);
+
+            // Handle new chat discovery via notifications
+            notifications.forEach(notif => {
+                if (notif.type === 'NEW_CHAT' && !notif.read) {
+                    const convoId = notif.link;
+                    if (convoId && !currentUser.conversationIds?.includes(convoId)) {
+                        console.log(`Discovered new chat ${convoId}, adding to user profile.`);
+                        // Add conversation to user's list and mark notification as read
+                        updateUser({ conversationIds: arrayUnion(convoId) as any });
+                        api.markNotificationAsRead(notif.id);
+                    }
+                }
+            });
+
         }, (error) => {
             console.error('Error listening for notifications:', error);
-            // Don't toast on this error, as it can be noisy due to index requirements
         });
         return () => unsubNotifications();
     }
-  }, [currentUser, addToast]);
+  }, [currentUser, addToast, updateUser]);
 
   useEffect(() => {
     if (isOnline && !hasSyncedOnConnect) {
@@ -84,25 +105,38 @@ const App: React.FC = () => {
     }
   }, [isOnline, hasSyncedOnConnect, addToast, currentUser]);
 
-  const requestLogout = () => {
-    setIsLogoutConfirmOpen(true);
-  };
-
+  const requestLogout = () => setIsLogoutConfirmOpen(true);
   const confirmLogout = async () => {
     await logout();
     setIsLogoutConfirmOpen(false);
   };
-
-  const handleSendBroadcast = async (message: string) => {
-    if (!currentUser) throw new Error("Not authenticated.");
+  const handleOpenChat = (target?: Conversation) => setChatTarget(target || 'main');
+  
+  const handleStartChatFromProfile = async (targetUserId: string) => {
+    if (!currentUser) return;
     try {
-        const newBroadcast = await api.sendBroadcast(currentUser, message);
-        setBroadcasts(prev => [newBroadcast, ...prev]);
-        addToast('Broadcast sent successfully!', 'success');
+        const targetUser = await api.getPublicUserProfile(targetUserId);
+        if (!targetUser) {
+            addToast("Could not find user to chat with.", "error");
+            return;
+        }
+        const newConvo = await api.startChat(currentUser, targetUser);
+        setViewingProfileId(null); // Close profile view
+        handleOpenChat(newConvo); // Open chat view
     } catch (error) {
-        addToast('Failed to send broadcast.', 'error');
-        throw error;
+        addToast("Failed to start chat.", "error");
+        console.error("Failed to start chat from profile:", error);
     }
+  };
+  
+  const handleNewChatSelect = (newConversation: Conversation) => {
+    setChatTarget(newConversation);
+    setIsNewChatModalOpen(false);
+  };
+
+  const handleViewProfile = (userId: string | null) => {
+    setChatTarget(null); // Close chat if open
+    setViewingProfileId(userId);
   };
   
   const handleProfileComplete = async (updatedData: Partial<User>) => {
@@ -119,8 +153,22 @@ const App: React.FC = () => {
       return <AuthPage />;
     }
 
-    // New members who haven't completed their profile yet should not be blocked by email verification.
-    // They will be prompted after they finish the initial setup.
+    if (viewingProfileId) {
+      return (
+        <PublicProfile
+          userId={viewingProfileId}
+          currentUser={currentUser}
+          onBack={() => setViewingProfileId(null)}
+          onStartChat={handleStartChatFromProfile}
+          onViewProfile={handleViewProfile}
+        />
+      );
+    }
+
+    if (currentUser.role === 'member' && !currentUser.hasCompletedInduction) {
+      return <CommonsInduction onComplete={async () => await updateUser({ hasCompletedInduction: true })} />;
+    }
+    
     if (firebaseUser && !firebaseUser.emailVerified && currentUser.isProfileComplete) {
         return <VerifyEmailPage user={currentUser} onLogout={requestLogout} />;
     }
@@ -134,10 +182,10 @@ const App: React.FC = () => {
         <div className="p-4 sm:p-6 lg:p-8">
             <AdminDashboard 
                 user={currentUser as Admin} 
-                broadcasts={broadcasts} 
-                onSendBroadcast={handleSendBroadcast} 
                 onUpdateUser={updateUser}
                 unreadCount={unreadNotificationCount}
+                onOpenChat={handleOpenChat}
+                onViewProfile={handleViewProfile}
             />
         </div>
       );
@@ -148,31 +196,23 @@ const App: React.FC = () => {
         <>
             {isDesktop && (
                 <Sidebar 
-                    agent={currentUser as Agent}
-                    activeView={agentView}
-                    setActiveView={setAgentView}
-                    onLogout={requestLogout}
-                    isCollapsed={isSidebarCollapsed}
+                    agent={currentUser as Agent} activeView={agentView} setActiveView={setAgentView}
+                    onLogout={requestLogout} isCollapsed={isSidebarCollapsed}
                     onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
                     unreadCount={unreadNotificationCount}
                 />
             )}
              <main className={`transition-all duration-300 ${isDesktop && !isSidebarCollapsed ? 'md:ml-64' : ''} ${isDesktop && isSidebarCollapsed ? 'md:ml-20' : ''} pb-24 md:pb-0`}>
                 <AgentDashboard 
-                    user={currentUser as Agent} 
-                    broadcasts={broadcasts} 
-                    onUpdateUser={updateUser} 
-                    activeView={agentView}
-                    setActiveView={setAgentView}
+                    user={currentUser as Agent} broadcasts={broadcasts} onUpdateUser={updateUser} 
+                    activeView={agentView} setActiveView={setAgentView}
+                    onViewProfile={handleViewProfile}
                 />
             </main>
             {!isDesktop && (
                 <BottomNavBar 
-                    agent={currentUser as Agent}
-                    activeView={agentView}
-                    setActiveView={setAgentView}
-                    onLogout={requestLogout}
-                    unreadCount={unreadNotificationCount}
+                    agent={currentUser as Agent} activeView={agentView} setActiveView={setAgentView}
+                    onLogout={requestLogout} unreadCount={unreadNotificationCount}
                 />
             )}
         </>
@@ -183,11 +223,10 @@ const App: React.FC = () => {
     return (
         <div className="p-4 sm:p-6 lg:p-8">
             <MemberDashboard 
-                user={currentUser as MemberUser} 
-                broadcasts={broadcasts} 
-                onUpdateUser={updateUser}
-                unreadCount={unreadNotificationCount}
-                onLogout={requestLogout}
+                user={currentUser as MemberUser} onUpdateUser={updateUser}
+                unreadCount={unreadNotificationCount} onLogout={requestLogout}
+                onOpenChat={handleOpenChat}
+                onViewProfile={handleViewProfile}
             />
         </div>
     );
@@ -195,9 +234,37 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white dark">
-      {/* Header is now simpler as profile view logic is in dashboards */}
-      <Header user={currentUser} onLogout={requestLogout} />
+      <Header user={currentUser} onLogout={requestLogout} onViewProfile={handleViewProfile} />
       {renderContent()}
+      
+      {currentUser && chatTarget && (
+        <ConnectPage
+          user={currentUser}
+          initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null}
+          onClose={() => setChatTarget(null)}
+          onViewProfile={handleViewProfile}
+          onNewMessageClick={() => setIsNewChatModalOpen(true)}
+          onNewGroupClick={() => setIsNewGroupModalOpen(true)}
+        />
+      )}
+      
+      {currentUser && isNewChatModalOpen && (
+        <MemberSearchModal 
+            isOpen={isNewChatModalOpen} 
+            onClose={() => setIsNewChatModalOpen(false)}
+            currentUser={currentUser}
+            onSelectUser={handleNewChatSelect}
+        />
+      )}
+      
+      {currentUser && isNewGroupModalOpen && (
+        <CreateGroupModal
+            isOpen={isNewGroupModalOpen}
+            onClose={() => setIsNewGroupModalOpen(false)}
+            currentUser={currentUser}
+        />
+      )}
+      
       <ToastContainer />
       <AppInstallBanner />
        <ConfirmationDialog

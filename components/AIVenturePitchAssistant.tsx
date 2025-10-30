@@ -48,7 +48,7 @@ export const AIVenturePitchAssistant: React.FC<AIVenturePitchAssistantProps> = (
     const { addToast } = useToast();
     
     useEffect(() => {
-        api.getVentureMembers(500).then(({ users }) => {
+        api.getCollaborators(500).then(({ users }) => {
           setAllVentureMembers(users.filter(u => u.id !== user.id));
         });
     }, [user.id]);
@@ -81,7 +81,7 @@ export const AIVenturePitchAssistant: React.FC<AIVenturePitchAssistantProps> = (
             // Filter collaborators
             const collaborators = allVentureMembers.filter(member => 
                 result.requiredSkills.some(skill => 
-                    member.skills?.toLowerCase().includes(skill.toLowerCase())
+                    member.skills?.some(s => s.toLowerCase() === skill.toLowerCase())
                 )
             );
             setSuggestedCollaborators(collaborators as (User & {id: string})[]);

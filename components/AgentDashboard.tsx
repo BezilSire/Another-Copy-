@@ -25,6 +25,7 @@ interface AgentDashboardProps {
   onUpdateUser: (updatedUser: Partial<User>) => Promise<void>;
   activeView: AgentView;
   setActiveView: (view: AgentView) => void;
+  onViewProfile: (userId: string | null) => void;
 }
 
 const StatCard: React.FC<{ icon: React.ReactNode; title: string; value: string | number; description: string }> = ({ icon, title, value, description }) => (
@@ -40,11 +41,10 @@ const StatCard: React.FC<{ icon: React.ReactNode; title: string; value: string |
   </div>
 );
 
-export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts, onUpdateUser, activeView, setActiveView }) => {
+export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts, onUpdateUser, activeView, setActiveView, onViewProfile }) => {
   const [members, setMembers] = useState<Member[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-  const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   
   // State for member list view
   const [searchQuery, setSearchQuery] = useState('');
@@ -113,7 +113,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
   const handleNavigate = (item: NotificationItem) => {
        if (item.type === 'NEW_MEMBER' || item.type === 'POST_LIKE' || item.type === 'NEW_POST_PROPOSAL' || item.type === 'NEW_POST_OPPORTUNITY' || item.type === 'NEW_POST_GENERAL' || item.type === 'NEW_POST_OFFER') {
           const targetId = item.itemType === 'notification' ? item.causerId : item.link;
-          setViewingProfileId(targetId);
+          onViewProfile(targetId);
       } else {
           addToast('Navigation for this notification is not available in this view.', 'info');
       }
@@ -225,7 +225,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
              {isLoading ? (
                 <p className="text-center py-8 text-gray-400">Loading members...</p>
              ) : filteredMembers.length > 0 ? (
-                 <MemberList members={filteredMembers} onSelectMember={setSelectedMember} onViewProfile={setViewingProfileId} />
+                 <MemberList members={filteredMembers} onSelectMember={setSelectedMember} onViewProfile={onViewProfile} />
              ) : (
                 <p className="text-center py-8 text-gray-400">
                     {searchQuery ? 'No members match your search.' : "You haven't registered any members yet."}
@@ -240,7 +240,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
   );
   
   const renderNotificationsView = () => (
-    <NotificationsPage user={user} onNavigate={handleNavigate} onViewProfile={setViewingProfileId} />
+    <NotificationsPage user={user} onNavigate={handleNavigate} onViewProfile={onViewProfile} />
   );
   
   const renderKnowledgeBaseView = () => (

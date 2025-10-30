@@ -3,47 +3,40 @@ import { User, MemberUser, Conversation } from '../types';
 import { api } from '../services/apiService';
 import { ConversationList } from './ConversationList';
 import { ChatWindow } from './ChatWindow';
-import { MemberSearchModal } from './MemberSearchModal';
 import { MessageSquareIcon } from './icons/MessageSquareIcon';
 import { ChatHeader } from './ChatHeader';
-import { CreateGroupModal } from './CreateGroupModal';
 import { GroupInfoPanel } from './GroupInfoPanel';
 import { useToast } from '../contexts/ToastContext';
 import { UsersPlusIcon } from './icons/UsersPlusIcon';
+import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 
 interface ConnectPageProps {
   user: User;
   initialTarget?: Conversation | null;
+  onClose: () => void;
   onViewProfile: (userId: string) => void;
+  onNewMessageClick: () => void;
+  onNewGroupClick: () => void;
 }
 
-export const ConnectPage: React.FC<ConnectPageProps> = ({ user, initialTarget, onViewProfile }) => {
+export const ConnectPage: React.FC<ConnectPageProps> = ({ user, initialTarget, onClose, onViewProfile, onNewMessageClick, onNewGroupClick }) => {
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
-  const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
-  const [isNewGroupModalOpen, setIsNewGroupModalOpen] = useState(false);
   const [isGroupInfoPanelOpen, setIsGroupInfoPanelOpen] = useState(false);
-  const [chatContacts, setChatContacts] = useState<User[]>([]);
   const { addToast } = useToast();
 
   useEffect(() => {
     if (user.role === 'member' && (user as MemberUser).status !== 'active') return;
     const unsubscribe = api.listenForConversations(
-      user.id,
-      (convos) => {
-        setConversations(convos);
-      },
+      user,
+      (convos) => setConversations(convos),
       (error) => {
         console.error('Failed to listen for conversations:', error);
-        addToast('Could not load conversations.', 'error');
+        addToast('Could not load conversations. This may be due to a permissions issue.', 'error');
       },
     );
     return () => unsubscribe();
-  }, [user.id, user.role, (user as MemberUser).status, addToast]);
-  
-  useEffect(() => {
-    api.getChatContacts(user).then(setChatContacts);
-  }, [user]);
+  }, [user, addToast]);
 
   useEffect(() => {
     if (initialTarget) {
@@ -51,7 +44,7 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ user, initialTarget, o
     }
   }, [initialTarget]);
 
-  const handleSelectConversation = async (convo: Conversation) => {
+  const handleSelectConversation = (convo: Conversation) => {
     setSelectedConversation(convo);
     if (convo.isGroup) {
       if (!isGroupInfoPanelOpen || selectedConversation?.id !== convo.id) {
@@ -61,50 +54,35 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ user, initialTarget, o
       setIsGroupInfoPanelOpen(false);
     }
   };
-
-  const handleNewChatSelect = (newConversation: Conversation) => {
-    // Optimistically add to the list if it's not there to prevent flicker
-    if (!conversations.some(c => c.id === newConversation.id)) {
-        setConversations(prev => [newConversation, ...prev]);
-    }
-    setSelectedConversation(newConversation);
-    setIsNewChatModalOpen(false);
-  };
   
   return (
-    <div className="animate-fade-in">
-        <MemberSearchModal 
-            isOpen={isNewChatModalOpen} 
-            onClose={() => setIsNewChatModalOpen(false)}
-            currentUser={user}
-            onSelectUser={handleNewChatSelect}
-            usersForSearch={chatContacts}
-        />
-        <CreateGroupModal
-            isOpen={isNewGroupModalOpen}
-            onClose={() => setIsNewGroupModalOpen(false)}
-            currentUser={user}
-        />
-        
-        <div className="mb-4 flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4">
-            <button
-                onClick={() => setIsNewChatModalOpen(true)}
-                className="flex-1 inline-flex items-center justify-center px-4 py-3 bg-slate-700 text-white rounded-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-green-500 font-semibold"
-            >
-                <MessageSquareIcon className="h-5 w-5 mr-2" />
-                New Message
+    <div className="fixed inset-0 z-40 bg-slate-900 flex flex-col animate-fade-in">
+        {/* Full Screen Header */}
+        <div className="flex-shrink-0 flex items-center p-3 border-b border-slate-700 h-16">
+            <button onClick={onClose} className="p-2 text-gray-300 hover:text-white hover:bg-slate-700 rounded-full">
+                <ArrowLeftIcon className="h-6 w-6" />
             </button>
-            <button
-                onClick={() => setIsNewGroupModalOpen(true)}
-                className="flex-1 inline-flex items-center justify-center px-4 py-3 bg-slate-700 text-white rounded-md hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900 focus:ring-green-500 font-semibold"
-            >
-                <UsersPlusIcon className="h-5 w-5 mr-2" />
-                Create Group
-            </button>
+            <h2 className="text-xl font-bold text-white ml-4">Connect</h2>
+            <div className="ml-auto flex items-center space-x-2">
+                 <button
+                    onClick={onNewMessageClick}
+                    className="p-2 text-gray-300 hover:text-white hover:bg-slate-700 rounded-full"
+                    title="New Message"
+                >
+                    <MessageSquareIcon className="h-6 w-6" />
+                </button>
+                 <button
+                    onClick={onNewGroupClick}
+                    className="p-2 text-gray-300 hover:text-white hover:bg-slate-700 rounded-full"
+                    title="Create Group"
+                >
+                    <UsersPlusIcon className="h-6 w-6" />
+                </button>
+            </div>
         </div>
-
-        <div className="flex h-[calc(100vh-250px)] bg-slate-800 rounded-lg shadow-lg overflow-hidden">
-            <aside className="w-full md:w-1/3 border-r border-slate-700 flex-shrink-0">
+        
+        <div className="flex-1 flex overflow-hidden">
+            <aside className="w-full md:w-2/5 lg:w-1/3 border-r border-slate-700 flex-shrink-0">
                 <ConversationList
                 conversations={conversations}
                 currentUser={user}
@@ -136,7 +114,7 @@ export const ConnectPage: React.FC<ConnectPageProps> = ({ user, initialTarget, o
                         </div>
                     </>
                 ) : (
-                <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-400 p-4">
+                <div className="hidden md:flex flex-1 flex-col items-center justify-center text-center text-gray-400 p-4">
                     <MessageSquareIcon className="h-16 w-16 mb-4 text-slate-600" />
                     <h3 className="text-xl font-semibold text-white">Select a conversation</h3>
                     <p>Or start a new one to connect with other members.</p>

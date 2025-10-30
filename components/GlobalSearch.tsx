@@ -5,42 +5,32 @@ import { PublicUserProfile, User } from '../types';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { useAuth } from '../contexts/AuthContext';
+import { useDebounce } from '../hooks/useDebounce';
 
+interface GlobalSearchProps {
+  onViewProfile: (userId: string) => void;
+}
 
-export const GlobalSearch: React.FC = () => {
+export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onViewProfile }) => {
     const [query, setQuery] = useState('');
     const [results, setResults] = useState<PublicUserProfile[]>([]);
-    const [allUsers, setAllUsers] = useState<PublicUserProfile[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [isFocused, setIsFocused] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
     const { currentUser } = useAuth();
+    const debouncedQuery = useDebounce(query, 300);
 
     useEffect(() => {
-        if (!currentUser) return;
-        setIsLoading(true);
-        api.getSearchableUsers(currentUser).then(users => {
-            setAllUsers(users);
-        }).catch(err => {
-            console.error("Failed to load users for search:", err);
-        }).finally(() => {
-            setIsLoading(false);
-        });
-    }, [currentUser]);
-
-    useEffect(() => {
-        if (query.length > 1) {
-            const lowerCaseQuery = query.toLowerCase();
-            const filtered = allUsers.filter(u => 
-                u.name.toLowerCase().includes(lowerCaseQuery) ||
-                u.circle.toLowerCase().includes(lowerCaseQuery) ||
-                u.profession?.toLowerCase().includes(lowerCaseQuery)
-            );
-            setResults(filtered);
+        if (debouncedQuery.length > 1 && currentUser) {
+            setIsLoading(true);
+            api.searchUsers(debouncedQuery, currentUser)
+                .then(setResults)
+                .catch(err => console.error("Search failed:", err))
+                .finally(() => setIsLoading(false));
         } else {
             setResults([]);
         }
-    }, [query, allUsers]);
+    }, [debouncedQuery, currentUser]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -51,6 +41,14 @@ export const GlobalSearch: React.FC = () => {
         document.addEventListener('mousedown', handleClickOutside);
         return () => document.removeEventListener('mousedown', handleClickOutside);
     }, []);
+    
+    const handleSelect = (userId: string) => {
+        onViewProfile(userId);
+        // Reset state after selection for a cleaner UI
+        setQuery('');
+        setResults([]);
+        setIsFocused(false);
+    };
 
     const showResults = isFocused && query.length > 0;
 
@@ -77,20 +75,19 @@ export const GlobalSearch: React.FC = () => {
 
             {showResults && (
                 <div className="absolute mt-1 w-full bg-slate-800 border border-slate-700 rounded-lg shadow-lg z-20 max-h-96 overflow-y-auto">
-                    {results.length === 0 && !isLoading ? (
+                    {results.length === 0 && !isLoading && debouncedQuery.length > 1 ? (
                          <div className="p-4 text-center text-sm text-gray-400">No members found for "{query}"</div>
                     ) : (
                         <ul>
                             {results.map(user => (
                                 <li key={`user-${user.id}`}>
-                                    {/* In a real app, this would navigate to the user's profile */}
-                                    <a href="#" onClick={(e) => { e.preventDefault(); /* onViewProfile(user.id); */ }} className="flex items-center space-x-3 p-3 hover:bg-slate-700">
+                                    <button onClick={() => handleSelect(user.id)} className="w-full text-left flex items-center space-x-3 p-3 hover:bg-slate-700">
                                         <UserCircleIcon className="h-8 w-8 text-gray-400 flex-shrink-0" />
                                         <div>
                                             <p className="font-medium text-white">{user.name}</p>
                                             <p className="text-sm text-gray-400 capitalize">{user.role} &bull; {user.circle}</p>
                                         </div>
-                                    </a>
+                                    </button>
                                 </li>
                             ))}
                         </ul>

@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { Conversation, User, MemberUser } from '../types';
+import { Conversation, User, MemberUser, PublicUserProfile } from '../types';
 import { api } from '../services/apiService';
 import { XCircleIcon } from './icons/XCircleIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { UsersPlusIcon } from './icons/UsersPlusIcon';
 import { DoorOpenIcon } from './icons/DoorOpenIcon';
+import { useDebounce } from '../hooks/useDebounce';
+import { SearchIcon } from './icons/SearchIcon';
+import { LoaderIcon } from './icons/LoaderIcon';
+import { useToast } from '../contexts/ToastContext';
 
 interface GroupInfoPanelProps {
   isOpen: boolean;
@@ -17,20 +21,33 @@ interface GroupInfoPanelProps {
 export const GroupInfoPanel: React.FC<GroupInfoPanelProps> = ({ isOpen, onClose, conversation, currentUser, onViewProfile }) => {
   const [members, setMembers] = useState<MemberUser[]>([]);
   const [isAddingMembers, setIsAddingMembers] = useState(false);
-  const [potentialMembers, setPotentialMembers] = useState<User[]>([]);
-  const [membersToAdd, setMembersToAdd] = useState<User[]>([]);
+  const [potentialMembers, setPotentialMembers] = useState<PublicUserProfile[]>([]);
+  const [membersToAdd, setMembersToAdd] = useState<PublicUserProfile[]>([]);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [isLoadingSearch, setIsLoadingSearch] = useState(false);
+  const debouncedSearch = useDebounce(searchQuery, 300);
+  const { addToast } = useToast();
 
   useEffect(() => {
-    if (isOpen) {
+    if (isOpen && Array.isArray(conversation.members)) {
       api.getGroupMembers(conversation.members).then(setMembers);
-      if (isAddingMembers) {
-          api.getChatContacts(currentUser, true).then(all => {
-              const currentMemberIds = new Set(conversation.members);
-              setPotentialMembers(all.filter(m => !currentMemberIds.has(m.id)));
-          });
-      }
     }
-  }, [isOpen, isAddingMembers, conversation.members, currentUser]);
+  }, [isOpen, conversation]);
+  
+  useEffect(() => {
+      if (isAddingMembers && debouncedSearch.length > 1) {
+          setIsLoadingSearch(true);
+          api.searchUsers(debouncedSearch, currentUser)
+              .then(all => {
+                  const currentMemberIds = new Set(conversation.members);
+                  setPotentialMembers(all.filter(m => !currentMemberIds.has(m.id)));
+              })
+              .catch(() => addToast("Could not search for members.", "error"))
+              .finally(() => setIsLoadingSearch(false));
+      } else {
+          setPotentialMembers([]);
+      }
+  }, [isAddingMembers, debouncedSearch, conversation, currentUser, addToast]);
   
   const handleAddMembers = async () => {
     if (membersToAdd.length === 0) {
@@ -80,13 +97,17 @@ export const GroupInfoPanel: React.FC<GroupInfoPanelProps> = ({ isOpen, onClose,
                 </ul>
             </div>
         ) : (
-            <div className="flex-1 p-4 overflow-y-auto">
-                {/* A simple search could go here */}
-                <ul>
+            <div className="flex-1 p-4 overflow-y-auto flex flex-col">
+                <div className="relative mb-2">
+                    <input type="text" placeholder="Search members..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 pl-10 pr-4 text-white" />
+                    <SearchIcon className="h-5 w-5 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    {isLoadingSearch && <LoaderIcon className="h-5 w-5 animate-spin text-gray-400 absolute right-3 top-1/2 -translate-y-1/2" />}
+                </div>
+                <ul className="flex-1 overflow-y-auto">
                     {potentialMembers.map(m => (
                         <li key={m.id}>
                             <label className="flex items-center space-x-3 p-2 hover:bg-slate-700 cursor-pointer">
-                                <input type="checkbox" onChange={() => setMembersToAdd(prev => prev.some(pm => pm.id === m.id) ? prev.filter(pm => pm.id !== m.id) : [...prev, m])} className="text-green-600 bg-slate-900 border-slate-600 focus:ring-green-500" />
+                                <input type="checkbox" onChange={() => setMembersToAdd(prev => prev.some(pm => pm.id === m.id) ? prev.filter(pm => pm.id !== m.id) : [...prev, m])} checked={membersToAdd.some(pm => pm.id === m.id)} className="text-green-600 bg-slate-900 border-slate-600 focus:ring-green-500" />
                                 <UserCircleIcon className="h-8 w-8 text-gray-400" />
                                 <span>{m.name}</span>
                             </label>
@@ -102,7 +123,7 @@ export const GroupInfoPanel: React.FC<GroupInfoPanelProps> = ({ isOpen, onClose,
                     <button onClick={handleLeaveGroup} className="w-full flex items-center justify-center space-x-2 p-2 text-red-400 hover:bg-red-900/50 rounded-md"><DoorOpenIcon className="h-5 w-5"/><span>Leave Group</span></button>
                 </>
             ) : (
-                 <button onClick={handleAddMembers} className="w-full p-2 bg-green-600 hover:bg-green-700 rounded-md">Confirm Add</button>
+                 <button onClick={handleAddMembers} disabled={membersToAdd.length === 0} className="w-full p-2 bg-green-600 hover:bg-green-700 rounded-md disabled:bg-slate-600">Add Selected Members</button>
             )}
         </div>
     </aside>

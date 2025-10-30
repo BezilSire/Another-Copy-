@@ -12,7 +12,6 @@ import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { ReportsView } from './ReportsView';
 import { AdminProfile } from './AdminProfile';
 import { PostsFeed } from './PostsFeed';
-import { ConnectPage } from './ConnectPage';
 import { DownloadIcon } from './icons/DownloadIcon';
 import { exportToCsv, formatTimeAgo } from '../utils';
 import { LayoutDashboardIcon } from './icons/LayoutDashboardIcon';
@@ -34,27 +33,23 @@ import { VenturesAdminPage } from './VenturesAdminPage';
 import { DatabaseIcon } from './icons/DatabaseIcon';
 import { EconomyAdminPage } from './EconomyAdminPage';
 import { Dashboard } from './Dashboard';
-import { PublicProfile } from './PublicProfile';
 
 
-type AdminView = 'dashboard' | 'users' | 'feed' | 'connect' | 'reports' | 'profile' | 'notifications' | 'proposals' | 'payouts' | 'sustenance' | 'ventures' | 'economy';
+type AdminView = 'dashboard' | 'users' | 'feed' | 'reports' | 'profile' | 'notifications' | 'proposals' | 'payouts' | 'sustenance' | 'ventures' | 'economy';
 type UserSubView = 'agents' | 'members' | 'roles';
 
 interface AdminDashboardProps {
   user: Admin;
-  broadcasts: Broadcast[];
-  onSendBroadcast: (message: string) => Promise<void>;
   onUpdateUser: (updatedUser: Partial<User>) => Promise<void>;
   unreadCount: number;
+  onOpenChat: (target?: Conversation) => void;
+  onViewProfile: (userId: string | null) => void;
 }
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts, onSendBroadcast, onUpdateUser, unreadCount }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUser, unreadCount, onOpenChat, onViewProfile }) => {
   const [view, setView] = useState<AdminView>('dashboard');
   const [userView, setUserView] = useState<UserSubView>('agents');
   
-  const [chatTarget, setChatTarget] = useState<Conversation | null>(null);
-  const [initialChat, setInitialChat] = useState<Conversation | null>(null);
-
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -64,13 +59,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
   const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
   const [ventures, setVentures] = useState<Venture[]>([]);
   const [cvp, setCvp] = useState<CommunityValuePool | null>(null);
-  const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
+  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   
   const [loadedStreamCount, setLoadedStreamCount] = useState(0);
   const [loadingErrors, setLoadingErrors] = useState<string[]>([]);
   const { addToast } = useToast();
   
-  const totalStreams = 9;
+  const totalStreams = 10; // Increased by 1 for broadcasts
   const isInitialLoading = loadedStreamCount < totalStreams;
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -81,24 +76,12 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
   const [verificationModalState, setVerificationModalState] = useState<{ isOpen: boolean, member: Member | null }>({ isOpen: false, member: null });
   const [typeFilter, setTypeFilter] = useState<PostFilterType>('all');
   
-  const onInitialChatConsumed = () => setInitialChat(null);
-
-  useEffect(() => {
-    if (initialChat) {
-        setChatTarget(initialChat);
-        setView('connect');
-        onInitialChatConsumed();
-    }
-  }, [initialChat]);
-
   useEffect(() => {
     // Reset loading state for each new cycle (e.g., if user object changes)
     setLoadedStreamCount(0);
     setLoadingErrors([]);
 
-    const handleStreamLoaded = () => {
-        setLoadedStreamCount(prev => prev + 1);
-    };
+    const handleStreamLoaded = () => setLoadedStreamCount(prev => prev + 1);
 
     const handleError = (dataType: string, error: Error) => {
         console.error(`Error loading ${dataType}:`, error);
@@ -118,74 +101,56 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
     const unsubAgents = api.listenForAllAgents(user, (data) => { setAgents(data); handleStreamLoaded(); }, (e) => handleError('agents', e));
     const unsubPending = api.listenForPendingMembers(user, (data) => { setPendingMembers(data); handleStreamLoaded(); }, (e) => handleError('pending members', e));
     const unsubReports = api.listenForReports(user, (data) => { setReports(data); handleStreamLoaded(); }, (e) => handleError('reports', e));
-    const unsubConversations = api.listenForConversations(user.id, (data) => { setConversations(data); handleStreamLoaded(); }, (e) => handleError('conversations', e));
+    const unsubConversations = api.listenForConversations(user, (data) => { setConversations(data); handleStreamLoaded(); }, (e) => handleError('conversations', e));
     const unsubPayouts = api.listenForPayoutRequests(user, (data) => { setPayouts(data); handleStreamLoaded(); }, (e) => handleError('payouts', e));
     const unsubVentures = api.listenForVentures(user, (data) => { setVentures(data); handleStreamLoaded(); }, (e) => handleError('ventures', e));
     const unsubCvp = api.listenForCVP(user, (data) => { setCvp(data); handleStreamLoaded(); }, (e) => handleError('cvp', e));
+    // Also fetch broadcasts here
+    api.getBroadcasts().then(data => { setBroadcasts(data); handleStreamLoaded(); }).catch(e => handleError('broadcasts', e));
 
 
     return () => {
-        unsubUsers();
-        unsubMembers();
-        unsubAgents();
-        unsubPending();
-        unsubReports();
-        unsubConversations();
-        unsubPayouts();
-        unsubVentures();
-        unsubCvp();
+        unsubUsers(); unsubMembers(); unsubAgents(); unsubPending(); unsubReports();
+        unsubConversations(); unsubPayouts(); unsubVentures(); unsubCvp();
     };
   }, [user, addToast]);
-
-
-  // Clear the initial chat target when navigating away from the connect page
-  useEffect(() => {
-    if (view !== 'connect') {
-      setChatTarget(null);
-    }
-  }, [view]);
   
   const handleStartChat = async (targetUserId: string) => {
     try {
         const targetUser = await api.getPublicUserProfile(targetUserId);
-        if (!targetUser) {
-            addToast("Could not find user to chat with.", "error");
-            return;
-        }
-        const newConvo = await api.startChat(user.id, targetUserId, user.name, targetUser.name);
-        setViewingProfileId(null); // Close profile if open
-        setChatTarget(newConvo);
-        setView('connect');
-    } catch (error) {
-        addToast("Failed to start chat.", "error");
-    }
+        if (!targetUser) { addToast("Could not find user to chat with.", "error"); return; }
+        const newConvo = await api.startChat(user, targetUser);
+        onViewProfile(null);
+        onOpenChat(newConvo);
+    } catch (error) { addToast("Failed to start chat.", "error"); }
   };
   
   const handleNavigate = (item: NotificationItem) => {
       switch (item.type) {
-          case 'NEW_MESSAGE':
-          case 'NEW_CHAT':
+          case 'NEW_MESSAGE': case 'NEW_CHAT':
               const convo = conversations.find(c => c.id === item.link);
-              if (convo) {
-                  setChatTarget(convo);
-                  setView('connect');
-              } else {
-                  addToast("Could not find the conversation.", "error");
-              }
+              if (convo) { onOpenChat(convo); } 
+              else { addToast("Could not find the conversation.", "error"); }
               break;
-          case 'POST_LIKE':
-          case 'NEW_MEMBER':
-          case 'NEW_POST_OPPORTUNITY':
-          case 'NEW_POST_PROPOSAL':
-          case 'NEW_POST_GENERAL':
-          case 'NEW_POST_OFFER':
-          case 'KNOWLEDGE_APPROVED':
+          case 'POST_LIKE': case 'NEW_MEMBER': case 'NEW_POST_OPPORTUNITY': case 'NEW_POST_PROPOSAL':
+          case 'NEW_POST_GENERAL': case 'NEW_POST_OFFER': case 'KNOWLEDGE_APPROVED':
               const targetId = item.itemType === 'notification' ? item.causerId : item.link;
-              setViewingProfileId(targetId);
+              onViewProfile(targetId);
               break;
           default:
               addToast("Navigation for this notification is not available.", "info");
       }
+  };
+
+  const handleSendBroadcast = async (message: string) => {
+    try {
+        const newBroadcast = await api.sendBroadcast(user, message);
+        setBroadcasts(prev => [newBroadcast, ...prev]);
+        addToast('Broadcast sent successfully!', 'success');
+    } catch (error) {
+        addToast('Failed to send broadcast.', 'error');
+        throw error;
+    }
   };
 
   const enrichedMembers = useMemo(() => {
@@ -194,11 +159,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
       if (member.uid) {
         const userProfile = userMap.get(member.uid) as MemberUser | undefined;
         if (userProfile) {
-          return {
-            ...member,
-            status: userProfile.status,
-            distress_calls_available: userProfile.distress_calls_available,
-          };
+          return { ...member, status: userProfile.status, distress_calls_available: userProfile.distress_calls_available, };
         }
       }
       return member;
@@ -208,143 +169,79 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
   const agentsWithStats = useMemo(() => {
     return agents.map(agent => {
       const agentMembers = members.filter(m => m.agent_id === agent.id);
-      const memberCount = agentMembers.length;
-      const commission = agentMembers
-        .filter(m => m.payment_status === 'complete')
-        .reduce((sum, member) => sum + member.registration_amount * 0.10, 0);
-      return { ...agent, memberCount, commission };
+      return { ...agent, memberCount: agentMembers.length, commission: agentMembers.filter(m => m.payment_status === 'complete').reduce((s, m) => s + m.registration_amount * 0.10, 0) };
     });
   }, [agents, members]);
   
-
   const handleMarkComplete = async (member: Member) => {
-    if (window.confirm(`Are you sure you want to mark ${member.full_name}'s payment as complete?`)) {
-        try {
-            await api.updatePaymentStatus(user, member.id, 'complete');
-            addToast("Payment status updated.", "success");
-        } catch {
-            addToast("Failed to update payment status.", "error");
-        }
+    if (window.confirm(`Mark ${member.full_name}'s payment as complete?`)) {
+        try { await api.updatePaymentStatus(user, member.id, 'complete'); addToast("Payment status updated.", "success"); } 
+        catch { addToast("Failed to update payment status.", "error"); }
     }
   };
   
    const handleResetQuota = async () => {
-        if (!dialogState.member || !dialogState.member.uid) return;
-        try {
-            await api.resetDistressQuota(user, dialogState.member.uid);
-            addToast(`Distress call quota has been reset for ${dialogState.member.full_name}.`, 'success');
-        } catch {
-            addToast("Failed to reset quota.", "error");
-        }
+        if (!dialogState.member?.uid) return;
+        try { await api.resetDistressQuota(user, dialogState.member.uid); addToast(`Distress quota reset for ${dialogState.member.full_name}.`, 'success'); } 
+        catch { addToast("Failed to reset quota.", "error"); }
         setDialogState({ isOpen: false, member: null, action: 'reset' });
     };
 
     const handleClearPost = async () => {
-        if (!dialogState.member || !dialogState.member.uid) return;
-        try {
-            await api.clearLastDistressPost(user, dialogState.member.uid);
-            addToast(`Last distress post has been cleared for ${dialogState.member.full_name}.`, 'success');
-        } catch {
-            addToast("Failed to clear post.", "error");
-        }
+        if (!dialogState.member?.uid) return;
+        try { await api.clearLastDistressPost(user, dialogState.member.uid); addToast(`Last distress post cleared for ${dialogState.member.full_name}.`, 'success'); } 
+        catch { addToast("Failed to clear post.", "error"); }
         setDialogState({ isOpen: false, member: null, action: 'clear' });
     };
 
-    const handleApproveMember = async (memberToApprove: Member) => {
-        try {
-            await api.approveMember(user, memberToApprove);
-            addToast(`${memberToApprove.full_name} has been approved and welcomed.`, 'success');
-            setVerificationModalState({ isOpen: false, member: null });
-        } catch (error) {
-            const msg = error instanceof Error ? error.message : "An unknown error occurred.";
-            addToast(`Approval failed: ${msg}`, 'error');
-            throw error;
-        }
+    const handleApproveMember = async (member: Member) => {
+        try { await api.approveMember(user, member); addToast(`${member.full_name} has been approved.`, 'success'); setVerificationModalState({ isOpen: false, member: null }); } 
+        catch (e) { addToast(`Approval failed: ${e instanceof Error ? e.message : "An error occurred."}`, 'error'); throw e; }
     }
 
-    const handleRejectMember = async (memberToReject: Member) => {
-        try {
-            await api.rejectMember(user, memberToReject);
-            addToast(`${memberToReject.full_name}'s registration has been rejected.`, 'info');
-            setVerificationModalState({ isOpen: false, member: null });
-        } catch (error) {
-            const msg = error instanceof Error ? error.message : "An unknown error occurred.";
-            addToast(`Rejection failed: ${msg}`, 'error');
-            throw error;
-        }
+    const handleRejectMember = async (member: Member) => {
+        try { await api.rejectMember(user, member); addToast(`${member.full_name}'s registration rejected.`, 'info'); setVerificationModalState({ isOpen: false, member: null }); } 
+        catch (e) { addToast(`Rejection failed: ${e instanceof Error ? e.message : "An error occurred."}`, 'error'); throw e; }
     }
     
-    const handleRoleChangeRequest = (user: User, newRole: User['role']) => {
-        setRoleChangeDialog({ isOpen: true, user, newRole });
-    };
+    const handleRoleChangeRequest = (user: User, newRole: User['role']) => setRoleChangeDialog({ isOpen: true, user, newRole });
 
     const handleRoleChangeConfirm = async () => {
-        const { user: userToUpdate, newRole } = roleChangeDialog;
-        if (!userToUpdate || !newRole) return;
-        
-        try {
-            await api.updateUserRole(user, userToUpdate.id, newRole);
-            addToast(`${userToUpdate.name}'s role has been updated to ${newRole}.`, 'success');
-        } catch {
-            addToast('Failed to update user role.', 'error');
-        }
+        const { user: u, newRole } = roleChangeDialog;
+        if (!u || !newRole) return;
+        try { await api.updateUserRole(user, u.id, newRole); addToast(`${u.name}'s role updated to ${newRole}.`, 'success'); } 
+        catch { addToast('Failed to update user role.', 'error'); }
         setRoleChangeDialog({ isOpen: false, user: null, newRole: null });
     };
 
     const handleDownloadAgents = () => {
-        if (agentsWithStats.length === 0) {
-            addToast('There are no agents to export.', 'info');
-            return;
-        }
-        const dataToExport = agentsWithStats.map(({ name, email, agent_code, circle, memberCount, commission }) => ({
-          name, 
-          email, 
-          agent_code, 
-          circle, 
-          member_count: memberCount, 
-          total_commission: commission.toFixed(2)
-        }));
-        exportToCsv(`all-agents-report-${new Date().toISOString().split('T')[0]}.csv`, dataToExport);
-        addToast('Agent data is being downloaded.', 'info');
+        if (agentsWithStats.length === 0) { addToast('No agents to export.', 'info'); return; }
+        exportToCsv(`all-agents-${new Date().toISOString().split('T')[0]}.csv`, agentsWithStats.map(({ name, email, agent_code, circle, memberCount, commission }) => ({ name, email, agent_code, circle, member_count: memberCount, total_commission: commission.toFixed(2) })));
+        addToast('Agent data is downloading.', 'info');
     };
     
     const handleDownloadMembers = () => {
-        if (enrichedMembers.length === 0) {
-            addToast('There are no members to export.', 'info');
-            return;
-        }
-        const dataToExport = enrichedMembers.map(({ welcome_message, ...rest }) => ({
-            ...rest,
-            agent_name: rest.agent_id === 'PUBLIC_SIGNUP' ? 'Self-Registered' : rest.agent_name
-        }));
-        exportToCsv(`all-members-${new Date().toISOString().split('T')[0]}.csv`, dataToExport);
-        addToast('Member data is being downloaded.', 'info');
+        if (enrichedMembers.length === 0) { addToast('No members to export.', 'info'); return; }
+        exportToCsv(`all-members-${new Date().toISOString().split('T')[0]}.csv`, enrichedMembers.map(({ welcome_message, ...rest }) => ({ ...rest, agent_name: rest.agent_id === 'PUBLIC_SIGNUP' ? 'Self-Registered' : rest.agent_name })));
+        addToast('Member data is downloading.', 'info');
     };
 
     const newReportsCount = useMemo(() => reports.filter(r => r.status === 'new').length, [reports]);
 
     const filteredItems = useMemo(() => {
-        let listToFilter: any[] = [];
+        let list: any[] = [];
         if (view === 'users') {
-            if (userView === 'members') listToFilter = enrichedMembers;
-            else if (userView === 'agents') listToFilter = agentsWithStats;
-            else if (userView === 'roles') listToFilter = allUsers;
+            if (userView === 'members') list = enrichedMembers;
+            else if (userView === 'agents') list = agentsWithStats;
+            else if (userView === 'roles') list = allUsers;
         }
-        
-        if (!searchQuery) return listToFilter;
-
-        return listToFilter.filter(item =>
-            (item.full_name || item.name).toLowerCase().includes(searchQuery.toLowerCase()) ||
-            item.email.toLowerCase().includes(searchQuery.toLowerCase())
-        );
+        if (!searchQuery) return list;
+        return list.filter(item => (item.full_name || item.name).toLowerCase().includes(searchQuery.toLowerCase()) || item.email.toLowerCase().includes(searchQuery.toLowerCase()));
     }, [enrichedMembers, agentsWithStats, allUsers, searchQuery, view, userView]);
 
     const ITEMS_PER_PAGE = 10;
     const totalPages = Math.ceil(filteredItems.length / ITEMS_PER_PAGE);
-    const paginatedItems = filteredItems.slice(
-        (currentPage - 1) * ITEMS_PER_PAGE,
-        currentPage * ITEMS_PER_PAGE
-    );
+    const paginatedItems = filteredItems.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
     
     const TabButton: React.FC<{label: string, count?: number, isActive: boolean, onClick: () => void, icon: React.ReactNode}> = ({ label, count, isActive, onClick, icon }) => (
         <button onClick={onClick} className={`${isActive ? 'border-green-500 text-green-400' : 'border-transparent text-gray-400 hover:text-gray-200'} group inline-flex items-center whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>
@@ -353,18 +250,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
             {count !== undefined && count > 0 && <span className="ml-2 bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{count}</span>}
         </button>
     );
-
-    if (viewingProfileId) {
-        return (
-            <PublicProfile 
-                userId={viewingProfileId}
-                currentUser={user}
-                onBack={() => setViewingProfileId(null)}
-                onStartChat={handleStartChat}
-                onViewProfile={setViewingProfileId}
-            />
-        );
-    }
 
     const renderUsersView = () => (
         <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
@@ -388,9 +273,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
                             <tbody className="divide-y divide-slate-700">
                                 {(paginatedItems as (Agent & { memberCount: number, commission: number })[]).map(agent => (
                                     <tr key={agent.id}>
-                                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-white sm:pl-0">
-                                            <button onClick={() => setViewingProfileId(agent.id)} className="hover:underline">{agent.name}</button>
-                                        </td>
+                                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-white sm:pl-0"><button onClick={() => onViewProfile(agent.id)} className="hover:underline">{agent.name}</button></td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{agent.email}</td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{agent.circle}</td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{agent.memberCount}</td>
@@ -402,7 +285,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
                     </div>
                 )}
                 {userView === 'members' && (
-                    <MemberList members={(filteredItems as Member[])} isAdminView onMarkAsComplete={handleMarkComplete} onResetQuota={(m) => setDialogState({isOpen: true, member: m, action: 'reset'})} onClearDistressPost={(m) => setDialogState({isOpen: true, member: m, action: 'clear'})} onSelectMember={(m) => m.payment_status === 'pending_verification' && setVerificationModalState({ isOpen: true, member: m })} onViewProfile={setViewingProfileId} onStartChat={(user) => handleStartChat(user.id)} />
+                    <MemberList members={(filteredItems as Member[])} isAdminView onMarkAsComplete={handleMarkComplete} onResetQuota={(m) => setDialogState({isOpen: true, member: m, action: 'reset'})} onClearDistressPost={(m) => setDialogState({isOpen: true, member: m, action: 'clear'})} onSelectMember={(m) => m.payment_status === 'pending_verification' && setVerificationModalState({ isOpen: true, member: m })} onViewProfile={onViewProfile} onStartChat={(user) => handleStartChat(user.id)} />
                 )}
                 {userView === 'roles' && (
                      <div className="flow-root">
@@ -411,115 +294,51 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
                             <tbody className="divide-y divide-slate-700">
                                 {(paginatedItems as User[]).map(u => (
                                     <tr key={u.id}>
-                                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-white sm:pl-0">
-                                            <button onClick={() => setViewingProfileId(u.id)} className="hover:underline">{u.name}</button>
-                                        </td>
+                                        <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm font-medium text-white sm:pl-0"><button onClick={() => onViewProfile(u.id)} className="hover:underline">{u.name}</button></td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{u.email}</td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400 capitalize">{u.role}</td>
-                                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">
-                                            {u.lastSeen ? formatTimeAgo(u.lastSeen.toDate().toISOString()) : 'N/A'}
-                                        </td>
-                                        <td className="whitespace-nowrap px-3 py-4 text-sm">
-                                            <select value={u.role} onChange={(e) => handleRoleChangeRequest(u, e.target.value as User['role'])} className="bg-slate-700 text-white rounded-md p-1 border border-slate-600 focus:ring-green-500 focus:border-green-500">
-                                                <option value="member">Member</option>
-                                                <option value="agent">Agent</option>
-                                                <option value="vendor">Vendor</option>
-                                                <option value="admin">Admin</option>
-                                            </select>
-                                        </td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{u.lastSeen ? formatTimeAgo(u.lastSeen.toDate().toISOString()) : 'N/A'}</td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm"><select value={u.role} onChange={(e) => handleRoleChangeRequest(u, e.target.value as User['role'])} className="bg-slate-700 text-white rounded-md p-1 border border-slate-600 focus:ring-green-500 focus:border-green-500"><option value="member">Member</option><option value="agent">Agent</option><option value="vendor">Vendor</option><option value="admin">Admin</option></select></td>
                                     </tr>
                                 ))}
                             </tbody>
                         </table>
                     </div>
                 )}
-                {userView !== 'members' && (
-                    <Pagination 
-                        currentPage={currentPage} 
-                        totalPages={totalPages} 
-                        onPageChange={setCurrentPage} 
-                        totalItems={filteredItems.length} 
-                        itemsPerPage={ITEMS_PER_PAGE} 
-                    />
-                )}
+                {userView !== 'members' && ( <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} totalItems={filteredItems.length} itemsPerPage={ITEMS_PER_PAGE} /> )}
             </>
         </div>
     );
 
     const renderActiveView = () => {
         switch (view) {
-            case 'dashboard': return <Dashboard 
-                user={user}
-                users={allUsers}
-                agents={agents}
-                members={members}
-                pendingMembers={pendingMembers}
-                reports={reports}
-                broadcasts={broadcasts}
-                payouts={payouts}
-                ventures={ventures}
-                cvp={cvp}
-                onSendBroadcast={onSendBroadcast}
-            />;
+            case 'dashboard': return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={handleSendBroadcast} />;
             case 'users': return renderUsersView();
-            case 'feed': return (
-                <>
-                    <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView />
-                    <PostsFeed 
-                        user={user} 
-                        feedType="all" 
-                        isAdminView 
-                        onViewProfile={setViewingProfileId}
-                        typeFilter={typeFilter}
-                    />
-                </>
-            );
-            case 'connect': return <ConnectPage user={user} initialTarget={chatTarget} onViewProfile={setViewingProfileId} />;
-            case 'reports': return <div className="bg-slate-800 p-6 rounded-lg shadow-lg"><ReportsView reports={reports} onViewProfile={setViewingProfileId} onResolve={(reportId, postId, authorId) => api.resolvePostReport(user, reportId, postId, authorId)} onDismiss={(reportId) => api.dismissReport(user, reportId)}/></div>;
+            case 'feed': return ( <><PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView /><PostsFeed user={user} feedType="all" isAdminView onViewProfile={onViewProfile} typeFilter={typeFilter} /></> );
+            case 'reports': return <div className="bg-slate-800 p-6 rounded-lg shadow-lg"><ReportsView reports={reports} onViewProfile={onViewProfile} onResolve={(reportId, postId, authorId) => api.resolvePostReport(user, reportId, postId, authorId)} onDismiss={(reportId) => api.dismissReport(user, reportId)}/></div>;
             case 'proposals': return <ProposalsAdminPage user={user} />;
             case 'payouts': return <PayoutsAdminPage payouts={payouts} />;
             case 'sustenance': return <SustenanceAdminPage user={user} />;
             case 'ventures': return <VenturesAdminPage user={user} ventures={ventures} />;
             case 'economy': return <EconomyAdminPage user={user} cvp={cvp} users={allUsers} />;
             case 'profile': return <AdminProfile user={user} onUpdateUser={onUpdateUser} />;
-            case 'notifications': return <NotificationsPage user={user} onNavigate={handleNavigate} onViewProfile={setViewingProfileId} />;
-            default: return <Dashboard 
-                user={user}
-                users={allUsers}
-                agents={agents}
-                members={members}
-                pendingMembers={pendingMembers}
-                reports={reports}
-                broadcasts={broadcasts}
-                payouts={payouts}
-                ventures={ventures}
-                cvp={cvp}
-                onSendBroadcast={onSendBroadcast}
-            />;
+            case 'notifications': return <NotificationsPage user={user} onNavigate={handleNavigate} onViewProfile={onViewProfile} />;
+            default: return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={handleSendBroadcast} />;
         }
     };
 
     const mainContent = () => {
         if (isInitialLoading) {
-            return (
-                <div className="flex flex-col items-center justify-center p-12 bg-slate-800 rounded-lg">
-                    <LoaderIcon className="h-12 w-12 text-green-500 animate-spin" />
-                    <p className="mt-4 text-lg text-gray-300">Loading dashboard data...</p>
-                </div>
-            );
+            return ( <div className="flex flex-col items-center justify-center p-12 bg-slate-800 rounded-lg"><LoaderIcon className="h-12 w-12 text-green-500 animate-spin" /><p className="mt-4 text-lg text-gray-300">Loading dashboard data...</p></div> );
         }
 
         if (loadingErrors.length > 0 && !isInitialLoading) {
             return (
                 <div className="p-6 bg-red-900/50 border border-red-700 rounded-lg text-center">
                     <h2 className="text-2xl font-bold text-red-400">Data Loading Error</h2>
-                    <p className="mt-2 text-gray-300">Some essential data could not be loaded, which may cause the dashboard to appear empty or incomplete. This is often due to account permissions or a network issue.</p>
-                    <ul className="mt-4 text-left bg-slate-900/50 p-4 rounded-md space-y-2">
-                        {loadingErrors.map((err, i) => (
-                            <li key={i} className="text-red-300 text-sm list-disc list-inside">{err}</li>
-                        ))}
-                    </ul>
-                    <p className="mt-4 text-gray-400 text-sm">Please try refreshing the page. If the problem persists, contact your system administrator to verify your account permissions.</p>
+                    <p className="mt-2 text-gray-300">Some data could not be loaded. This may be due to account permissions or network issues.</p>
+                    <ul className="mt-4 text-left bg-slate-900/50 p-4 rounded-md space-y-2">{loadingErrors.map((err, i) => (<li key={i} className="text-red-300 text-sm list-disc list-inside">{err}</li>))}</ul>
+                    <p className="mt-4 text-gray-400 text-sm">Please refresh. If the problem persists, contact an administrator.</p>
                 </div>
             );
         }
@@ -528,17 +347,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
 
   return (
     <div className="space-y-8 animate-fade-in">
-        <ConfirmationDialog isOpen={dialogState.isOpen} onClose={() => setDialogState({ isOpen: false, member: null, action: 'reset' })} onConfirm={dialogState.action === 'reset' ? handleResetQuota : handleClearPost} title={dialogState.action === 'reset' ? "Reset Quota?" : "Clear Last Post?"} message={`Are you sure you want to ${dialogState.action === 'reset' ? 'reset the monthly distress call quota' : 'clear the last distress post'} for ${dialogState.member?.full_name}? This action cannot be undone.`} confirmButtonText={dialogState.action === 'reset' ? "Reset Quota" : "Clear Post"} />
+        <ConfirmationDialog isOpen={dialogState.isOpen} onClose={() => setDialogState({ isOpen: false, member: null, action: 'reset' })} onConfirm={dialogState.action === 'reset' ? handleResetQuota : handleClearPost} title={dialogState.action === 'reset' ? "Reset Quota?" : "Clear Last Post?"} message={`Are you sure you want to ${dialogState.action === 'reset' ? 'reset the monthly distress call quota' : 'clear the last distress post'} for ${dialogState.member?.full_name}?`} confirmButtonText={dialogState.action === 'reset' ? "Reset Quota" : "Clear Post"} />
         <ConfirmationDialog isOpen={roleChangeDialog.isOpen} onClose={() => setRoleChangeDialog({ isOpen: false, user: null, newRole: null })} onConfirm={handleRoleChangeConfirm} title="Confirm Role Change" message={`Are you sure you want to change ${roleChangeDialog.user?.name}'s role to "${roleChangeDialog.newRole}"?`} confirmButtonText="Confirm Change" />
-        {verificationModalState.member && (
-            <VerificationModal 
-                isOpen={verificationModalState.isOpen} 
-                onClose={() => setVerificationModalState({isOpen: false, member: null})} 
-                member={verificationModalState.member} 
-                onApprove={handleApproveMember}
-                onReject={handleRejectMember}
-            />
-        )}
+        {verificationModalState.member && ( <VerificationModal isOpen={verificationModalState.isOpen} onClose={() => setVerificationModalState({isOpen: false, member: null})} member={verificationModalState.member} onApprove={handleApproveMember} onReject={handleRejectMember} /> )}
       
         <div>
             <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
@@ -547,7 +358,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, broadcasts
                     <TabButton label="Dashboard" icon={<LayoutDashboardIcon/>} isActive={view === 'dashboard'} onClick={() => setView('dashboard')} />
                     <TabButton label="Users" icon={<UsersIcon/>} isActive={view === 'users'} onClick={() => setView('users')} />
                     <TabButton label="Feed" icon={<MessageSquareIcon/>} isActive={view === 'feed'} onClick={() => setView('feed')} />
-                    <TabButton label="Connect" icon={<InboxIcon/>} isActive={view === 'connect'} onClick={() => setView('connect')} />
+                    <TabButton label="Connect" icon={<InboxIcon/>} isActive={false} onClick={() => onOpenChat()} />
                     <TabButton label="Proposals" icon={<ScaleIcon/>} isActive={view === 'proposals'} onClick={() => setView('proposals')} />
                     <TabButton label="Ventures" icon={<TrendingUpIcon/>} isActive={view === 'ventures'} onClick={() => setView('ventures')} />
                     <TabButton label="Economy" icon={<DatabaseIcon/>} isActive={view === 'economy'} onClick={() => setView('economy')} />

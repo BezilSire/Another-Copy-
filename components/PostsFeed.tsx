@@ -19,8 +19,6 @@ import { LightbulbIcon } from './icons/LightbulbIcon';
 import { BriefcaseIcon } from './icons/BriefcaseIcon';
 import { UsersIcon } from './icons/UsersIcon';
 import { MessageCircleIcon } from './icons/MessageCircleIcon';
-// FIX: Imported MessageSquareIcon
-import { MessageSquareIcon } from './icons/MessageSquareIcon';
 import { SendIcon } from './icons/SendIcon';
 import { Timestamp, DocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { PinIcon } from './icons/PinIcon';
@@ -208,7 +206,7 @@ export const PostItem: React.FC<{
           title: 'Distress Call',
         },
         general: {
-          icon: <MessageSquareIcon className="h-4 w-4 text-slate-400" />,
+          icon: <MessageCircleIcon className="h-4 w-4 text-slate-400" />,
           borderColor: 'border-slate-700',
           title: 'General Post',
         },

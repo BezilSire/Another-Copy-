@@ -5,6 +5,7 @@ import { useToast } from './ToastContext';
 import { api } from '../services/apiService';
 import { auth, db } from '../services/firebase';
 import { User, Agent, NewPublicMemberData, MemberUser, Member } from '../types';
+import { generateReferralCode } from '../utils';
 
 // FIX: Define specific credential types as User/Agent don't have passwords.
 type LoginCredentials = { email: string; password: string };
@@ -53,6 +54,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         userDocListener = onSnapshot(userDocRef, (userDoc) => {
           if (userDoc.exists()) {
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
+
+            // FIX: Ensure referral code exists for all users, backfilling if necessary.
+            if (!userData.referralCode) {
+              const newReferralCode = generateReferralCode();
+              // Update firestore in the background (fire-and-forget)
+              api.updateUser(userDoc.id, { referralCode: newReferralCode }).catch(err => {
+                console.error("Failed to backfill referral code:", err);
+              });
+              // Update local state immediately for a seamless UX
+              userData.referralCode = newReferralCode;
+            }
+
             if (userData.status === 'ousted') {
               // Only show toast and log out if the user was *already* logged in and then ousted.
               if(currentUser?.id === userData.id) {
@@ -183,7 +196,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         addToast(message, 'error');
         throw error;
     } finally {
-        setIsProcessingAuth(false);
+      setIsProcessingAuth(false);
     }
   }, [addToast]);
 

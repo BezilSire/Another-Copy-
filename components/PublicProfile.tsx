@@ -99,8 +99,12 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
         );
     }
     
-    const skillsArray = publicProfile.skills?.split(',').map(s => s.trim()).filter(Boolean) || [];
-    const interestsArray = publicProfile.interests?.split(',').map(s => s.trim()).filter(Boolean) || [];
+    const skills = publicProfile.skills;
+    const skillsArray = Array.isArray(skills) ? skills : (typeof skills === 'string' ? skills.split(',').map(s => s.trim()).filter(Boolean) : []);
+
+    const interests = publicProfile.interests;
+    const interestsArray = Array.isArray(interests) ? interests : (typeof interests === 'string' ? interests.split(',').map(s => s.trim()).filter(Boolean) : []);
+    
     const lookingForArray = publicProfile.lookingFor?.filter(Boolean) || [];
     const hasPitchDeck = !!(publicProfile.businessIdea);
 

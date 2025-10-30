@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Member, User, Post, PublicUserProfile, VentureEquityHolding, MemberUser, FilterType } from '../types';
 import { api } from '../services/apiService';
 import { PencilIcon } from './icons/PencilIcon';
@@ -56,7 +56,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
         address: currentUser.address || '',
         bio: currentUser.bio || '',
         profession: currentUser.profession || '',
-        skills: currentUser.skills || '',
+        skills: Array.isArray(currentUser.skills) ? currentUser.skills.join(', ') : (currentUser.skills || ''),
         awards: currentUser.awards || '',
         interests: currentUser.interests || '',
         passions: currentUser.passions || '',
@@ -71,7 +71,8 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
     useEffect(() => {
         setEditData({
             name: currentUser.name || '', phone: currentUser.phone || '', address: currentUser.address || '',
-            bio: currentUser.bio || '', profession: currentUser.profession || '', skills: currentUser.skills || '',
+            bio: currentUser.bio || '', profession: currentUser.profession || '', 
+            skills: Array.isArray(currentUser.skills) ? currentUser.skills.join(', ') : (currentUser.skills || ''),
             awards: currentUser.awards || '', interests: currentUser.interests || '', passions: currentUser.passions || '',
             gender: currentUser.gender || '', age: currentUser.age || '',
             isLookingForPartners: currentUser.isLookingForPartners || false, lookingFor: currentUser.lookingFor || [],
@@ -80,9 +81,12 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
     }, [currentUser]);
     
     useEffect(() => {
-        const unsub = api.listenForReferredUsers(currentUser.id, setReferredUsers, console.error);
+        const unsub = api.listenForReferredUsers(currentUser.id, setReferredUsers, (error) => {
+            console.error("Failed to load referred users:", error);
+            addToast("Could not load referral list. This may be due to a database configuration issue.", "error");
+        });
         return () => unsub();
-    }, [currentUser.id]);
+    }, [currentUser.id, addToast]);
 
     const referralLink = `${window.location.origin}?ref=${currentUser.referralCode}`;
 
@@ -100,22 +104,23 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
         if (!currentUser.member_id) { addToast("Could not save profile. Member ID is missing.", "error"); return; }
         setIsSaving(true);
         try {
+            const skillsAsArray = editData.skills.split(',').map(s => s.trim()).filter(Boolean);
+            const interestsAsArray = editData.interests.split(',').map(s => s.trim()).filter(Boolean);
+            const passionsAsArray = editData.passions.split(',').map(s => s.trim()).filter(Boolean);
+
             const memberUpdateData: Partial<Member> = {
                 full_name: editData.name, phone: editData.phone, address: editData.address, bio: editData.bio,
-                profession: editData.profession, skills: editData.skills, awards: editData.awards, interests: editData.interests,
-                passions: editData.passions, gender: editData.gender, age: editData.age, isLookingForPartners: editData.isLookingForPartners,
+                profession: editData.profession, skills: skillsAsArray, awards: editData.awards, interests: interestsAsArray,
+                passions: passionsAsArray, gender: editData.gender, age: editData.age, isLookingForPartners: editData.isLookingForPartners,
                 lookingFor: editData.lookingFor, businessIdea: editData.businessIdea,
             };
             const userUpdateData: Partial<User> = {
                 name: editData.name, phone: editData.phone, address: editData.address, bio: editData.bio,
                 isLookingForPartners: editData.isLookingForPartners, lookingFor: editData.lookingFor, businessIdea: editData.businessIdea,
-                skills: editData.skills, interests: editData.interests, profession: editData.profession, awards: editData.awards,
-                passions: editData.passions, gender: editData.gender, age: editData.age,
+                skills: skillsAsArray, interests: interestsAsArray, profession: editData.profession, awards: editData.awards,
+                passions: passionsAsArray, gender: editData.gender, age: editData.age,
             };
-            // The `onUpdateUser` will trigger the AuthContext listener which updates the `currentUser` prop for this component.
-            // This re-renders the component with the latest data.
             await onUpdateUser(userUpdateData);
-            // We also update the 'members' collection for consistency, though it's not directly read by this component anymore.
             await api.updateMemberProfile(currentUser.member_id, memberUpdateData);
             setIsEditing(false);
         } catch (error) { addToast("An error occurred while saving.", "error"); }
@@ -129,9 +134,27 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
         });
     };
     
-    const skillsArray = ((isEditing ? editData.skills : currentUser.skills) || '').split(',').map(s => s.trim()).filter(Boolean);
-    const interestsArray = ((isEditing ? editData.interests : currentUser.interests) || '').split(',').map(s => s.trim()).filter(Boolean);
-    const passionsArray = ((isEditing ? editData.passions : currentUser.passions) || '').split(',').map(s => s.trim()).filter(Boolean);
+    const skillsArray = useMemo(() => {
+        const skills = isEditing ? editData.skills : currentUser.skills;
+        if (Array.isArray(skills)) return skills;
+        if (typeof skills === 'string') return skills.split(',').map(s => s.trim()).filter(Boolean);
+        return [];
+    }, [isEditing, editData.skills, currentUser.skills]);
+
+    const interestsArray = useMemo(() => {
+        const interests = isEditing ? editData.interests : currentUser.interests;
+        if (Array.isArray(interests)) return interests;
+        if (typeof interests === 'string') return interests.split(',').map(s => s.trim()).filter(Boolean);
+        return [];
+    }, [isEditing, editData.interests, currentUser.interests]);
+    
+    const passionsArray = useMemo(() => {
+        const passions = isEditing ? editData.passions : currentUser.passions;
+        if (Array.isArray(passions)) return passions;
+        if (typeof passions === 'string') return passions.split(',').map(s => s.trim()).filter(Boolean);
+        return [];
+    }, [isEditing, editData.passions, currentUser.passions]);
+    
     const lookingForArray = (isEditing ? editData.lookingFor : currentUser.lookingFor)?.filter(Boolean) || [];
     const profileDataForMeter = isEditing ? editData : currentUser;
 

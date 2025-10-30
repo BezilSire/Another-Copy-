@@ -1,9 +1,8 @@
-import React, { useState } from 'react';
-import { MemberUser, Broadcast, User, Post } from '../types';
+import React, { useState, useEffect } from 'react';
+import { MemberUser, Broadcast, User, Post, Conversation, FilterType } from '../types';
 import { MemberBottomNav } from './MemberBottomNav';
 import { PostsFeed } from './PostsFeed';
 import { MemberProfile } from './MemberProfile';
-import { ConnectPage } from './ConnectPage';
 import { ProposalsPage } from './ProposalsPage';
 import { VenturesPage } from './VenturesPage';
 import { KnowledgeBasePage } from './KnowledgeBasePage';
@@ -13,26 +12,24 @@ import { SustenancePage } from './SustenancePage';
 import { MyInvestmentsPage } from './MyInvestmentsPage';
 import { RedemptionPage } from './RedemptionPage';
 import { ProposalDetailsPage } from './ProposalDetailsPage';
-import { PublicProfile } from './PublicProfile';
 import { AIVenturePitchAssistant } from './AIVenturePitchAssistant';
 import { MorePage } from './MorePage';
 import { PostTypeFilter } from './PostTypeFilter';
-import { FilterType } from '../types';
 import { NewPostModal } from './NewPostModal';
 import { DistressCallDialog } from './DistressCallDialog';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
-import { SirenIcon } from './icons/SirenIcon';
-import { NotificationsPage } from './NotificationsPage';
-import { FloatingActionMenu } from './FloatingActionMenu';
 import { ConfirmationDialog } from './ConfirmationDialog';
 import { UbtVerificationPage } from './UbtVerificationPage';
+import { NotificationsPage } from './NotificationsPage';
+import { FloatingActionMenu } from './FloatingActionMenu';
+import { CommunityPage } from './CommunityPage';
 
 
 type MemberView = 
   | 'home' 
-  | 'connect' 
   | 'ventures' 
+  | 'community'
   | 'more' 
   // Sub-views from 'more'
   | 'profile' 
@@ -50,18 +47,21 @@ type MemberView =
 
 interface MemberDashboardProps {
   user: MemberUser;
-  broadcasts: Broadcast[];
   onUpdateUser: (updatedUser: Partial<User>) => Promise<void>;
   unreadCount: number;
   onLogout: () => void;
+  onOpenChat: (target: Conversation) => void;
+  onViewProfile: (userId: string | null) => void;
+  onNewMessageClick: () => void;
+  onNewGroupClick: () => void;
 }
 
-export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcasts, onUpdateUser, unreadCount, onLogout }) => {
+export const MemberDashboard: React.FC<MemberDashboardProps> = (props) => {
+  const { user, onUpdateUser, unreadCount, onLogout, onOpenChat, onViewProfile, onNewMessageClick, onNewGroupClick } = props;
   const [view, setView] = useState<MemberView>('home');
   const [activeSubViewId, setActiveSubViewId] = useState<string | null>(null);
-  const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const { addToast } = useToast();
-
+  
   const [typeFilter, setTypeFilter] = useState<FilterType>('all');
   const [isNewPostModalOpen, setIsNewPostModalOpen] = useState(false);
   const [isDistressModalOpen, setIsDistressModalOpen] = useState(false);
@@ -69,19 +69,19 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcas
   
   const [isVerificationPromptOpen, setIsVerificationPromptOpen] = useState(false);
   const [isVerifying, setIsVerifying] = useState(false);
-  
+
   const handleNavigation = (targetView: MemberView, id: string | null = null) => {
     setView(targetView);
     setActiveSubViewId(id);
-    setViewingProfileId(null); // Clear profile view when navigating
+    onViewProfile(null);
   }
   
   const handleActionAttempt = () => {
     if (user.status === 'pending') {
       setIsVerificationPromptOpen(true);
-      return false; // Action is blocked
+      return false;
     }
-    return true; // Action is allowed
+    return true;
   };
 
   const handlePostCreated = (ccapAwarded: number) => {
@@ -93,7 +93,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcas
       setIsSendingDistress(true);
       try {
           await api.sendDistressPost(user, content);
-          await onUpdateUser({}); // Trigger user refresh
+          await onUpdateUser({});
           addToast("Distress call sent. Your circle and admins have been notified.", 'success');
           setIsDistressModalOpen(false);
       } catch (error) {
@@ -101,12 +101,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcas
       } finally {
           setIsSendingDistress(false);
       }
-  };
-  
-   const handleStartChat = async (targetUserId: string) => {
-    if (handleActionAttempt()) {
-      setView('connect');
-    }
   };
   
   if (isVerifying) {
@@ -117,40 +111,21 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcas
     );
   }
 
-  if (viewingProfileId) {
-    return (
-        <PublicProfile
-            userId={viewingProfileId}
-            currentUser={user}
-            onBack={() => setViewingProfileId(null)}
-            onStartChat={handleStartChat}
-            onViewProfile={setViewingProfileId}
-        />
-    );
-  }
-
-
   const renderContent = () => {
     switch (view) {
       case 'home':
-        return (
-          <>
-            <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} />
-            <PostsFeed user={user} onViewProfile={setViewingProfileId} typeFilter={typeFilter} />
-          </>
-        );
-      case 'connect':
-        return <ConnectPage user={user} onViewProfile={setViewingProfileId} />;
+        return ( <> <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} /> <PostsFeed user={user} onViewProfile={onViewProfile} typeFilter={typeFilter} /> </> );
       case 'ventures':
-        return <VenturesPage currentUser={user} onViewProfile={setViewingProfileId} onNavigateToPitchAssistant={() => handleNavigation('pitch-assistant')} />;
+        return <VenturesPage currentUser={user} onViewProfile={onViewProfile} onNavigateToPitchAssistant={() => handleNavigation('pitch-assistant')} />;
+      case 'community':
+        return <CommunityPage currentUser={user} onViewProfile={onViewProfile} onOpenChat={onOpenChat} unreadCount={unreadCount} onNewMessageClick={onNewMessageClick} onNewGroupClick={onNewGroupClick} />;
       case 'more':
         return <MorePage user={user} onNavigate={handleNavigation} onLogout={onLogout} notificationCount={unreadCount} />;
       
-      // Sub-views from More
       case 'profile':
-        return <MemberProfile currentUser={user} onUpdateUser={onUpdateUser} onViewProfile={setViewingProfileId} />;
+        return <MemberProfile currentUser={user} onUpdateUser={onUpdateUser} onViewProfile={onViewProfile} />;
       case 'notifications':
-        return <NotificationsPage user={user} onNavigate={() => {}} onViewProfile={setViewingProfileId} />;
+        return <NotificationsPage user={user} onNavigate={() => {}} onViewProfile={onViewProfile} />;
       case 'knowledge':
         return <KnowledgeBasePage currentUser={user} onUpdateUser={onUpdateUser} />;
       case 'launchpad':
@@ -160,11 +135,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcas
       case 'sustenance':
         return <SustenancePage user={user} />;
       case 'myinvestments':
-        return <MyInvestmentsPage user={user} onViewProfile={setViewingProfileId} onNavigateToMarketplace={() => handleNavigation('ventures')} />;
+        return <MyInvestmentsPage user={user} onViewProfile={onViewProfile} onNavigateToMarketplace={() => handleNavigation('ventures')} />;
       case 'proposals':
         return <ProposalsPage currentUser={user} onNavigateToDetails={(id) => handleNavigation('proposal-details', id)} />;
-
-      // Sub-sub-views
       case 'redemption':
         return <RedemptionPage user={user} onUpdateUser={onUpdateUser} onBack={() => handleNavigation('earn')} />;
       case 'proposal-details':
@@ -172,12 +145,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcas
       case 'pitch-assistant':
         return <AIVenturePitchAssistant user={user} onUpdateUser={onUpdateUser} onBack={() => handleNavigation('ventures')} />;
       default:
-        return (
-          <>
-            <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} />
-            <PostsFeed user={user} onViewProfile={setViewingProfileId} typeFilter={typeFilter} />
-          </>
-        );
+        return ( <> <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} /> <PostsFeed user={user} onViewProfile={onViewProfile} typeFilter={typeFilter} /> </> );
     }
   };
 
@@ -193,27 +161,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcas
         onDistressClick={() => { if (handleActionAttempt()) setIsDistressModalOpen(true); }}
       />
 
-      <MemberBottomNav activeView={view as any} setActiveView={handleNavigation} unreadNotificationCount={unreadCount} onLogout={onLogout} />
+      <MemberBottomNav activeView={view as any} setActiveView={handleNavigation} unreadNotificationCount={unreadCount} />
 
-      <NewPostModal 
-        isOpen={isNewPostModalOpen}
-        onClose={() => setIsNewPostModalOpen(false)}
-        user={user}
-        onPostCreated={handlePostCreated}
-      />
-      <DistressCallDialog
-        isOpen={isDistressModalOpen}
-        onClose={() => setIsDistressModalOpen(false)}
-        onConfirm={handleSendDistress}
-        isLoading={isSendingDistress}
-      />
+      <NewPostModal isOpen={isNewPostModalOpen} onClose={() => setIsNewPostModalOpen(false)} user={user} onPostCreated={handlePostCreated} />
+      <DistressCallDialog isOpen={isDistressModalOpen} onClose={() => setIsDistressModalOpen(false)} onConfirm={handleSendDistress} isLoading={isSendingDistress} />
       <ConfirmationDialog
         isOpen={isVerificationPromptOpen}
         onClose={() => setIsVerificationPromptOpen(false)}
-        onConfirm={() => {
-            setIsVerificationPromptOpen(false);
-            setIsVerifying(true);
-        }}
+        onConfirm={() => { setIsVerificationPromptOpen(false); setIsVerifying(true); }}
         title="Membership Verification Required"
         message="To create posts and use all features of the commons, you must be a verified member. This requires confirming you hold at least $10 worth of $UBT."
         confirmButtonText="Verify Now"

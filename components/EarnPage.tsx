@@ -12,6 +12,7 @@ import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
 import { formatTimeAgo } from '../utils';
 import { ClockIcon } from './icons/ClockIcon';
 import { BriefcaseIcon } from './icons/BriefcaseIcon';
+import { ClaimBonusModal } from './ClaimBonusModal';
 
 interface EarnPageProps {
   user: MemberUser;
@@ -68,7 +69,7 @@ const RedemptionStatus: React.FC<{ cycle: RedemptionCycle | null, onNavigate: ()
                     <h2 className="text-2xl font-bold text-white">Redemption Hub</h2>
                     <p className="text-gray-300">Convert your Civic Capital (CCAP) into real value.</p>
                      <div className="mt-2 text-lg font-mono text-green-300">
-                        1 CCAP ≈ ${cycle.ccap_usd_value.toFixed(4)} USDT
+                        1 CCAP ≈ ${cycle.ccap_to_usd_rate.toFixed(4)} USDT
                     </div>
                 </div>
                 <div className="text-center">
@@ -105,6 +106,7 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
     const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
     const [referredUsers, setReferredUsers] = useState<User[]>([]);
     const [cycle, setCycle] = useState<RedemptionCycle | null>(null);
+    const [claimingBonus, setClaimingBonus] = useState<PayoutRequest | null>(null);
 
     const [timeLeft, setTimeLeft] = useState('');
     const canCheckIn = !user.lastDailyCheckin || (new Date().getTime() - user.lastDailyCheckin.toDate().getTime()) > 24 * 60 * 60 * 1000;
@@ -115,12 +117,15 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
     useEffect(() => {
         api.getCurrentRedemptionCycle().then(setCycle);
         const unsubPayouts = api.listenForUserPayouts(user.id, setPayouts, console.error);
-        const unsubReferrals = api.listenForReferredUsers(user.id, setReferredUsers, console.error);
+        const unsubReferrals = api.listenForReferredUsers(user.id, setReferredUsers, (error) => {
+            console.error("Failed to load referred users:", error);
+            addToast("Could not load referral list. This may be due to a database configuration issue.", "error");
+        });
         return () => {
             unsubPayouts();
             unsubReferrals();
         };
-    }, [user.id]);
+    }, [user.id, addToast]);
 
 
     useEffect(() => {
@@ -211,146 +216,166 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
     };
     
     return (
-        <div className="space-y-8 animate-fade-in">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <StatCard title="Social Capital (SCAP)" value={(user.scap ?? 0).toLocaleString()} icon={<SparkleIcon className="h-6 w-6 text-yellow-400"/>} description="Earned from daily activity. Your SCAP increases your chances in the bi-monthly Sustenance Dividend lottery."/>
-                <StatCard title="Civic Capital (CCAP)" value={(user.ccap ?? 0).toLocaleString()} icon={<DatabaseIcon className="h-6 w-6 text-blue-400"/>} description="Earned by making valuable contributions. During the bi-monthly Redemption Cycle, you can convert your CCAP to cash, stake it for a 10% bonus, or invest it in community ventures to earn Venture Equity (VEQ)."/>
-            </div>
-            
-            <RedemptionStatus cycle={cycle} onNavigate={onNavigateToRedemption} />
-
-            <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                <h2 className="text-xl font-semibold text-white flex items-center mb-2">
-                    <BriefcaseIcon className="h-6 w-6 mr-3 text-yellow-400" />
-                    Venture Equity (VEQ)
-                </h2>
-                <p className="text-gray-400 mb-4">Your ownership in community ventures. Redeem your shares or watch your investments grow.</p>
-                <div className="bg-slate-900/50 p-4 rounded-lg flex items-center justify-between">
-                    <div>
-                        <p className="text-sm text-gray-400">Your Holdings</p>
-                        <p className="text-lg font-semibold text-white">
-                            {user.ventureEquity?.length > 0 
-                                ? `Invested in ${user.ventureEquity.length} venture(s)` 
-                                : 'No investments yet'}
-                        </p>
-                    </div>
-                    <button onClick={onNavigateToInvestments} className="px-4 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-600 font-semibold text-sm">
-                        Manage Investments
-                    </button>
+        <>
+            {claimingBonus && (
+                <ClaimBonusModal 
+                    isOpen={!!claimingBonus}
+                    onClose={() => setClaimingBonus(null)}
+                    payoutRequest={claimingBonus}
+                />
+            )}
+            <div className="space-y-8 animate-fade-in">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <StatCard title="Social Capital (SCAP)" value={(user.scap ?? 0).toLocaleString()} icon={<SparkleIcon className="h-6 w-6 text-yellow-400"/>} description="Earned from daily activity. Your SCAP increases your chances in the bi-monthly Sustenance Dividend lottery."/>
+                    <StatCard title="Civic Capital (CCAP)" value={(user.ccap ?? 0).toLocaleString()} icon={<DatabaseIcon className="h-6 w-6 text-blue-400"/>} description="Earned by making valuable contributions. During the bi-monthly Redemption Cycle, you can convert your CCAP to cash, stake it for a 10% bonus, or invest it in community ventures to earn Venture Equity (VEQ)."/>
                 </div>
-            </div>
+                
+                <RedemptionStatus cycle={cycle} onNavigate={onNavigateToRedemption} />
 
-            {/* Daily Check-in */}
-            <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                <h2 className="text-xl font-semibold text-white mb-2">Daily Check-in</h2>
-                <p className="text-gray-400 mb-4">Earn 10 SCAP every 24 hours just for being an active member of the commons.</p>
-                <button onClick={handleCheckIn} disabled={!canCheckIn || isLoading.checkin} className="w-full sm:w-auto px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold disabled:bg-slate-600 disabled:cursor-not-allowed">
-                    {isLoading.checkin ? <LoaderIcon className="h-5 w-5 animate-spin"/> : canCheckIn ? 'Check-in Now (+10 SCAP)' : `Next check-in in ${timeLeft}`}
-                </button>
-            </div>
-            
-            {/* Ways to Earn CCAP */}
-            <div className="space-y-6">
-                 <h2 className="text-2xl font-bold text-white">Earn More Civic Capital (CCAP)</h2>
-                 
-                 {/* Price Verification */}
-                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                    <h3 className="text-xl font-semibold text-white">Price Verification (+15 CCAP)</h3>
-                    <p className="text-gray-400 mt-1 mb-4">Help the commons track fair market prices. Submit the current price of a commodity in your area.</p>
-                    <form onSubmit={handlePriceSubmit} className="space-y-4">
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <div>
-                                <label htmlFor="commodity" className="block text-sm font-medium text-gray-300">Commodity</label>
-                                <select id="commodity" value={priceData.commodity} onChange={e => setPriceData(p => ({...p, commodity: e.target.value}))} className="mt-1 block w-full pl-3 pr-10 py-2 bg-slate-700 border-slate-600 rounded-md text-white">
-                                    {COMMODITIES.map(c => <option key={c}>{c}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label htmlFor="price" className="block text-sm font-medium text-gray-300">Price (USD)</label>
-                                <input type="number" step="0.01" id="price" value={priceData.price} onChange={e => setPriceData(p => ({...p, price: e.target.value}))} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                            </div>
-                        </div>
-                        {priceData.commodity === 'Other' && (
-                             <div className="animate-fade-in">
-                                <label htmlFor="otherCommodity" className="block text-sm font-medium text-gray-300">Specify Commodity Name <span className="text-red-400">*</span></label>
-                                <input
-                                    type="text"
-                                    id="otherCommodity"
-                                    value={otherCommodity}
-                                    onChange={e => setOtherCommodity(e.target.value)}
-                                    className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"
-                                    required
-                                />
-                            </div>
-                        )}
+                <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                    <h2 className="text-xl font-semibold text-white flex items-center mb-2">
+                        <BriefcaseIcon className="h-6 w-6 mr-3 text-yellow-400" />
+                        Venture Equity (VEQ)
+                    </h2>
+                    <p className="text-gray-400 mb-4">Your ownership in community ventures. Redeem your shares or watch your investments grow.</p>
+                    <div className="bg-slate-900/50 p-4 rounded-lg flex items-center justify-between">
                         <div>
-                            <label htmlFor="shop" className="block text-sm font-medium text-gray-300">Shop Name & Location</label>
-                            <input type="text" id="shop" value={priceData.shop} onChange={e => setPriceData(p => ({...p, shop: e.target.value}))} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
+                            <p className="text-sm text-gray-400">Your Holdings</p>
+                            <p className="text-lg font-semibold text-white">
+                                {user.ventureEquity?.length > 0 
+                                    ? `Invested in ${user.ventureEquity.length} venture(s)` 
+                                    : 'No investments yet'}
+                            </p>
                         </div>
-                        <div className="text-right">
-                             <button type="submit" disabled={isLoading.price} className="px-6 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-600 font-semibold disabled:bg-slate-600">
-                                {isLoading.price ? <LoaderIcon className="h-5 w-5 animate-spin"/> : 'Submit Price'}
-                            </button>
-                        </div>
-                    </form>
-                 </div>
-            </div>
-            
-            {/* Referral System */}
-            <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                <h2 className="text-2xl font-bold text-white mb-2">Referral Program</h2>
-                <p className="text-gray-400 mb-4">Earn <strong className="text-white">$1.00 USDT</strong> for every new member who joins using your referral code.</p>
-                <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-slate-900/50 rounded-lg">
-                    <p className="font-mono text-lg text-green-300 tracking-widest bg-slate-700 p-2 rounded-md">{user.referralCode}</p>
-                    <div className="flex-1 text-sm text-gray-300 break-all">{referralLink}</div>
-                    <button onClick={handleCopy} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-md">
-                        {isCopied ? <ClipboardCheckIcon className="h-5 w-5 text-green-400"/> : <ClipboardIcon className="h-5 w-5"/>}
+                        <button onClick={onNavigateToInvestments} className="px-4 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-600 font-semibold text-sm">
+                            Manage Investments
+                        </button>
+                    </div>
+                </div>
+
+                {/* Daily Check-in */}
+                <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                    <h2 className="text-xl font-semibold text-white mb-2">Daily Check-in</h2>
+                    <p className="text-gray-400 mb-4">Earn 10 SCAP every 24 hours just for being an active member of the commons.</p>
+                    <button onClick={handleCheckIn} disabled={!canCheckIn || isLoading.checkin} className="w-full sm:w-auto px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold disabled:bg-slate-600 disabled:cursor-not-allowed">
+                        {isLoading.checkin ? <LoaderIcon className="h-5 w-5 animate-spin"/> : canCheckIn ? 'Check-in Now (+10 SCAP)' : `Next check-in in ${timeLeft}`}
                     </button>
                 </div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
-                    <div>
-                        <h3 className="text-lg font-semibold text-white">Your Referrals ({referredUsers.length})</h3>
-                        <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
-                            {referredUsers.length > 0 ? referredUsers.map(ref => (
-                                <div key={ref.id} className="text-sm text-gray-300 p-2 bg-slate-700/50 rounded-md">{ref.name}</div>
-                            )) : <p className="text-sm text-gray-500">No referrals yet.</p>}
-                        </div>
-                    </div>
-                    <div>
-                        <h3 className="text-lg font-semibold text-white">Available Earnings</h3>
-                        <p className="text-3xl font-bold text-green-400">${referralEarnings.toFixed(2)}</p>
-                         {referralEarnings > 0 && (
-                            <form onSubmit={handlePayoutRequest} className="mt-4 space-y-3">
-                                <input type="text" value={payoutData.ecocashName} onChange={e => setPayoutData(p => ({...p, ecocashName: e.target.value}))} placeholder="Ecocash Full Name" required className="block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                                <input type="tel" value={payoutData.ecocashNumber} onChange={e => setPayoutData(p => ({...p, ecocashNumber: e.target.value}))} placeholder="Ecocash Phone Number" required className="block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                                <button type="submit" disabled={isLoading.payout} className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold disabled:bg-slate-600">
-                                    {isLoading.payout ? 'Processing...' : `Request Payout ($${referralEarnings.toFixed(2)})`}
+                
+                {/* Ways to Earn CCAP */}
+                <div className="space-y-6">
+                    <h2 className="text-2xl font-bold text-white">Earn More Civic Capital (CCAP)</h2>
+                    
+                    {/* Price Verification */}
+                    <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                        <h3 className="text-xl font-semibold text-white">Price Verification (+15 CCAP)</h3>
+                        <p className="text-gray-400 mt-1 mb-4">Help the commons track fair market prices. Submit the current price of a commodity in your area.</p>
+                        <form onSubmit={handlePriceSubmit} className="space-y-4">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                <div>
+                                    <label htmlFor="commodity" className="block text-sm font-medium text-gray-300">Commodity</label>
+                                    <select id="commodity" value={priceData.commodity} onChange={e => setPriceData(p => ({...p, commodity: e.target.value}))} className="mt-1 block w-full pl-3 pr-10 py-2 bg-slate-700 border-slate-600 rounded-md text-white">
+                                        {COMMODITIES.map(c => <option key={c}>{c}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label htmlFor="price" className="block text-sm font-medium text-gray-300">Price (USD)</label>
+                                    <input type="number" step="0.01" id="price" value={priceData.price} onChange={e => setPriceData(p => ({...p, price: e.target.value}))} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
+                                </div>
+                            </div>
+                            {priceData.commodity === 'Other' && (
+                                <div className="animate-fade-in">
+                                    <label htmlFor="otherCommodity" className="block text-sm font-medium text-gray-300">Specify Commodity Name <span className="text-red-400">*</span></label>
+                                    <input
+                                        type="text"
+                                        id="otherCommodity"
+                                        value={otherCommodity}
+                                        onChange={e => setOtherCommodity(e.target.value)}
+                                        className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"
+                                        required
+                                    />
+                                </div>
+                            )}
+                            <div>
+                                <label htmlFor="shop" className="block text-sm font-medium text-gray-300">Shop Name & Location</label>
+                                <input type="text" id="shop" value={priceData.shop} onChange={e => setPriceData(p => ({...p, shop: e.target.value}))} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
+                            </div>
+                            <div className="text-right">
+                                <button type="submit" disabled={isLoading.price} className="px-6 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-600 font-semibold disabled:bg-slate-600">
+                                    {isLoading.price ? <LoaderIcon className="h-5 w-5 animate-spin"/> : 'Submit Price'}
                                 </button>
-                            </form>
-                         )}
+                            </div>
+                        </form>
                     </div>
                 </div>
-            </div>
-
-            {/* Payout Requests */}
-            <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                <h3 className="text-lg font-semibold text-white mb-4">Payout History</h3>
-                {payouts.length > 0 ? (
-                    <div className="space-y-2">
-                        {payouts.map(p => (
-                            <div key={p.id} className="flex justify-between items-center bg-slate-700/50 p-3 rounded-md">
-                                <div>
-                                    <p className="font-semibold text-gray-200">
-                                        {p.type === 'ccap_redemption' ? `CCAP Redemption: $${p.amount.toFixed(2)}` : `Referral Payout: $${p.amount.toFixed(2)}`}
-                                    </p>
-                                    <p className="text-xs text-gray-400">{formatTimeAgo(p.requestedAt.toDate().toISOString())}</p>
-                                </div>
-                                <PayoutStatusBadge status={p.status} />
-                            </div>
-                        ))}
+                
+                {/* Referral System */}
+                <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                    <h2 className="text-2xl font-bold text-white mb-2">Referral Program</h2>
+                    <p className="text-gray-400 mb-4">Earn <strong className="text-white">$1.00 USDT</strong> for every new member who joins using your referral code.</p>
+                    <div className="flex flex-col sm:flex-row items-center gap-4 p-4 bg-slate-900/50 rounded-lg">
+                        <p className="font-mono text-lg text-green-300 tracking-widest bg-slate-700 p-2 rounded-md">{user.referralCode}</p>
+                        <div className="flex-1 text-sm text-gray-300 break-all">{referralLink}</div>
+                        <button onClick={handleCopy} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-md">
+                            {isCopied ? <ClipboardCheckIcon className="h-5 w-5 text-green-400"/> : <ClipboardIcon className="h-5 w-5"/>}
+                        </button>
                     </div>
-                ) : <p className="text-sm text-gray-500">You haven't requested any payouts yet.</p>}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-6">
+                        <div>
+                            <h3 className="text-lg font-semibold text-white">Your Referrals ({referredUsers.length})</h3>
+                            <div className="mt-2 space-y-2 max-h-48 overflow-y-auto">
+                                {referredUsers.length > 0 ? referredUsers.map(ref => (
+                                    <div key={ref.id} className="text-sm text-gray-300 p-2 bg-slate-700/50 rounded-md">{ref.name}</div>
+                                )) : <p className="text-sm text-gray-500">No referrals yet.</p>}
+                            </div>
+                        </div>
+                        <div>
+                            <h3 className="text-lg font-semibold text-white">Available Earnings</h3>
+                            <p className="text-3xl font-bold text-green-400">${referralEarnings.toFixed(2)}</p>
+                            {referralEarnings > 0 && (
+                                <form onSubmit={handlePayoutRequest} className="mt-4 space-y-3">
+                                    <input type="text" value={payoutData.ecocashName} onChange={e => setPayoutData(p => ({...p, ecocashName: e.target.value}))} placeholder="Ecocash Full Name" required className="block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
+                                    <input type="tel" value={payoutData.ecocashNumber} onChange={e => setPayoutData(p => ({...p, ecocashNumber: e.target.value}))} placeholder="Ecocash Phone Number" required className="block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
+                                    <button type="submit" disabled={isLoading.payout} className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold disabled:bg-slate-600">
+                                        {isLoading.payout ? 'Processing...' : `Request Payout ($${referralEarnings.toFixed(2)})`}
+                                    </button>
+                                </form>
+                            )}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Payout Requests */}
+                <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                    <h3 className="text-lg font-semibold text-white mb-4">Payout History</h3>
+                    {payouts.length > 0 ? (
+                        <div className="space-y-2">
+                            {payouts.map(p => {
+                                const isBonusToClaim = p.type === 'admin_referral_bonus' && p.status === 'pending' && !p.ecocashName;
+                                return (
+                                    <div key={p.id} className="flex justify-between items-center bg-slate-700/50 p-3 rounded-md">
+                                        <div>
+                                            <p className="font-semibold text-gray-200">
+                                                {p.type === 'ccap_redemption' && `CCAP Redemption: $${p.amount.toFixed(2)}`}
+                                                {p.type === 'referral' && `Referral Payout: $${p.amount.toFixed(2)}`}
+                                                {p.type === 'admin_referral_bonus' && `Signup Bonus: $${p.amount.toFixed(2)}`}
+                                            </p>
+                                            <p className="text-xs text-gray-400">{formatTimeAgo(p.requestedAt.toDate().toISOString())}</p>
+                                        </div>
+                                        {isBonusToClaim ? (
+                                            <button onClick={() => setClaimingBonus(p)} className="px-3 py-1 bg-green-600 text-white text-sm font-semibold rounded-md hover:bg-green-700">
+                                                Claim Bonus
+                                            </button>
+                                        ) : (
+                                            <PayoutStatusBadge status={p.status} />
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : <p className="text-sm text-gray-500">You haven't requested any payouts yet.</p>}
+                </div>
             </div>
-        </div>
+        </>
     );
 };

@@ -13,11 +13,15 @@ interface ChatHeaderProps {
 export const ChatHeader: React.FC<ChatHeaderProps> = ({ conversation, currentUser, onShowInfo, onViewProfile }) => {
   const getChatPartner = () => {
     if (conversation.isGroup) {
-      return { name: conversation.name, id: null };
+      return { name: conversation.name || 'Group Chat', id: null };
+    }
+    if (!Array.isArray(conversation.members)) {
+        return { name: 'Chat', id: null };
     }
     const otherMemberId = conversation.members.find(id => id !== currentUser.id);
+    const memberNames = conversation.memberNames || {};
     return {
-        name: conversation.memberNames[otherMemberId || ''] || 'Chat',
+        name: memberNames[otherMemberId || ''] || 'Chat',
         id: otherMemberId || null
     };
   };

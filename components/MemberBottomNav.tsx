@@ -1,14 +1,13 @@
 import React from 'react';
 import { HomeIcon } from './icons/HomeIcon';
 import { UsersIcon } from './icons/UsersIcon';
-import { MessageSquareIcon } from './icons/MessageSquareIcon';
 import { BriefcaseIcon } from './icons/BriefcaseIcon';
 import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon';
 
 type MemberView = 
   | 'home' 
-  | 'connect' 
-  | 'ventures' 
+  | 'ventures'
+  | 'community'
   | 'more';
 
 
@@ -16,7 +15,6 @@ interface MemberBottomNavProps {
     activeView: MemberView;
     setActiveView: (view: MemberView) => void;
     unreadNotificationCount: number;
-    onLogout: () => void;
 }
 
 const NavItem: React.FC<{
@@ -58,10 +56,10 @@ export const MemberBottomNav: React.FC<MemberBottomNavProps> = ({ activeView, se
                     onClick={() => setActiveView('ventures')}
                 />
                 <NavItem
-                    icon={<MessageSquareIcon />}
-                    label="Connect"
-                    isActive={activeView === 'connect'}
-                    onClick={() => setActiveView('connect')}
+                    icon={<UsersIcon />}
+                    label="Community"
+                    isActive={activeView === 'community'}
+                    onClick={() => setActiveView('community')}
                     hasNotification={unreadNotificationCount > 0}
                 />
                 <NavItem

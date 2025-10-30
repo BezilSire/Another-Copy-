@@ -13,6 +13,7 @@ export interface BaseUser {
   createdAt: Timestamp;
   lastSeen: Timestamp;
   isProfileComplete: boolean;
+  hasCompletedInduction?: boolean;
   phone?: string;
   address?: string;
   bio?: string;
@@ -20,7 +21,7 @@ export interface BaseUser {
   national_id?: string; // For members
   // Member specific profile fields
   profession?: string;
-  skills?: string;
+  skills?: string[];
   awards?: string;
   interests?: string;
   passions?: string;
@@ -51,6 +52,8 @@ export interface BaseUser {
   // Pitch Deck
   pitchDeckTitle?: string;
   pitchDeckSlides?: { title: string; content: string }[];
+  // Chat
+  conversationIds?: string[];
 }
 
 export interface Admin extends BaseUser {
@@ -88,7 +91,7 @@ export interface PublicUserProfile {
   status: UserStatus;
   bio?: string;
   profession?: string;
-  skills?: string;
+  skills?: string[];
   interests?: string;
   businessIdea?: string;
   isLookingForPartners?: boolean;
@@ -124,7 +127,7 @@ export interface Member {
   national_id?: string;
   bio?: string;
   profession?: string;
-  skills?: string;
+  skills?: string[];
   awards?: string;
   interests?: string;
   passions?: string;
@@ -287,7 +290,7 @@ export interface PayoutRequest {
     id: string;
     userId: string;
     userName: string;
-    type: 'referral' | 'ccap_redemption' | 'veq_redemption' | 'commission';
+    type: 'referral' | 'ccap_redemption' | 'veq_redemption' | 'commission' | 'admin_referral_bonus';
     amount: number; // For referral/ccap in USD, for VEQ in shares
     ecocashName: string;
     ecocashNumber: string;

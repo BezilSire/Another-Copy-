@@ -71,7 +71,11 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
     }
 
     try {
-      await onProfileComplete(formData);
+      const dataToSubmit = {
+        ...formData,
+        skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean),
+      };
+      await onProfileComplete(dataToSubmit as Partial<User>);
       // On success, the App component will automatically navigate away.
     } catch (error) {
       addToast('Failed to update profile. Please try again.', 'error');
@@ -127,7 +131,7 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
                                     <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                                         {LOOKING_FOR_LIST.map(item => (
                                             <label key={item} className="flex items-center space-x-2 text-sm text-gray-300">
-                                                <input type="checkbox" value={item} checked={formData.lookingFor.includes(item)} onChange={handleCheckboxChange} className="text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500"/>
+                                                <input type="checkbox" value={item} checked={formData.lookingFor.includes(item)} onChange={handleCheckboxChange} className="text-green-600 bg-slate-700 border border-slate-600 rounded focus:ring-green-500"/>
                                                 <span>{item}</span>
                                             </label>
                                         ))}

@@ -21,7 +21,6 @@ const VentureHoldingCard: React.FC<VentureHoldingCardProps> = ({ holding, userId
         const fetchData = async () => {
             setIsLoading(true);
             try {
-                // FIX: Corrected API call from getVentureDetails to getVentureById
                 const ventureDetails = await api.getVentureById(holding.ventureId);
                 setVenture(ventureDetails);
                 if (ventureDetails) {
