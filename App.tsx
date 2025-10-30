@@ -15,13 +15,15 @@ import { useOnlineStatus } from './hooks/useOnlineStatus';
 import { AppInstallBanner } from './components/AppInstallBanner';
 import { useProfileCompletionReminder } from './hooks/useProfileCompletionReminder';
 import { CompleteProfilePage } from './components/CompleteProfilePage';
-import { UbtVerificationPage } from './components/UbtVerificationPage';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
+import { VerifyEmailPage } from './components/VerifyEmailPage';
+import { UbtVerificationPage } from './components/UbtVerificationPage';
+
 
 type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge';
 
 const App: React.FC = () => {
-  const { currentUser, isLoadingAuth, logout, updateUser } = useAuth();
+  const { currentUser, isLoadingAuth, logout, updateUser, firebaseUser } = useAuth();
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const { addToast } = useToast();
   const isOnline = useOnlineStatus();
@@ -117,12 +119,10 @@ const App: React.FC = () => {
       return <AuthPage />;
     }
 
-    if (currentUser.status === 'pending' && currentUser.role !== 'agent') {
-        return (
-            <div className="p-4 sm:p-6 lg:p-8 flex items-center justify-center min-h-[calc(100vh-100px)]">
-                <UbtVerificationPage user={currentUser} onLogout={requestLogout} />
-            </div>
-        );
+    // New members who haven't completed their profile yet should not be blocked by email verification.
+    // They will be prompted after they finish the initial setup.
+    if (firebaseUser && !firebaseUser.emailVerified && currentUser.isProfileComplete) {
+        return <VerifyEmailPage user={currentUser} onLogout={requestLogout} />;
     }
 
     if (!currentUser.isProfileComplete) {

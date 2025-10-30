@@ -39,7 +39,7 @@ const VentureHoldingCard: React.FC<VentureHoldingCardProps> = ({ holding, user, 
             }
         };
         fetchData();
-    }, [holding.ventureId, holding.shares, user.id]);
+    }, [holding, user.id]);
 
     const equityPercentage = venture && venture.totalSharesIssued > 0 ? (holding.shares / venture.totalSharesIssued) * 100 : 0;
     

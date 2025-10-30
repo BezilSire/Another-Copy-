@@ -25,6 +25,8 @@ import { useToast } from '../contexts/ToastContext';
 import { SirenIcon } from './icons/SirenIcon';
 import { NotificationsPage } from './NotificationsPage';
 import { FloatingActionMenu } from './FloatingActionMenu';
+import { ConfirmationDialog } from './ConfirmationDialog';
+import { UbtVerificationPage } from './UbtVerificationPage';
 
 
 type MemberView = 
@@ -65,11 +67,22 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcas
   const [isDistressModalOpen, setIsDistressModalOpen] = useState(false);
   const [isSendingDistress, setIsSendingDistress] = useState(false);
   
+  const [isVerificationPromptOpen, setIsVerificationPromptOpen] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(false);
+  
   const handleNavigation = (targetView: MemberView, id: string | null = null) => {
     setView(targetView);
     setActiveSubViewId(id);
     setViewingProfileId(null); // Clear profile view when navigating
   }
+  
+  const handleActionAttempt = () => {
+    if (user.status === 'pending') {
+      setIsVerificationPromptOpen(true);
+      return false; // Action is blocked
+    }
+    return true; // Action is allowed
+  };
 
   const handlePostCreated = (ccapAwarded: number) => {
       setIsNewPostModalOpen(false);
@@ -91,10 +104,18 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcas
   };
   
    const handleStartChat = async (targetUserId: string) => {
-    // A simplified start chat that just switches view.
-    // Full implementation would require a chat context.
-    setView('connect');
+    if (handleActionAttempt()) {
+      setView('connect');
+    }
   };
+  
+  if (isVerifying) {
+    return (
+      <div className="flex items-center justify-center min-h-[calc(100vh-200px)]">
+        <UbtVerificationPage user={user} onLogout={onLogout} />
+      </div>
+    );
+  }
 
   if (viewingProfileId) {
     return (
@@ -168,8 +189,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcas
 
       <FloatingActionMenu
         user={user}
-        onNewPostClick={() => setIsNewPostModalOpen(true)}
-        onDistressClick={() => setIsDistressModalOpen(true)}
+        onNewPostClick={() => { if (handleActionAttempt()) setIsNewPostModalOpen(true); }}
+        onDistressClick={() => { if (handleActionAttempt()) setIsDistressModalOpen(true); }}
       />
 
       <MemberBottomNav activeView={view as any} setActiveView={handleNavigation} unreadNotificationCount={unreadCount} onLogout={onLogout} />
@@ -185,6 +206,17 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, broadcas
         onClose={() => setIsDistressModalOpen(false)}
         onConfirm={handleSendDistress}
         isLoading={isSendingDistress}
+      />
+      <ConfirmationDialog
+        isOpen={isVerificationPromptOpen}
+        onClose={() => setIsVerificationPromptOpen(false)}
+        onConfirm={() => {
+            setIsVerificationPromptOpen(false);
+            setIsVerifying(true);
+        }}
+        title="Membership Verification Required"
+        message="To create posts and use all features of the commons, you must be a verified member. This requires confirming you hold at least $10 worth of $UBT."
+        confirmButtonText="Verify Now"
       />
     </>
   );

@@ -49,7 +49,7 @@ import {
     User, Agent, Member, NewMember, MemberUser, Broadcast, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, NewPublicMemberData, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
-    Distribution, Bounty
+    Distribution
 } from '../types';
 
 
@@ -67,7 +67,6 @@ const sustenanceCollection = collection(db, 'sustenance_cycles');
 const vouchersCollection = collection(db, 'sustenance_vouchers');
 const venturesCollection = collection(db, 'ventures');
 const globalsCollection = collection(db, 'globals');
-const bountiesCollection = collection(db, 'bounties');
 
 // Helper function for robust post deletion
 const _deletePostAndSubcollections = async (postId: string) => {
@@ -787,28 +786,6 @@ export const api = {
         status: 'pending', requestedAt: serverTimestamp(), meta: { ventureId: holding.ventureId, ventureName: holding.ventureName }
     }),
     
-    listenForOpenBounties: (callback: (bounties: Bounty[]) => void, onError: (e: Error) => void) => onSnapshot(query(bountiesCollection, where('status', '==', 'open'), orderBy('createdAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Bounty))), onError),
-    getOpenBounties: async (): Promise<Bounty[]> => {
-        const q = query(bountiesCollection, where('status', '==', 'open'), orderBy('createdAt', 'desc'));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Bounty));
-    },
-    createBounty: (user: User, bountyData: Omit<Bounty, 'id'|'creatorId'|'creatorName'|'createdAt'|'status'>) => {
-        const newBounty = {
-        ...bountyData,
-        creatorId: user.id,
-        creatorName: user.name,
-        createdAt: serverTimestamp(),
-        status: 'open',
-        };
-        return addDoc(bountiesCollection, newBounty);
-    },
-    acceptBounty: (user: User, bountyId: string) => updateDoc(doc(bountiesCollection, bountyId), {
-        status: 'assigned',
-        assigneeId: user.id,
-        assigneeName: user.name,
-    }),
-
     // Knowledge
     awardKnowledgePoints: async (userId: string): Promise<boolean> => {
         const userRef = doc(usersCollection, userId);

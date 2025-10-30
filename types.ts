@@ -80,21 +80,6 @@ export interface VendorUser extends BaseUser {
 
 export type User = Admin | Agent | MemberUser | VendorUser;
 
-export interface Bounty {
-  id: string;
-  title: string;
-  description: string;
-  reward: number; // in CCAP
-  requiredSkills: string[];
-  status: 'open' | 'assigned' | 'in_review' | 'completed';
-  creatorId: string;
-  creatorName: string;
-  assigneeId?: string;
-  assigneeName?: string;
-  createdAt: Timestamp;
-  completedAt?: Timestamp;
-}
-
 export interface PublicUserProfile {
   id: string;
   name: string;

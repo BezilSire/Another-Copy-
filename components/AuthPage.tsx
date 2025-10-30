@@ -11,7 +11,7 @@ import { MemberActivationForm } from './MemberActivationForm';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
 
-type AuthView = 'login' | 'agentSignup' | 'forgotPassword' | 'lookup' | 'memberSignup' | 'memberActivate';
+type AuthView = 'login' | 'agentSignup' | 'forgotPassword' | 'lookup' | 'memberSignup' | 'memberActivate' | 'passwordResetSent';
 
 export const AuthPage: React.FC = () => {
   const { login, agentSignup, memberSignup, memberActivate, sendPasswordReset } = useAuth();
@@ -21,6 +21,7 @@ export const AuthPage: React.FC = () => {
   const [isPolicyVisible, setIsPolicyVisible] = useState(false);
   const [lookupData, setLookupData] = useState<{ email: string; member: Member | null } | null>(null);
   const [lookupMessage, setLookupMessage] = useState<string | null>(null);
+  const [resetEmail, setResetEmail] = useState('');
 
   // This effect handles invalid states, e.g., on page refresh, preventing render loops.
   useEffect(() => {
@@ -31,7 +32,8 @@ export const AuthPage: React.FC = () => {
 
   const handlePasswordReset = async (email: string) => {
     await sendPasswordReset(email);
-    setView('login');
+    setResetEmail(email);
+    setView('passwordResetSent');
   };
 
   const handleMemberLookup = async (email: string) => {
@@ -68,6 +70,7 @@ export const AuthPage: React.FC = () => {
     setView('login');
     setLookupData(null);
     setLookupMessage(null);
+    setResetEmail('');
   };
   
   const handleBackToLookup = () => {
@@ -90,6 +93,42 @@ export const AuthPage: React.FC = () => {
             return lookupData?.member ? <MemberActivationForm member={lookupData.member} onActivate={memberActivate} onBack={handleBackToLookup} /> : null;
         case 'forgotPassword':
             return <ForgotPasswordForm onReset={handlePasswordReset} onBack={resetFlow} />;
+        case 'passwordResetSent':
+            return (
+                <div className="bg-slate-800 p-8 rounded-lg shadow-lg text-center animate-fade-in">
+                    {/* Embedded MailIcon SVG */}
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="24"
+                        height="24"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        className="h-16 w-16 text-green-500 mx-auto"
+                    >
+                        <rect width="20" height="16" x="2" y="4" rx="2" />
+                        <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
+                    </svg>
+                    <h2 className="text-2xl font-bold text-white mt-4">Check your inbox</h2>
+                    <p className="text-gray-300 mt-2">
+                        We've sent a password reset link to <strong className="text-green-400">{resetEmail}</strong>.
+                    </p>
+                    <p className="text-sm text-gray-400 mt-4">
+                        Didn't receive the email? Check your spam folder, or go back to try again.
+                    </p>
+                    <div className="mt-6">
+                        <button
+                            onClick={resetFlow}
+                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                        >
+                            Back to Login
+                        </button>
+                    </div>
+                </div>
+            );
         default:
             return <LoginPage onLogin={login} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => setView('lookup')} onSwitchToForgotPassword={() => setView('forgotPassword')} />;
     }

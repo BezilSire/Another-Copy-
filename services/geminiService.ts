@@ -1,6 +1,5 @@
 import { GoogleGenAI, Type, Chat } from '@google/genai';
-// FIX: Added Bounty to imports
-import { User, Post, PublicUserProfile, Bounty } from '../types';
+import { User, Post, PublicUserProfile } from '../types';
 
 const GEMINI_API_KEY = process.env.API_KEY;
 
@@ -150,38 +149,5 @@ export const generateWelcomeMessage = async (name: string, circle: string): Prom
       temperature: 0.8,
     },
   });
-  return response.text;
-};
-
-// FIX: Added generatePersonalizedBriefing function
-export const generatePersonalizedBriefing = async (user: User, posts: Post[], bounties: Bounty[]): Promise<string> => {
-  const postSummaries = posts.map(p => `- "${p.content.substring(0, 100)}..." by ${p.authorName} (Type: ${p.types})`).join('\n');
-  const bountySummaries = bounties.map(b => `- "${b.title}" for ${b.reward} CCAP. Skills: ${b.requiredSkills.join(', ')}.`).join('\n');
-
-  const prompt = `
-    You are a helpful assistant for the Ubuntium Global Commons. Your task is to generate a concise, personalized daily briefing for a user.
-    The user's name is ${user.name} and their role is ${user.role}. Their interests include: ${user.interests || 'not specified'}.
-
-    Here is a summary of recent activity in the commons:
-    
-    **Recent Posts:**
-    ${postSummaries.length > 0 ? postSummaries : "No new posts."}
-
-    **Available Bounties:**
-    ${bountySummaries.length > 0 ? bounties : "No open bounties right now."}
-
-    Based on the user's profile and the recent activity, generate a friendly and engaging briefing in Markdown format.
-    - Start with a warm greeting.
-    - Highlight 1-2 posts or bounties that seem most relevant to the user's interests, if any.
-    - Keep it short and scannable. Use bolding for emphasis.
-    - End with an encouraging message.
-    - Do not make up information not present in the summaries.
-  `;
-
-  const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash',
-    contents: prompt,
-  });
-
   return response.text;
 };
