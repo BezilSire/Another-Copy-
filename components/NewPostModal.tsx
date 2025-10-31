@@ -64,7 +64,6 @@ export const NewPostModal: React.FC<NewPostModalProps> = ({ isOpen, onClose, use
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
   const editorRef = useRef<HTMLDivElement>(null);
-  const isAdmin = user.role === 'admin';
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
 
   useEffect(() => {
@@ -249,22 +248,24 @@ export const NewPostModal: React.FC<NewPostModalProps> = ({ isOpen, onClose, use
 
           {/* Footer */}
           <div className="bg-slate-800 px-4 py-3 flex justify-end items-center gap-4 border-t border-slate-700 flex-shrink-0">
-            {isAdmin && (
-              <button
-                onClick={() => handlePost(true)}
-                disabled={isPosting || isEvaluating || textLength === 0}
-                className="text-xs text-slate-400 hover:text-white disabled:opacity-50"
-              >
-                Post without evaluation (Admin)
-              </button>
-            )}
+            {/* Post Directly Button */}
+            <button
+              onClick={() => handlePost(true)}
+              disabled={isPosting || isEvaluating || textLength === 0 || textLength > MAX_POST_LENGTH || (evaluation && evaluation.impactScore >= 7)}
+              className="inline-flex justify-center rounded-md border border-slate-600 shadow-sm px-4 py-2 bg-slate-700 text-base font-medium text-gray-300 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
+              title={evaluation && evaluation.impactScore >= 7 ? "Use the 'Post (+ CCAP)' button instead" : "Post without earning potential CCAP"}
+            >
+              Post Directly
+            </button>
+
+            {/* Evaluate & Post with CCAP Button */}
             {evaluation && evaluation.impactScore >= 7 ? (
               <button
                 onClick={() => handlePost(false)}
                 disabled={isPosting}
-                className="inline-flex justify-center rounded-md border border-transparent shadow-sm px-6 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 disabled:bg-slate-500"
+                className="inline-flex items-center justify-center rounded-md border border-transparent shadow-sm px-6 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 disabled:bg-slate-500"
               >
-                {isPosting ? 'Posting...' : `Post to Feed (+${evaluation.ccapAward} CCAP)`}
+                {isPosting ? <LoaderIcon className="h-5 w-5 animate-spin"/> : `Post (+${evaluation.ccapAward} CCAP)`}
               </button>
             ) : (
               <button
@@ -272,7 +273,7 @@ export const NewPostModal: React.FC<NewPostModalProps> = ({ isOpen, onClose, use
                 disabled={isEvaluating || textLength === 0 || textLength > MAX_POST_LENGTH}
                 className="inline-flex items-center justify-center rounded-md border border-transparent shadow-sm px-6 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 disabled:bg-slate-500"
               >
-                {isEvaluating ? <><LoaderIcon className="h-5 w-5 animate-spin mr-2" />Evaluating...</> : evaluation ? 'Re-evaluate' : <><SparkleIcon className="h-5 w-5 mr-2" />Evaluate Impact</>}
+                {isEvaluating ? <><LoaderIcon className="h-5 w-5 animate-spin mr-2" />Evaluating...</> : evaluation ? 'Re-evaluate for CCAP' : <><SparkleIcon className="h-5 w-5 mr-2" />Evaluate for CCAP</>}
               </button>
             )}
           </div>

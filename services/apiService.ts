@@ -143,7 +143,6 @@ export const api = {
         
         const referralCode = generateReferralCode();
         const userRef = doc(db, 'users', user.uid);
-        // FIX: Corrected property name 'national_id' to 'id_card_number' to match the User/MemberUser type.
         const newUserDoc: Omit<MemberUser, 'id'> = {
             name: memberData.full_name, email: memberData.email, phone: memberData.phone, address: memberData.address,
             id_card_number: memberData.national_id, role: 'member', status: 'pending', circle: memberData.circle,
@@ -269,24 +268,55 @@ export const api = {
     },
     searchUsers: async (searchQuery: string, currentUser: User): Promise<PublicUserProfile[]> => {
         if (!searchQuery.trim()) return [];
-        
-        const lowerCaseQuery = searchQuery.toLowerCase();
-        const q = query(
-            usersCollection,
-            where('name', '>=', lowerCaseQuery),
-            where('name', '<=', lowerCaseQuery + '\uf8ff'),
-            limit(20)
-        );
 
+        const lowerCaseQuery = searchQuery.toLowerCase();
+        const capitalizedQuery = lowerCaseQuery.charAt(0).toUpperCase() + lowerCaseQuery.slice(1);
+    
+        const nameQuery = query(
+            usersCollection,
+            where('name', '>=', capitalizedQuery),
+            where('name', '<=', capitalizedQuery + '\uf8ff'),
+            limit(10)
+        );
+    
+        const skillQueryLower = query(
+            usersCollection,
+            where('skills', 'array-contains', lowerCaseQuery),
+            limit(10)
+        );
+        
+        const skillQueryCapitalized = query(
+            usersCollection,
+            where('skills', 'array-contains', capitalizedQuery),
+            limit(10)
+        );
+    
         try {
-            const snapshot = await getDocs(q);
-            const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile));
-            return users.filter(u => u.id !== currentUser.id);
+            const [nameSnapshot, skillSnapshotLower, skillSnapshotCapitalized] = await Promise.all([
+                getDocs(nameQuery),
+                getDocs(skillQueryLower),
+                getDocs(skillQueryCapitalized)
+            ]);
+    
+            const userMap = new Map<string, PublicUserProfile>();
+    
+            const processSnapshot = (snapshot: DocumentData) => {
+                snapshot.forEach((doc: DocumentData) => {
+                    if (doc.id !== currentUser.id && !userMap.has(doc.id)) {
+                        userMap.set(doc.id, { id: doc.id, ...doc.data() } as PublicUserProfile);
+                    }
+                });
+            }
+    
+            processSnapshot(nameSnapshot);
+            processSnapshot(skillSnapshotLower);
+            processSnapshot(skillSnapshotCapitalized);
+    
+            return Array.from(userMap.values());
         } catch (error) {
             console.error("Error searching users:", error);
-            // This error likely means a composite index is needed.
             if ((error as any).code === 'failed-precondition') {
-                throw new Error("User search is not configured. Please contact an admin to enable it.");
+                throw new Error("User search requires a database index. Please check your Firestore console for a link to create the required index on the 'skills' field.");
             }
             throw new Error("Could not perform search at this time.");
         }
@@ -295,14 +325,72 @@ export const api = {
         const q = query(usersCollection, where('status', '==', 'active'));
         const snapshot = await getDocs(q);
         const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
-        // Filter out the current user from the list of contacts
         return users.filter(u => u.id !== currentUser.id);
     },
     getSearchableUsers: async (currentUser: User): Promise<PublicUserProfile[]> => {
-        const q = query(usersCollection, where('status', '==', 'active'), orderBy('createdAt', 'desc'), limit(100));
+        const q = query(usersCollection, where('status', '==', 'active'), limit(100));
         const snapshot = await getDocs(q);
         const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile));
         return users.filter(u => u.id !== currentUser.id);
+    },
+    findCollaborators: async (currentUser: User): Promise<PublicUserProfile[]> => {
+        let potentialCollaborators: PublicUserProfile[] = [];
+        try {
+            const q = query(
+                usersCollection, 
+                where('isLookingForPartners', '==', true), 
+                where('status', '==', 'active'),
+                limit(50)
+            );
+            const snapshot = await getDocs(q);
+            potentialCollaborators = snapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile))
+                .filter(u => u.id !== currentUser.id);
+        } catch (error) {
+            console.error("Error finding collaborators, falling back to a general user list.", error);
+            if ((error as any).code === 'failed-precondition') {
+                // Don't throw, just use the fallback.
+                console.warn("Firestore index for collaborators missing. Consider creating a composite index on (isLookingForPartners, status).");
+            }
+            const fallbackQ = query(usersCollection, where('status', '==', 'active'), limit(50));
+            const fallbackSnapshot = await getDocs(fallbackQ);
+            potentialCollaborators = fallbackSnapshot.docs
+                .map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile))
+                .filter(u => u.id !== currentUser.id);
+        }
+
+        const currentUserSkills = Array.isArray(currentUser.skills) 
+            ? currentUser.skills.map(s => s.toLowerCase())
+            : typeof currentUser.skills === 'string' 
+                ? currentUser.skills.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) 
+                : [];
+
+        if (currentUserSkills.length === 0) {
+            return potentialCollaborators.sort((a, b) => a.name.localeCompare(b.name));
+        }
+
+        const scoredCollaborators = potentialCollaborators.map(pUser => {
+            let score = 0;
+            const pUserSkills = Array.isArray(pUser.skills) 
+                ? pUser.skills.map(s => s.toLowerCase())
+                : typeof pUser.skills === 'string' 
+                    ? pUser.skills.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) 
+                    : [];
+
+            const complementarySkills = pUserSkills.filter(skill => !currentUserSkills.includes(skill));
+            score += complementarySkills.length;
+            
+            return { user: pUser, score };
+        });
+
+        scoredCollaborators.sort((a, b) => {
+            if (b.score !== a.score) {
+                return b.score - a.score;
+            }
+            return a.user.name.localeCompare(b.user.name);
+        });
+
+        return scoredCollaborators.map(item => item.user);
     },
     getUserByReferralCode: async (referralCode: string): Promise<User | null> => {
         const q = query(usersCollection, where('referralCode', '==', referralCode), limit(1));
@@ -319,7 +407,6 @@ export const api = {
     listenForAllMembers: (adminUser: User, callback: (members: Member[]) => void, onError: (error: Error) => void) => onSnapshot(query(membersCollection, orderBy('date_registered', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), onError),
     listenForAllAgents: (adminUser: User, callback: (agents: Agent[]) => void, onError: (error: Error) => void) => onSnapshot(query(usersCollection, where('role', 'in', ['agent', 'creator'])), s => {
         const agents = s.docs.map(d => ({ id: d.id, ...d.data() } as Agent));
-        // Sort client-side to avoid needing a composite index which can cause permission errors
         agents.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
         callback(agents);
     }, onError),
@@ -331,7 +418,6 @@ export const api = {
         const q = query(membersCollection, where('agent_id', '==', agent.id));
         const snapshot = await getDocs(q);
         const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Member));
-        // Sort client-side to avoid needing a composite index
         members.sort((a, b) => new Date(b.date_registered).getTime() - new Date(a.date_registered).getTime());
         return members;
     },
@@ -529,9 +615,6 @@ export const api = {
     deleteComment: (parentId: string, commentId: string, parentCollection: 'posts' | 'proposals') => {
         const batch = writeBatch(db);
         batch.delete(doc(db, parentCollection, parentId, 'comments', commentId));
-        // The line to update commentCount was removed to prevent permission errors when a user
-        // deletes their comment on another user's post. The count may become out of sync,
-        // but this ensures the delete functionality works.
         return batch.commit();
     },
     upvoteComment: async (parentId: string, commentId: string, userId: string, parentCollection: 'posts' | 'proposals') => {
@@ -576,7 +659,6 @@ export const api = {
             query(conversationsCollection, where('members', 'array-contains', user.id)), 
             (snapshot) => {
                 const conversations = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
-                // Sort client-side to avoid index requirement
                 conversations.sort((a, b) => {
                     const timeA = a.lastMessageTimestamp?.toMillis() || 0;
                     const timeB = b.lastMessageTimestamp?.toMillis() || 0;
@@ -704,7 +786,6 @@ export const api = {
             query(collection(db, 'users', userId, 'notifications'), limit(50)), 
             (s) => {
                 const notifications = s.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
-                // Sort client-side to avoid index requirement which can throw permission errors
                 notifications.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
                 callback(notifications);
             }, 
@@ -765,7 +846,6 @@ export const api = {
         const q = query(payoutsCollection, where('userId', '==', userId));
         return onSnapshot(q, (snapshot) => {
             const payouts = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest));
-            // Sort client-side to avoid needing a composite index
             payouts.sort((a, b) => {
                 const timeA = a.requestedAt?.toMillis() || 0;
                 const timeB = b.requestedAt?.toMillis() || 0;
@@ -799,7 +879,7 @@ export const api = {
         userId: user.id, userName: user.name, type: 'ccap_redemption', amount: usdtValue, ecocashName, ecocashNumber,
         status: 'pending', requestedAt: serverTimestamp(), meta: { ccapToRedeem, ccapUsdValue: usdtValue, ccapRate: ccap_to_usd_rate },
     }),
-    stakeCcapForNextCycle: (user: MemberUser) => { /* Logic to be implemented */ return Promise.resolve() },
+    stakeCcapForNextCycle: (user: MemberUser) => { return Promise.resolve() },
     convertCcapToVeq: async (user: MemberUser, venture: Venture, ccapAmount: number, ccapRate: number) => {
         const usdValue = ccapAmount * ccapRate;
         const shares = Math.floor(usdValue); // Simplified 1 USD = 1 share
@@ -836,14 +916,13 @@ export const api = {
     initializeSustenanceFund: (admin: User, balance: number, cost: number) => setDoc(doc(sustenanceCollection, 'current'), {
         slf_balance: balance, hamper_cost: cost, last_run: serverTimestamp(), next_run: serverTimestamp(),
     }),
-    runSustenanceLottery: (admin: User): Promise<{ winners_count: number }> => { return Promise.resolve({ winners_count: 0 }); /* Complex logic here */ },
+    runSustenanceLottery: (admin: User): Promise<{ winners_count: number }> => { return Promise.resolve({ winners_count: 0 }); },
     performDailyCheckin: (userId: string): Promise<Partial<User>> => {
-      // Return the fields that will be updated for optimistic UI
       return updateDoc(doc(usersCollection, userId), { 
         scap: increment(10), 
         lastDailyCheckin: serverTimestamp() 
       }).then(() => ({
-        scap: increment(10), // This is not the real value, but tells the client what to expect
+        scap: increment(10),
         lastDailyCheckin: Timestamp.now()
       }));
     },

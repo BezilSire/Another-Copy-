@@ -14,6 +14,8 @@ import { DollarSignIcon } from './icons/DollarSignIcon';
 import { ClipboardIcon } from './icons/ClipboardIcon';
 import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
 import { TrendingUpIcon } from './icons/TrendingUpIcon';
+import { formatTimeAgo } from '../utils';
+import { UserCircleIcon } from './icons/UserCircleIcon';
 
 const LOOKING_FOR_LIST = ['Co-founder', 'Business Partner', 'Investor', 'Mentor', 'Advisor', 'Employee', 'Freelancer'];
 
@@ -215,48 +217,57 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
             
             <div><h3 className="text-md font-semibold text-gray-300 border-b border-slate-700 pb-2 mb-4">Referral Program</h3>
                 <div className="bg-slate-900/50 p-4 rounded-lg space-y-4">
-                    <div><label className="text-sm font-medium text-gray-400">Your Referral Link</label><div className="flex items-center gap-2 mt-1"><input type="text" readOnly value={referralLink} className="w-full bg-slate-700 p-2 rounded-md text-gray-300 font-mono text-sm" /><button onClick={handleCopy} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-md">{isCopied ? <ClipboardCheckIcon className="h-5 w-5 text-green-400"/> : <ClipboardIcon className="h-5 w-5"/>}</button></div></div>
-                    <div><h4 className="text-sm font-medium text-gray-400">Members You've Referred ({referredUsers.length})</h4>
-                        {referredUsers.length > 0 ? <div className="mt-2 text-sm text-gray-300 space-y-1">{referredUsers.map(u => <p key={u.id} className="p-2 bg-slate-700/50 rounded-md">{u.name}</p>)}</div> : <p className="text-xs text-gray-500 mt-1">No members have joined with your code yet.</p>}
-                    </div>
-                </div>
-            </div>
-             <div className="mt-8 pt-6 border-t border-slate-700">
-                <h3 className="text-lg font-medium text-gray-200 flex items-center">
-                    <HelpCircleIcon className="h-5 w-5 mr-2" />
-                    Help & Support
-                </h3>
-                <div className="mt-4 flex flex-col sm:flex-row justify-between items-center bg-slate-900/50 p-4 rounded-lg">
-                    <p className="text-sm text-gray-300">Have questions or need assistance? Contact our support team.</p>
-                    <a href="mailto:support@globalcommons.app" className="mt-3 sm:mt-0 w-full sm:w-auto inline-flex justify-center py-2 px-4 rounded-md text-white bg-slate-600 hover:bg-slate-500">
-                        Contact Support
-                    </a>
-                </div>
-            </div>
-        </div>
-    );
-
-    return (
-        <div className="animate-fade-in">
-            <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                <div className="flex justify-between items-start">
-                    <div>
-                        <h2 className="text-3xl font-bold text-white">{isEditing ? editData.name : currentUser.name}</h2>
-                        <div className="flex items-center gap-4 mt-2">
-                             <p className="text-lg text-green-400">{isEditing ? editData.profession : currentUser.profession || 'Community Member'}</p>
-                             <div className="relative group flex items-center gap-1" title="Knowledge Points"><BookOpenIcon className="h-4 w-4 text-blue-400" /><span className="font-mono text-sm py-0.5 px-2 rounded-full bg-slate-700 text-blue-400">{currentUser.knowledgePoints ?? 0}</span></div>
+                    <div><label className="text-sm font-medium text-gray-400">Your Referral Link</label><div className="flex items-center gap-2 mt-1"><input type="text" readOnly value={referralLink} className="w-full bg-slate-700 p-2 rounded-md text-gray-300 font-mono text-sm" /><button onClick={handleCopy} className="p-2 bg-slate-700 hover:bg-slate-600 rounded-md">{isCopied ? <ClipboardCheckIcon className="h-5 w-5 text-green-400"/> : <ClipboardIcon className="h-5 w-5 text-gray-400"/>}</button></div></div>
+                    <div><h4 className="text-sm font-medium text-gray-400">Your Referrals ({referredUsers.length})</h4>
+                        <div className="mt-2 max-h-48 overflow-y-auto space-y-2">
+                            {referredUsers.length > 0 ? referredUsers.map(u => (
+                                <button key={u.id} onClick={() => onViewProfile(u.id)} className="w-full text-left flex items-center space-x-3 p-2 bg-slate-700/50 rounded-md hover:bg-slate-700">
+                                    <UserCircleIcon className="h-8 w-8 text-gray-400 flex-shrink-0" />
+                                    <div>
+                                        <p className="font-medium text-white">{u.name}</p>
+                                        <p className="text-xs text-gray-400">Joined {u.createdAt ? formatTimeAgo(u.createdAt.toDate().toISOString()) : 'N/A'}</p>
+                                    </div>
+                                </button>
+                            )) : <p className="text-sm text-gray-500 text-center py-4">No one has joined with your code yet.</p>}
                         </div>
-                        <p className="text-sm text-gray-400">{currentUser.circle} • Joined {currentUser.createdAt ? new Date(currentUser.createdAt.toDate()).toLocaleDateString() : 'N/A'}</p>
                     </div>
-                    {!isEditing && (<button onClick={() => { setIsEditing(true); setActiveTab('profile'); }} className="flex items-center space-x-2 px-3 py-2 bg-slate-700 text-white text-sm rounded-md hover:bg-slate-600"><PencilIcon className="h-4 w-4" /><span>Edit Profile</span></button>)}
                 </div>
-                <ProfileCompletionMeter profileData={profileDataForMeter} role="member" />
-            </div>
-
-            <div className="mt-4">
-                <div className="border-b border-slate-700"><nav className="-mb-px flex justify-around" aria-label="Tabs"><button onClick={() => setActiveTab('profile')} className={`${activeTab === 'profile' ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-gray-200'} w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm`}>Profile</button><button onClick={() => setActiveTab('activity')} className={`${activeTab === 'activity' ? 'border-white text-white' : 'border-transparent text-gray-400 hover:text-gray-200'} w-1/2 py-4 px-1 text-center border-b-2 font-medium text-sm`}>Activity</button></nav></div>
-                <div className="mt-6">{activeTab === 'profile' && (isEditing ? renderProfileEdit() : renderProfileView())}{activeTab === 'activity' && (<><PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} /><PostsFeed user={currentUser} authorId={currentUser.id} onViewProfile={onViewProfile} typeFilter={typeFilter} /></>)}</div>
             </div>
         </div>
     );
+
+  return (
+    <div className="bg-slate-800 p-4 sm:p-6 rounded-lg shadow-lg">
+      <div className="flex justify-between items-start">
+        <div>
+          <h2 className="text-3xl font-bold text-white">{isEditing ? editData.name : currentUser.name}</h2>
+          <p className="text-lg text-green-400">{isEditing ? editData.profession : currentUser.profession || <span className="capitalize">{currentUser.role}</span>}</p>
+          <p className="text-sm text-gray-400">{currentUser.circle}</p>
+        </div>
+         {!isEditing && (
+            <button onClick={() => setIsEditing(true)} className="flex items-center space-x-2 px-4 py-2 bg-slate-700 text-white text-sm font-semibold rounded-md hover:bg-slate-600">
+                <PencilIcon className="h-4 w-4" />
+                <span>Edit Profile</span>
+            </button>
+         )}
+      </div>
+      
+      <div className="mt-4 border-b border-slate-700">
+          <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+              <button onClick={() => setActiveTab('profile')} className={`${activeTab === 'profile' ? 'border-green-500 text-green-400' : 'border-transparent text-gray-400 hover:text-gray-200'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Profile</button>
+              <button onClick={() => setActiveTab('activity')} className={`${activeTab === 'activity' ? 'border-green-500 text-green-400' : 'border-transparent text-gray-400 hover:text-gray-200'} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}>Activity</button>
+          </nav>
+      </div>
+
+       <div className="mt-6">
+            <ProfileCompletionMeter profileData={profileDataForMeter} role="member" />
+            {activeTab === 'profile' ? (isEditing ? renderProfileEdit() : renderProfileView()) : (
+                <div className="animate-fade-in">
+                    <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} />
+                    <PostsFeed user={currentUser} authorId={currentUser.id} onViewProfile={onViewProfile} typeFilter={typeFilter} />
+                </div>
+            )}
+        </div>
+    </div>
+  );
 };

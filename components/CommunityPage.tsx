@@ -26,15 +26,16 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ currentUser, onVie
 
     const fetchUsers = async () => {
       try {
-        const results = await (debouncedSearch.length > 1 
-          ? api.searchUsers(debouncedSearch, currentUser) 
-          : api.getSearchableUsers(currentUser));
+        const results = await (debouncedSearch.length > 1
+          ? api.searchUsers(debouncedSearch, currentUser)
+          : api.findCollaborators(currentUser));
         
         if (isMounted) {
           setUsers(results);
         }
       } catch (error) {
-        addToast("Could not load community members.", "error");
+        const errorMessage = error instanceof Error ? error.message : "Could not load community members.";
+        addToast(errorMessage, "error");
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -57,7 +58,7 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ currentUser, onVie
           </div>
           <input
               type="text"
-              placeholder="Search for members by name..."
+              placeholder="Search for members by name or skill..."
               value={searchQuery}
               onChange={e => setSearchQuery(e.target.value)}
               className="block w-full bg-slate-800 border border-slate-700 rounded-md py-2 pl-10 pr-4 text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-green-500"
@@ -80,7 +81,11 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ currentUser, onVie
       ) : (
         <div className="text-center text-gray-500 py-16 bg-slate-800 rounded-lg">
           <p className="font-semibold text-lg text-white">No members found</p>
-          <p>Try refining your search.</p>
+          <p>
+            {debouncedSearch.length > 1
+                ? "Try refining your search."
+                : "No potential collaborators found at this time. Complete your profile to get better recommendations!"}
+            </p>
         </div>
       )}
     </div>
