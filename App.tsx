@@ -2,9 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MemberDashboard } from './components/MemberDashboard';
+import { CreatorDashboard } from './components/CreatorDashboard';
 import { AuthPage } from './components/AuthPage';
 import { Header } from './components/Header';
-import { User, Agent, Broadcast, MemberUser, Admin, Conversation } from './types';
+import { User, Agent, Broadcast, MemberUser, Admin, Conversation, Creator } from './types';
 import { useToast } from './contexts/ToastContext';
 import { ToastContainer } from './components/Toast';
 import { api } from './services/apiService';
@@ -189,6 +190,14 @@ const App: React.FC = () => {
             />
         </div>
       );
+    }
+
+    if (currentUser.role === 'creator') {
+        return (
+            <div className="p-4 sm:p-6 lg:p-8">
+                <CreatorDashboard user={currentUser as Creator} onUpdateUser={updateUser} />
+            </div>
+        );
     }
 
     if (currentUser.role === 'agent') {

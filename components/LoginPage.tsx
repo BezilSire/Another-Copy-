@@ -11,27 +11,22 @@ type LoginCredentials = {
 
 interface LoginPageProps {
   onLogin: (credentials: LoginCredentials) => Promise<void>;
+  isProcessing: boolean;
   onSwitchToSignup: () => void;
   onSwitchToPublicSignup: () => void;
   onSwitchToForgotPassword: () => void;
 }
 
-export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToSignup, onSwitchToPublicSignup, onSwitchToForgotPassword }) => {
+export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isProcessing, onSwitchToSignup, onSwitchToPublicSignup, onSwitchToForgotPassword }) => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    try {
-      await onLogin({ email, password });
-      // On success, the component will unmount, so no need to setLoading(false)
-    } catch (error) {
-      console.error("Login failed:", error);
-      setIsLoading(false); // On failure, re-enable the form
-    }
+    await onLogin({ email, password }).catch(() => {
+        // Errors are handled by the context, but this catch prevents unhandled promise rejection warnings.
+    });
   };
 
   return (
@@ -54,7 +49,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToSignup,
             className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
             placeholder="your-email@example.com"
             required
-            disabled={isLoading}
+            disabled={isProcessing}
           />
         </div>
         <div className="mb-2">
@@ -70,7 +65,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToSignup,
               className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white pr-10 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
               placeholder="******************"
               required
-              disabled={isLoading}
+              disabled={isProcessing}
             />
             <button
               type="button"
@@ -86,7 +81,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToSignup,
             <button
                 type="button"
                 onClick={onSwitchToForgotPassword}
-                disabled={isLoading}
+                disabled={isProcessing}
                 className="inline-block align-baseline font-bold text-xs text-green-500 hover:text-green-400 disabled:opacity-50"
             >
                 Forgot Password?
@@ -96,14 +91,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToSignup,
           <button
             type="submit"
             className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-slate-500"
-            disabled={isLoading}
+            disabled={isProcessing}
           >
-            {isLoading ? 'Signing In...' : 'Sign In'}
+            {isProcessing ? 'Signing In...' : 'Sign In'}
           </button>
           <button
             type="button"
             onClick={onSwitchToSignup}
-            disabled={isLoading}
+            disabled={isProcessing}
             className="inline-block align-baseline font-bold text-sm text-green-500 hover:text-green-400 disabled:opacity-50"
           >
             Agent Signup
@@ -115,7 +110,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, onSwitchToSignup,
             <button
                 type="button"
                 onClick={onSwitchToPublicSignup}
-                disabled={isLoading}
+                disabled={isProcessing}
                 className="inline-block align-baseline font-bold text-sm text-green-500 hover:text-green-400 disabled:opacity-50 mt-1"
             >
                 Start Here to Become a Member

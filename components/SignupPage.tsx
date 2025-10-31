@@ -11,25 +11,22 @@ type SignupCredentials = Pick<Agent, 'name' | 'email' | 'circle'> & {
 
 interface SignupPageProps {
   onSignup: (credentials: SignupCredentials) => Promise<void>;
+  isProcessing: boolean;
   onSwitchToLogin: () => void;
 }
 
-export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, onSwitchToLogin }) => {
+export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, isProcessing, onSwitchToLogin }) => {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [circle, setCircle] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
-    try {
-        await onSignup({ name, email, password, circle });
-    } catch (error) {
-        setIsLoading(false);
-    }
+    await onSignup({ name, email, password, circle }).catch(() => {
+        // Errors are handled by the context
+    });
   };
 
   return (
@@ -50,7 +47,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, onSwitchToLogi
             onChange={(e) => setName(e.target.value)}
             className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
             required
-            disabled={isLoading}
+            disabled={isProcessing}
           />
         </div>
         <div className="mb-4">
@@ -64,7 +61,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, onSwitchToLogi
             onChange={(e) => setEmail(e.target.value)}
             className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
             required
-            disabled={isLoading}
+            disabled={isProcessing}
           />
         </div>
         <div className="mb-4">
@@ -79,7 +76,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, onSwitchToLogi
             className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
             placeholder="e.g., Kampala"
             required
-            disabled={isLoading}
+            disabled={isProcessing}
           />
         </div>
         <div className="mb-6">
@@ -95,7 +92,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, onSwitchToLogi
               className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white pr-10 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
               required
               minLength={6}
-              disabled={isLoading}
+              disabled={isProcessing}
             />
             <button
               type="button"
@@ -111,14 +108,14 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, onSwitchToLogi
           <button
             type="submit"
             className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-slate-500"
-            disabled={isLoading}
+            disabled={isProcessing}
           >
-            {isLoading ? 'Creating Account...' : 'Sign Up'}
+            {isProcessing ? 'Creating Account...' : 'Sign Up'}
           </button>
           <button
             type="button"
             onClick={onSwitchToLogin}
-            disabled={isLoading}
+            disabled={isProcessing}
             className="inline-block align-baseline font-bold text-sm text-green-500 hover:text-green-400 disabled:opacity-50"
           >
             Already have an account? Login

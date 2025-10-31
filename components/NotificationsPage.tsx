@@ -98,7 +98,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ user, onNa
   }, [notifications, activities]);
 
   const handleItemClick = (item: NotificationItem) => {
-    if (item.itemType === 'notification' && !item.read) {
+    if (item.itemType === 'notification' && !(item as Notification).read) {
       api.markNotificationAsRead(item.id).catch(err => console.error("Failed to mark as read:", err));
     }
     // If onViewProfile is provided and it's a profile link, use it. Otherwise, use onNavigate.
@@ -137,7 +137,9 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ user, onNa
       ) : mergedItems.length > 0 ? (
         <ul className="space-y-2">
           {mergedItems.map((item) => {
-              const isUnread = item.itemType === 'notification' && !item.read;
+              // FIX: Explicitly cast `item` to `Notification` to access the 'read' property,
+              // resolving ambiguity in the `NotificationItem` union type.
+              const isUnread = item.itemType === 'notification' && !(item as Notification).read;
               const isRecentActivity = item.itemType === 'activity' && (Date.now() - item.timestamp.toMillis()) < 24 * 60 * 60 * 1000;
 
               return (

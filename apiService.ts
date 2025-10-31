@@ -136,9 +136,10 @@ export const api = {
         
         const referralCode = generateReferralCode();
         const userRef = doc(db, 'users', user.uid);
+        // FIX: Corrected property name 'national_id' to 'id_card_number' to match the User/MemberUser type.
         const newUserDoc: Omit<MemberUser, 'id'> = {
             name: memberData.full_name, email: memberData.email, phone: memberData.phone, address: memberData.address,
-            national_id: memberData.national_id, role: 'member', status: 'pending', circle: memberData.circle,
+            id_card_number: memberData.national_id, role: 'member', status: 'pending', circle: memberData.circle,
             createdAt: Timestamp.now(), lastSeen: Timestamp.now(), isProfileComplete: false, member_id: memberRef.id,
             credibility_score: 100, distress_calls_available: 1, referralCode, referredBy: memberData.referralCode || '',
             hasCompletedInduction: referredByAdmin,
@@ -216,8 +217,9 @@ export const api = {
         const userDoc = await getDoc(doc(usersCollection, uid));
         if (!userDoc.exists()) return null;
         const d = userDoc.data();
+        // FIX: Added missing 'email' property to conform to the PublicUserProfile type.
         return {
-            id: userDoc.id, name: d.name, role: d.role, circle: d.circle, status: d.status, bio: d.bio, profession: d.profession,
+            id: userDoc.id, name: d.name, email: d.email, role: d.role, circle: d.circle, status: d.status, bio: d.bio, profession: d.profession,
             skills: d.skills, interests: d.interests, businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
             lookingFor: d.lookingFor, credibility_score: d.credibility_score, scap: d.scap, ccap: d.ccap, createdAt: d.createdAt,
             pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides,

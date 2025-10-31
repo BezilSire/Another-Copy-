@@ -298,7 +298,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{u.email}</td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400 capitalize">{u.role}</td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{u.lastSeen ? formatTimeAgo(u.lastSeen.toDate().toISOString()) : 'N/A'}</td>
-                                        <td className="whitespace-nowrap px-3 py-4 text-sm"><select value={u.role} onChange={(e) => handleRoleChangeRequest(u, e.target.value as User['role'])} className="bg-slate-700 text-white rounded-md p-1 border border-slate-600 focus:ring-green-500 focus:border-green-500"><option value="member">Member</option><option value="agent">Agent</option><option value="vendor">Vendor</option><option value="admin">Admin</option></select></td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm"><select value={u.role} onChange={(e) => handleRoleChangeRequest(u, e.target.value as User['role'])} className="bg-slate-700 text-white rounded-md p-1 border border-slate-600 focus:ring-green-500 focus:border-green-500"><option value="member">Member</option><option value="agent">Agent</option><option value="creator">Creator</option><option value="vendor">Vendor</option><option value="admin">Admin</option></select></td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -314,7 +314,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
         switch (view) {
             case 'dashboard': return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={handleSendBroadcast} />;
             case 'users': return renderUsersView();
-            case 'feed': return ( <><PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView /><PostsFeed user={user} feedType="all" isAdminView onViewProfile={onViewProfile} typeFilter={typeFilter} /></> );
+            case 'feed': return ( <> <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView /><PostsFeed user={user} feedType="all" isAdminView onViewProfile={onViewProfile} typeFilter={typeFilter} /></> );
             case 'reports': return <div className="bg-slate-800 p-6 rounded-lg shadow-lg"><ReportsView reports={reports} onViewProfile={onViewProfile} onResolve={(reportId, postId, authorId) => api.resolvePostReport(user, reportId, postId, authorId)} onDismiss={(reportId) => api.dismissReport(user, reportId)}/></div>;
             case 'proposals': return <ProposalsAdminPage user={user} />;
             case 'payouts': return <PayoutsAdminPage payouts={payouts} />;

@@ -2,23 +2,19 @@ import React, { useState } from 'react';
 
 interface ForgotPasswordFormProps {
   onReset: (email: string) => Promise<void>;
+  isProcessing: boolean;
   onBack: () => void;
 }
 
-export const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onReset, onBack }) => {
+export const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onReset, isProcessing, onBack }) => {
   const [email, setEmail] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email) return;
-    setIsLoading(true);
-    try {
-        await onReset(email);
-        // On success, the parent component shows a toast and switches view.
-    } catch (error) {
-        setIsLoading(false); // Only reset loading on error
-    }
+    await onReset(email).catch(() => {
+      // Errors handled by context
+    });
   };
 
   return (
@@ -39,16 +35,16 @@ export const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onReset,
             className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
             placeholder="your-email@example.com"
             required
-            disabled={isLoading}
+            disabled={isProcessing}
           />
         </div>
         <div className="flex items-center justify-end">
           <button
             type="submit"
             className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-slate-500"
-            disabled={isLoading}
+            disabled={isProcessing}
           >
-            {isLoading ? 'Sending...' : 'Send Reset Link'}
+            {isProcessing ? 'Sending...' : 'Send Reset Link'}
           </button>
         </div>
       </form>
@@ -57,7 +53,7 @@ export const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onReset,
         <button
           type="button"
           onClick={onBack}
-          disabled={isLoading}
+          disabled={isProcessing}
           className="inline-block align-baseline font-bold text-sm text-green-500 hover:text-green-400 disabled:opacity-50"
         >
           Back to Login

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
 import { ForgotPasswordForm } from './ForgotPasswordForm';
-import { Member } from '../types';
+import { Member, User } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { MemberLookup } from './MemberLookup';
@@ -10,11 +10,12 @@ import { MemberSignupForm } from './MemberSignupForm';
 import { MemberActivationForm } from './MemberActivationForm';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
+import { CreatorSignupPage } from './CreatorSignupPage';
 
-type AuthView = 'login' | 'agentSignup' | 'forgotPassword' | 'lookup' | 'memberSignup' | 'memberActivate' | 'passwordResetSent';
+type AuthView = 'login' | 'agentSignup' | 'forgotPassword' | 'lookup' | 'memberSignup' | 'memberActivate' | 'passwordResetSent' | 'creatorSignup';
 
 export const AuthPage: React.FC = () => {
-  const { login, agentSignup, memberSignup, memberActivate, sendPasswordReset } = useAuth();
+  const { login, agentSignup, memberSignup, memberActivate, sendPasswordReset, isProcessingAuth } = useAuth();
   const { addToast } = useToast();
   
   const [view, setView] = useState<AuthView>('login');
@@ -22,8 +23,29 @@ export const AuthPage: React.FC = () => {
   const [lookupData, setLookupData] = useState<{ email: string; member: Member | null } | null>(null);
   const [lookupMessage, setLookupMessage] = useState<string | null>(null);
   const [resetEmail, setResetEmail] = useState('');
+  const [creatorReferrer, setCreatorReferrer] = useState<User | null>(null);
+  const [isCheckingRef, setIsCheckingRef] = useState(true);
 
-  // This effect handles invalid states, e.g., on page refresh, preventing render loops.
+  useEffect(() => {
+    const checkReferral = async () => {
+        const params = new URLSearchParams(window.location.search);
+        const refCode = params.get('ref');
+        if (refCode) {
+            try {
+                const user = await api.getUserByReferralCode(refCode);
+                if (user && user.role === 'creator') {
+                    setCreatorReferrer(user);
+                    setView('creatorSignup');
+                }
+            } catch (error) {
+                console.error("Failed to fetch creator by referral", error);
+            }
+        }
+        setIsCheckingRef(false);
+    };
+    checkReferral();
+  }, []);
+
   useEffect(() => {
     if ((view === 'memberSignup' || view === 'memberActivate') && !lookupData) {
       setView('lookup');
@@ -44,7 +66,7 @@ export const AuthPage: React.FC = () => {
         if (member) {
             if (member.uid) {
                 setLookupMessage(`An account for ${email} already exists. Please log in.`);
-                setView('lookup'); // Stay on lookup but show message
+                setView('lookup');
             } else {
                 setView('memberActivate');
             }
@@ -67,36 +89,43 @@ export const AuthPage: React.FC = () => {
   };
 
   const resetFlow = () => {
+    // Also clear referral from URL to go back to standard login
+    window.history.pushState({}, document.title, window.location.pathname);
     setView('login');
+    setCreatorReferrer(null);
     setLookupData(null);
     setLookupMessage(null);
     setResetEmail('');
   };
   
   const handleBackToLookup = () => {
-      // Keep the email but clear the member data to allow re-lookup if needed.
       setLookupData(prev => prev ? { email: prev.email, member: null } : null);
       setView('lookup');
+  }
+  
+  if (isCheckingRef) {
+      return <div className="text-center p-10 text-gray-400">Loading...</div>;
   }
 
   const renderContent = () => {
     switch(view) {
+        case 'creatorSignup':
+            return creatorReferrer ? <CreatorSignupPage creator={creatorReferrer} onRegister={memberSignup} onBackToLogin={resetFlow} /> : null;
         case 'login':
-            return <LoginPage onLogin={login} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => { setLookupMessage(null); setView('lookup'); }} onSwitchToForgotPassword={() => setView('forgotPassword')} />;
+            return <LoginPage onLogin={login} isProcessing={isProcessingAuth} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => { setLookupMessage(null); setView('lookup'); }} onSwitchToForgotPassword={() => setView('forgotPassword')} />;
         case 'agentSignup':
-            return <SignupPage onSignup={agentSignup} onSwitchToLogin={resetFlow} />;
+            return <SignupPage onSignup={agentSignup} isProcessing={isProcessingAuth} onSwitchToLogin={resetFlow} />;
         case 'lookup':
             return <MemberLookup onLookup={handleMemberLookup} onBack={resetFlow} message={lookupMessage} />;
         case 'memberSignup':
-            return lookupData ? <MemberSignupForm email={lookupData.email} onRegister={memberSignup} onBack={handleBackToLookup} /> : null;
+            return lookupData ? <MemberSignupForm email={lookupData.email} onRegister={memberSignup} isProcessing={isProcessingAuth} onBack={handleBackToLookup} /> : null;
         case 'memberActivate':
-            return lookupData?.member ? <MemberActivationForm member={lookupData.member} onActivate={memberActivate} onBack={handleBackToLookup} /> : null;
+            return lookupData?.member ? <MemberActivationForm member={lookupData.member} onActivate={memberActivate} isProcessing={isProcessingAuth} onBack={handleBackToLookup} /> : null;
         case 'forgotPassword':
-            return <ForgotPasswordForm onReset={handlePasswordReset} onBack={resetFlow} />;
+            return <ForgotPasswordForm onReset={handlePasswordReset} isProcessing={isProcessingAuth} onBack={resetFlow} />;
         case 'passwordResetSent':
             return (
                 <div className="bg-slate-800 p-8 rounded-lg shadow-lg text-center animate-fade-in">
-                    {/* Embedded MailIcon SVG */}
                     <svg
                         xmlns="http://www.w3.org/2000/svg"
                         width="24"
@@ -130,7 +159,7 @@ export const AuthPage: React.FC = () => {
                 </div>
             );
         default:
-            return <LoginPage onLogin={login} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => setView('lookup')} onSwitchToForgotPassword={() => setView('forgotPassword')} />;
+            return <LoginPage onLogin={login} isProcessing={isProcessingAuth} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => { setLookupMessage(null); setView('lookup'); }} onSwitchToForgotPassword={() => setView('forgotPassword')} />;
     }
   }
 

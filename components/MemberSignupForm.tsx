@@ -6,10 +6,11 @@ import { EyeOffIcon } from './icons/EyeOffIcon';
 interface MemberSignupFormProps {
   email: string;
   onRegister: (data: NewPublicMemberData, password: string) => Promise<void>;
+  isProcessing: boolean;
   onBack: () => void;
 }
 
-export const MemberSignupForm: React.FC<MemberSignupFormProps> = ({ email, onRegister, onBack }) => {
+export const MemberSignupForm: React.FC<MemberSignupFormProps> = ({ email, onRegister, isProcessing, onBack }) => {
   const [formData, setFormData] = useState<NewPublicMemberData>({
     full_name: '',
     phone: '',
@@ -20,7 +21,6 @@ export const MemberSignupForm: React.FC<MemberSignupFormProps> = ({ email, onReg
   });
   const [password, setPassword] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -33,14 +33,10 @@ export const MemberSignupForm: React.FC<MemberSignupFormProps> = ({ email, onReg
         alert("Password must be at least 6 characters long.");
         return;
     }
-    setIsLoading(true);
-    try {
-      await onRegister(formData, password);
-      // On success, App component will switch the view.
-    } catch (err) {
-      // Error toast is handled by the parent component.
-      setIsLoading(false);
-    }
+    
+    await onRegister(formData, password).catch(() => {
+        // Errors handled by context
+    });
   };
   
   return (
@@ -96,7 +92,7 @@ export const MemberSignupForm: React.FC<MemberSignupFormProps> = ({ email, onReg
                     placeholder="At least 6 characters"
                     required
                     minLength={6}
-                    disabled={isLoading}
+                    disabled={isProcessing}
                     />
                     <button
                     type="button"
@@ -113,13 +109,13 @@ export const MemberSignupForm: React.FC<MemberSignupFormProps> = ({ email, onReg
                  <button
                     type="button"
                     onClick={onBack}
-                    disabled={isLoading}
+                    disabled={isProcessing}
                     className="inline-block align-baseline font-bold text-sm text-green-500 hover:text-green-400 disabled:opacity-50"
                 >
                     Back
                 </button>
-                <button type="submit" disabled={isLoading} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-700 focus:ring-green-500 disabled:bg-gray-500">
-                    {isLoading ? 'Creating Account...' : 'Complete Registration'}
+                <button type="submit" disabled={isProcessing} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-700 focus:ring-green-500 disabled:bg-gray-500">
+                    {isProcessing ? 'Creating Account...' : 'Complete Registration'}
                 </button>
             </div>
         </form>
