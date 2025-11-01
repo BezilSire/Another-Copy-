@@ -70,7 +70,7 @@ export const MemberSearchModal: React.FC<MemberSearchModalProps> = ({ isOpen, on
                 </div>
                 <input
                     type="text"
-                    placeholder="Search for a member or agent..."
+                    placeholder="Search by name or skill..."
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                     className="w-full bg-slate-700 border border-slate-600 rounded-md py-2 pl-10 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-green-500"

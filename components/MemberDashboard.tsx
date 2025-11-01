@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MemberUser, Conversation, User, NotificationItem, CreatorContent } from '../types';
+import { MemberUser, Conversation, User, NotificationItem, CreatorContent, FilterType } from '../types';
 import { MemberBottomNav } from './MemberBottomNav';
 import { PostsFeed } from './PostsFeed';
 import { NewPostModal } from './NewPostModal';
@@ -21,6 +21,7 @@ import { EarnPage } from './EarnPage';
 import { ProjectLaunchpad } from './ProjectLaunchpad';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { formatTimeAgo } from '../utils';
+import { PostTypeFilter } from './PostTypeFilter';
 
 type MemberView = 'home' | 'ventures' | 'community' | 'more' | 'profile' | 'knowledge' | 'pitch' | 'myinvestments' | 'sustenance' | 'earn' | 'redemption' | 'notifications' | 'launchpad';
 
@@ -29,16 +30,16 @@ interface MemberDashboardProps {
   onUpdateUser: (updatedData: Partial<User>) => Promise<void>;
   unreadCount: number;
   onLogout: () => void;
-  onOpenChat: (target?: Conversation) => void;
   onViewProfile: (userId: string | null) => void;
 }
 
-export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdateUser, unreadCount, onLogout, onOpenChat, onViewProfile }) => {
+export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdateUser, unreadCount, onLogout, onViewProfile }) => {
   const [view, setView] = useState<MemberView>('home');
   const [isNewPostModalOpen, setIsNewPostModalOpen] = useState(false);
   const [isDistressModalOpen, setIsDistressModalOpen] = useState(false);
   const [isDistressLoading, setIsDistressLoading] = useState(false);
   const { addToast } = useToast();
+  const [typeFilter, setTypeFilter] = useState<FilterType>('all');
 
   const [creatorContent, setCreatorContent] = useState<CreatorContent[]>([]);
   const [isLoadingCreatorContent, setIsLoadingCreatorContent] = useState(true);
@@ -112,7 +113,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
 
   const handleNotificationNavigate = (item: NotificationItem) => {
     if (item.type === 'NEW_CHAT' || item.type === 'NEW_MESSAGE') {
-      onOpenChat();
+      // Chat functionality is handled in App.tsx
+      console.log('Navigate to chat not implemented here.');
     } else if (item.link) {
       onViewProfile(item.link);
     }
@@ -124,11 +126,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
         return (
             <>
               <CreatorContentFeed />
-              <PostsFeed user={user} onViewProfile={onViewProfile} />
+              <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} />
+              <PostsFeed user={user} onViewProfile={onViewProfile as (userId: string) => void} typeFilter={typeFilter} />
             </>
           );
       case 'ventures':
-        return <VenturesPage currentUser={user} onViewProfile={onViewProfile} onNavigateToPitchAssistant={() => setView('pitch')} />;
+        return <VenturesPage currentUser={user} onViewProfile={onViewProfile as (userId: string) => void} onNavigateToPitchAssistant={() => setView('pitch')} />;
       case 'pitch':
         return <AIVenturePitchAssistant user={user} onUpdateUser={onUpdateUser} onBack={() => setView('ventures')} />;
       case 'community':
@@ -152,7 +155,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       case 'launchpad':
         return <ProjectLaunchpad />;
       default:
-        return <PostsFeed user={user} onViewProfile={onViewProfile} />;
+        return (
+            <>
+              <CreatorContentFeed />
+              <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} />
+              <PostsFeed user={user} onViewProfile={onViewProfile as (userId: string) => void} typeFilter={typeFilter} />
+            </>
+        );
     }
   };
 

@@ -8,6 +8,7 @@ import { api } from '../services/apiService';
 import { DollarSignIcon } from './icons/DollarSignIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { formatTimeAgo } from '../utils';
+import { UserCircleIcon } from './icons/UserCircleIcon';
 
 interface AgentProfileProps {
   agent: Agent;
@@ -122,9 +123,12 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
 
   return (
     <div className="bg-slate-800 p-6 rounded-lg shadow-lg animate-fade-in max-w-2xl mx-auto">
-       <div className="flex justify-between items-center mb-2 border-b border-slate-700 pb-4">
-            <div>
-                <h2 className="text-2xl font-semibold text-white">Your Profile</h2>
+       <div className="flex flex-col sm:flex-row justify-between items-start mb-2 border-b border-slate-700 pb-4 gap-4">
+            <div className="flex items-center gap-4">
+                <UserCircleIcon className="h-24 w-24 text-slate-600" />
+                <div>
+                    <h2 className="text-2xl font-semibold text-white">Your Profile</h2>
+                </div>
             </div>
             <div className="relative group flex items-center gap-1" title="Knowledge Points">
                 <BookOpenIcon className="h-4 w-4 text-blue-400" />

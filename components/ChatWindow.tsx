@@ -1,30 +1,33 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Conversation, User, Message } from '../types';
+import { User, Conversation, Message } from '../types';
 import { api } from '../services/apiService';
 import { SendIcon } from './icons/SendIcon';
-import { Timestamp } from 'firebase/firestore';
+import { LoaderIcon } from './icons/LoaderIcon';
+import { ChatHeader } from './ChatHeader';
+import { formatTimeAgo } from '../utils';
 
 interface ChatWindowProps {
   conversation: Conversation;
   currentUser: User;
+  onBack?: () => void;
+  onHeaderClick?: () => void;
 }
 
-const formatMessageTime = (timestamp: Timestamp | undefined): string => {
-    if (!timestamp) return '';
-    return timestamp.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-};
-
-
-export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, currentUser }) => {
+export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, currentUser, onBack, onHeaderClick }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [newMessage, setNewMessage] = useState('');
-  const messagesEndRef = useRef<null | HTMLDivElement>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const unsubscribe = api.listenForMessages(conversation.id, setMessages);
+    setIsLoading(true);
+    const unsubscribe = api.listenForMessages(conversation.id, (msgs) => {
+      setMessages(msgs);
+      setIsLoading(false);
+    });
     return () => unsubscribe();
   }, [conversation.id]);
-
+  
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
@@ -33,40 +36,58 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, currentUse
     e.preventDefault();
     if (!newMessage.trim()) return;
 
-    const message: Omit<Message, 'id' | 'timestamp'> = {
-        senderId: currentUser.id,
-        senderName: currentUser.name,
-        text: newMessage,
+    const messageData: Omit<Message, 'id' | 'timestamp'> = {
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      text: newMessage.trim(),
     };
-
+    
+    setNewMessage('');
     try {
-        await api.sendMessage(conversation.id, message, conversation);
-        setNewMessage('');
+      await api.sendMessage(conversation.id, messageData, conversation);
     } catch (error) {
-        console.error("Failed to send message", error);
+      console.error("Failed to send message:", error);
     }
   };
 
+  const otherMemberId = conversation.isGroup ? null : conversation.members.find(id => id !== currentUser.id);
+  const otherMemberName = otherMemberId ? conversation.memberNames[otherMemberId] : 'Group';
+
   return (
-    <div className="flex-1 flex flex-col bg-slate-900/50">
-      <div className="flex-1 p-4 overflow-y-auto space-y-2">
-        {messages.map((msg, index) => {
-            const isMe = msg.senderId === currentUser.id;
-            const showAuthor = conversation.isGroup && (index === 0 || messages[index-1].senderId !== msg.senderId);
+    <div className="flex flex-col h-full bg-slate-900">
+      <ChatHeader
+        title={conversation.isGroup ? conversation.name || 'Group Chat' : otherMemberName}
+        isGroup={conversation.isGroup}
+        onBack={onBack}
+        onHeaderClick={onHeaderClick}
+      />
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {isLoading ? (
+          <div className="flex justify-center items-center h-full"><LoaderIcon className="h-6 w-6 animate-spin"/></div>
+        ) : (
+          messages.map((msg, index) => {
+            const isOwnMessage = msg.senderId === currentUser.id;
+            const showSender = conversation.isGroup && (index === 0 || messages[index-1].senderId !== msg.senderId);
+
             return (
-                <div key={msg.id} className={`flex flex-col ${isMe ? 'items-end' : 'items-start'}`}>
-                    {showAuthor && <p className="text-xs text-gray-400 mb-1 ml-2">{msg.senderName}</p>}
-                    <div className={`max-w-xs md:max-w-md lg:max-w-lg px-4 py-2 rounded-2xl ${isMe ? 'bg-green-600 text-white rounded-br-lg' : 'bg-slate-700 text-gray-200 rounded-bl-lg'}`}>
-                        <p className="whitespace-pre-wrap break-words">{msg.text}</p>
+                <div key={msg.id} className={`flex flex-col ${isOwnMessage ? 'items-end' : 'items-start'}`}>
+                    {showSender && <span className="text-xs text-gray-400 ml-12 mb-1">{msg.senderName}</span>}
+                    <div className={`flex items-end max-w-xs md:max-w-md ${isOwnMessage ? 'flex-row-reverse' : ''}`}>
+                         <div className={`px-4 py-2 rounded-2xl ${isOwnMessage ? 'bg-green-600 text-white rounded-br-none' : 'bg-slate-700 text-gray-200 rounded-bl-none'}`}>
+                            <p className="text-sm break-words">{msg.text}</p>
+                         </div>
                     </div>
-                    <p className="text-xs text-gray-500 mt-1 px-2">{formatMessageTime(msg.timestamp)}</p>
+                     <p className={`text-xs text-gray-500 mt-1 ${isOwnMessage ? 'mr-2' : 'ml-2'}`}>
+                        {formatTimeAgo(msg.timestamp.toDate().toISOString())}
+                    </p>
                 </div>
             )
-        })}
+          })
+        )}
         <div ref={messagesEndRef} />
       </div>
-      <div className="p-4 border-t border-slate-700">
-        <form onSubmit={handleSendMessage} className="flex items-center space-x-3">
+      <div className="p-4 border-t border-slate-700 flex-shrink-0">
+        <form onSubmit={handleSendMessage} className="flex items-center space-x-2">
           <input
             type="text"
             value={newMessage}

@@ -14,6 +14,8 @@ import { PostTypeFilter } from './PostTypeFilter';
 import { FilePenIcon } from './icons/FilePenIcon';
 import { SparkleIcon } from './icons/SparkleIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
+import { UserCircleIcon } from './icons/UserCircleIcon';
+
 
 interface PublicProfileProps {
   userId: string;
@@ -190,29 +192,32 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
             
             <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
                 <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
-                    <div>
-                        <div className="flex items-center gap-3">
-                            <h2 className="text-3xl font-bold text-white">{publicProfile.name}</h2>
-                        </div>
-                        <p className="text-lg text-green-400">{publicProfile.profession || <span className="capitalize">{publicProfile.role}</span>}</p>
-                        <p className="text-sm text-gray-400">{publicProfile.circle}</p>
-                        <div className="flex items-center gap-4 mt-2">
-                             <div className="relative group flex items-center gap-1" title="Credibility Score">
-                                <span className="font-mono text-sm py-0.5 px-2 rounded-full bg-slate-700 text-green-400">
-                                    CR: {publicProfile.credibility_score ?? 100}
-                                </span>
+                    <div className="flex items-center gap-4">
+                        <UserCircleIcon className="h-20 w-20 text-slate-600" />
+                        <div>
+                            <div className="flex items-center gap-3">
+                                <h2 className="text-3xl font-bold text-white">{publicProfile.name}</h2>
                             </div>
-                            <div className="relative group flex items-center gap-1" title="Social Capital (SCAP)">
-                                <SparkleIcon className="h-4 w-4 text-yellow-400" />
-                                <span className="font-mono text-sm py-0.5 px-2 rounded-full bg-slate-700 text-yellow-400">
-                                    {publicProfile.scap ?? 0}
-                                </span>
-                            </div>
-                            <div className="relative group flex items-center gap-1" title="Civic Capital (CCAP)">
-                                <DatabaseIcon className="h-4 w-4 text-blue-400" />
-                                <span className="font-mono text-sm py-0.5 px-2 rounded-full bg-slate-700 text-blue-400">
-                                    {publicProfile.ccap ?? 0}
-                                </span>
+                            <p className="text-lg text-green-400">{publicProfile.profession || <span className="capitalize">{publicProfile.role}</span>}</p>
+                            <p className="text-sm text-gray-400">{publicProfile.circle}</p>
+                            <div className="flex items-center gap-4 mt-2">
+                                <div className="relative group flex items-center gap-1" title="Credibility Score">
+                                    <span className="font-mono text-sm py-0.5 px-2 rounded-full bg-slate-700 text-green-400">
+                                        CR: {publicProfile.credibility_score ?? 100}
+                                    </span>
+                                </div>
+                                <div className="relative group flex items-center gap-1" title="Social Capital (SCAP)">
+                                    <SparkleIcon className="h-4 w-4 text-yellow-400" />
+                                    <span className="font-mono text-sm py-0.5 px-2 rounded-full bg-slate-700 text-yellow-400">
+                                        {publicProfile.scap ?? 0}
+                                    </span>
+                                </div>
+                                <div className="relative group flex items-center gap-1" title="Civic Capital (CCAP)">
+                                    <DatabaseIcon className="h-4 w-4 text-blue-400" />
+                                    <span className="font-mono text-sm py-0.5 px-2 rounded-full bg-slate-700 text-blue-400">
+                                        {publicProfile.ccap ?? 0}
+                                    </span>
+                                </div>
                             </div>
                         </div>
                     </div>

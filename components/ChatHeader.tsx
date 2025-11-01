@@ -1,48 +1,32 @@
 import React from 'react';
-import { Conversation, User } from '../types';
-import { SettingsIcon } from './icons/SettingsIcon';
+import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { UsersIcon } from './icons/UsersIcon';
+import { UserIcon } from './icons/UserIcon';
+import { MoreVerticalIcon } from './icons/MoreVerticalIcon';
 
 interface ChatHeaderProps {
-  conversation: Conversation;
-  currentUser: User;
-  onShowInfo: () => void;
-  onViewProfile: (userId: string) => void;
+  title: string;
+  isGroup: boolean;
+  onBack?: () => void;
+  onHeaderClick?: () => void;
 }
 
-export const ChatHeader: React.FC<ChatHeaderProps> = ({ conversation, currentUser, onShowInfo, onViewProfile }) => {
-  const getChatPartner = () => {
-    if (conversation.isGroup) {
-      return { name: conversation.name || 'Group Chat', id: null };
-    }
-    if (!Array.isArray(conversation.members)) {
-        return { name: 'Chat', id: null };
-    }
-    const otherMemberId = conversation.members.find(id => id !== currentUser.id);
-    const memberNames = conversation.memberNames || {};
-    return {
-        name: memberNames[otherMemberId || ''] || 'Chat',
-        id: otherMemberId || null
-    };
-  };
-
-  const chatPartner = getChatPartner();
-
+export const ChatHeader: React.FC<ChatHeaderProps> = ({ title, isGroup, onBack, onHeaderClick }) => {
   return (
-    <div className="p-3 border-b border-slate-700 flex justify-between items-center flex-shrink-0">
-      <div className="flex items-center space-x-3">
-          {conversation.isGroup && <div className="p-2 bg-slate-700 rounded-full"><UsersIcon className="h-5 w-5 text-gray-300"/></div>}
-           <button 
-                onClick={() => chatPartner.id && onViewProfile(chatPartner.id)}
-                disabled={!chatPartner.id}
-                className={`text-lg font-bold text-white ${chatPartner.id ? 'hover:underline' : 'cursor-default'}`}
-            >
-                {chatPartner.name}
-            </button>
-      </div>
-      {conversation.isGroup && (
-        <button onClick={onShowInfo} className="p-2 text-gray-400 hover:text-white rounded-full hover:bg-slate-700">
-            <SettingsIcon className="h-5 w-5" />
+    <div className="flex items-center p-3 border-b border-slate-700 bg-slate-800 flex-shrink-0">
+      {onBack && <button onClick={onBack} className="md:hidden mr-2 p-2 text-gray-400 hover:text-white"><ArrowLeftIcon className="h-6 w-6"/></button>}
+      <button onClick={onHeaderClick} className="flex items-center space-x-3 flex-1 min-w-0">
+        <div className="flex-shrink-0">
+          {isGroup ? <UsersIcon className="h-8 w-8 text-gray-400"/> : <UserIcon className="h-8 w-8 text-gray-400"/>}
+        </div>
+        <div className="flex-1 min-w-0 text-left">
+          <h3 className="font-bold text-white truncate">{title}</h3>
+          {/* We can add online status here in the future */}
+        </div>
+      </button>
+      {onHeaderClick && isGroup && (
+        <button onClick={onHeaderClick} className="p-2 text-gray-400 hover:text-white">
+            <MoreVerticalIcon className="h-5 w-5"/>
         </button>
       )}
     </div>

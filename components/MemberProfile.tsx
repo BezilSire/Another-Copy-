@@ -239,10 +239,13 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
   return (
     <div className="bg-slate-800 p-4 sm:p-6 rounded-lg shadow-lg">
       <div className="flex justify-between items-start">
-        <div>
-          <h2 className="text-3xl font-bold text-white">{isEditing ? editData.name : currentUser.name}</h2>
-          <p className="text-lg text-green-400">{isEditing ? editData.profession : currentUser.profession || <span className="capitalize">{currentUser.role}</span>}</p>
-          <p className="text-sm text-gray-400">{currentUser.circle}</p>
+        <div className="flex items-center gap-4">
+            <UserCircleIcon className="h-24 w-24 text-slate-600" />
+            <div>
+                <h2 className="text-3xl font-bold text-white">{isEditing ? editData.name : currentUser.name}</h2>
+                <p className="text-lg text-green-400">{isEditing ? editData.profession : currentUser.profession || <span className="capitalize">{currentUser.role}</span>}</p>
+                <p className="text-sm text-gray-400">{currentUser.circle}</p>
+            </div>
         </div>
          {!isEditing && (
             <button onClick={() => setIsEditing(true)} className="flex items-center space-x-2 px-4 py-2 bg-slate-700 text-white text-sm font-semibold rounded-md hover:bg-slate-600">

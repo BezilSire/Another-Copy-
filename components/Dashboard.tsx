@@ -1,14 +1,12 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef } from 'react';
 import { Admin, User, Member, Agent, Report, Broadcast, Activity, PayoutRequest, Venture, CommunityValuePool } from '../types';
 import { UsersIcon } from './icons/UsersIcon';
 import { BriefcaseIcon } from './icons/BriefcaseIcon';
 import { ClockIcon } from './icons/ClockIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { DonutChart } from './DonutChart';
-import { PieChartIcon } from './icons/PieChartIcon';
 import { api } from '../services/apiService';
-import { ActivityItem } from './ActivityItem';
-import { MegaphoneIcon } from './icons/MegaphoneIcon';
+import { LoaderIcon } from './icons/LoaderIcon';
 
 interface DashboardProps {
     user: Admin;
@@ -36,16 +34,10 @@ const StatCard: React.FC<{ icon: React.ReactNode; title: string; value: string |
 );
 
 export const Dashboard: React.FC<DashboardProps> = (props) => {
-    const { users, members, agents, pendingMembers, reports, broadcasts, payouts, ventures, cvp, onSendBroadcast } = props;
-    const [recentActivity, setRecentActivity] = useState<Activity[]>([]);
+    const { users, members, agents, pendingMembers, reports, cvp, onSendBroadcast } = props;
     const [broadcastMessage, setBroadcastMessage] = useState('');
     const [isSending, setIsSending] = useState(false);
     const editorRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        const unsub = api.listenForRecentActivity(5, setRecentActivity, console.error);
-        return () => unsub();
-    }, []);
 
     const newReportsCount = useMemo(() => reports.filter(r => r.status === 'new').length, [reports]);
 
@@ -85,12 +77,12 @@ export const Dashboard: React.FC<DashboardProps> = (props) => {
         <div className="space-y-8">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                 <StatCard icon={<UsersIcon className="h-6 w-6 text-green-400" />} title="Total Members" value={members.length} />
-                <StatCard icon={<BriefcaseIcon className="h-6 w-6 text-green-400" />} title="Total Agents" value={agents.length} />
+                <StatCard icon={<BriefcaseIcon className="h-6 w-6 text-green-400" />} title="Total Agents & Creators" value={agents.length} />
                 <StatCard icon={<ClockIcon className="h-6 w-6 text-yellow-400" />} title="Pending Verification" value={pendingMembers.length} />
                 <StatCard icon={<AlertTriangleIcon className="h-6 w-6 text-red-400" />} title="New Reports" value={newReportsCount} />
             </div>
 
-             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 bg-slate-800 p-6 rounded-lg shadow-lg">
                     <h3 className="text-xl font-semibold text-white mb-4">Send Broadcast</h3>
                     <form onSubmit={handleSendBroadcast}>
@@ -109,21 +101,7 @@ export const Dashboard: React.FC<DashboardProps> = (props) => {
                         </button>
                     </form>
                 </div>
-                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                    <h3 className="text-xl font-semibold text-white mb-4">Recent Activity</h3>
-                    <div className="space-y-3 max-h-64 overflow-y-auto">
-                        {recentActivity.map(act => (
-                            <div key={act.id} className="text-sm text-gray-300 border-b border-slate-700 pb-2 last:border-0">
-                                <p>{act.message}</p>
-                                <p className="text-xs text-gray-500">{act.causerCircle}</p>
-                            </div>
-                        ))}
-                    </div>
-                 </div>
-            </div>
-
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="bg-slate-800 p-6 rounded-lg shadow-lg flex flex-col items-center">
+                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg flex flex-col items-center">
                     <h3 className="text-xl font-semibold text-white mb-4">User Status</h3>
                     <DonutChart 
                         data={userStatusData}
@@ -137,18 +115,7 @@ export const Dashboard: React.FC<DashboardProps> = (props) => {
                             </div>
                         ))}
                     </div>
-                </div>
-                <div className="lg:col-span-2 bg-slate-800 p-6 rounded-lg shadow-lg">
-                    <h3 className="text-xl font-semibold text-white mb-4">Economic Overview</h3>
-                    {cvp ? (
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <StatCard title="Community Value Pool" value={`$${cvp.total_usd_value.toFixed(2)}`} description="Available for CCAP redemption." />
-                            <StatCard title="Circulating CCAP" value={cvp.total_circulating_ccap.toLocaleString()} description="Total CCAP across all members." />
-                             <StatCard title="Pending Payouts" value={`$${payouts.filter(p=>p.status === 'pending').reduce((s,p) => s + (p.type === 'veq_redemption' ? 0 : p.amount) ,0).toFixed(2)}`} description="Across all payout types." />
-                            <StatCard title="VEQ Holders" value={users.filter(u=> u.ventureEquity && u.ventureEquity.length > 0).length} description="Members with venture equity." />
-                        </div>
-                    ): <p className="text-gray-400">Loading economic data...</p>}
-                </div>
+                 </div>
             </div>
         </div>
     );

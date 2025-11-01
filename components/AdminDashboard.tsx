@@ -16,7 +16,6 @@ import { DownloadIcon } from './icons/DownloadIcon';
 import { exportToCsv, formatTimeAgo } from '../utils';
 import { LayoutDashboardIcon } from './icons/LayoutDashboardIcon';
 import { MessageSquareIcon } from './icons/MessageSquareIcon';
-import { InboxIcon } from './icons/InboxIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { BellIcon } from './icons/BellIcon';
 import { NotificationsPage } from './NotificationsPage';
@@ -35,14 +34,14 @@ import { EconomyAdminPage } from './EconomyAdminPage';
 import { Dashboard } from './Dashboard';
 
 
-type AdminView = 'dashboard' | 'users' | 'feed' | 'reports' | 'profile' | 'notifications' | 'proposals' | 'payouts' | 'sustenance' | 'ventures' | 'economy';
+type AdminView = 'dashboard' | 'users' | 'feed' | 'reports' | 'profile' | 'notifications' | 'proposals' | 'payouts' | 'sustenance' | 'ventures' | 'economy' | 'chats';
 type UserSubView = 'agents' | 'members' | 'roles';
 
 interface AdminDashboardProps {
   user: Admin;
   onUpdateUser: (updatedUser: Partial<User>) => Promise<void>;
   unreadCount: number;
-  onOpenChat: (target?: Conversation) => void;
+  onOpenChat: () => void;
   onViewProfile: (userId: string | null) => void;
 }
 
@@ -101,7 +100,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
     const unsubAgents = api.listenForAllAgents(user, (data) => { setAgents(data); handleStreamLoaded(); }, (e) => handleError('agents', e));
     const unsubPending = api.listenForPendingMembers(user, (data) => { setPendingMembers(data); handleStreamLoaded(); }, (e) => handleError('pending members', e));
     const unsubReports = api.listenForReports(user, (data) => { setReports(data); handleStreamLoaded(); }, (e) => handleError('reports', e));
-    const unsubConversations = api.listenForConversations(user, (data) => { setConversations(data); handleStreamLoaded(); }, (e) => handleError('conversations', e));
+    const unsubConversations = api.listenForConversations(user.id, (data) => { setConversations(data); handleStreamLoaded(); }, (e) => handleError('conversations', e));
     const unsubPayouts = api.listenForPayoutRequests(user, (data) => { setPayouts(data); handleStreamLoaded(); }, (e) => handleError('payouts', e));
     const unsubVentures = api.listenForVentures(user, (data) => { setVentures(data); handleStreamLoaded(); }, (e) => handleError('ventures', e));
     const unsubCvp = api.listenForCVP(user, (data) => { setCvp(data); handleStreamLoaded(); }, (e) => handleError('cvp', e));
@@ -115,22 +114,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
     };
   }, [user, addToast]);
   
-  const handleStartChat = async (targetUserId: string) => {
+  const handleStartChat = async (targetUser: PublicUserProfile) => {
     try {
-        const targetUser = await api.getPublicUserProfile(targetUserId);
-        if (!targetUser) { addToast("Could not find user to chat with.", "error"); return; }
-        const newConvo = await api.startChat(user, targetUser);
-        onViewProfile(null);
-        onOpenChat(newConvo);
+        await api.startChat(user, targetUser);
+        addToast(`Chat with ${targetUser.name} started!`, 'success');
+        onOpenChat();
     } catch (error) { addToast("Failed to start chat.", "error"); }
   };
   
   const handleNavigate = (item: NotificationItem) => {
       switch (item.type) {
           case 'NEW_MESSAGE': case 'NEW_CHAT':
-              const convo = conversations.find(c => c.id === item.link);
-              if (convo) { onOpenChat(convo); } 
-              else { addToast("Could not find the conversation.", "error"); }
+              onOpenChat();
               break;
           case 'POST_LIKE': case 'NEW_MEMBER': case 'NEW_POST_OPPORTUNITY': case 'NEW_POST_PROPOSAL':
           case 'NEW_POST_GENERAL': case 'NEW_POST_OFFER': case 'KNOWLEDGE_APPROVED':
@@ -285,7 +280,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
                     </div>
                 )}
                 {userView === 'members' && (
-                    <MemberList members={(filteredItems as Member[])} isAdminView onMarkAsComplete={handleMarkComplete} onResetQuota={(m) => setDialogState({isOpen: true, member: m, action: 'reset'})} onClearDistressPost={(m) => setDialogState({isOpen: true, member: m, action: 'clear'})} onSelectMember={(m) => m.payment_status === 'pending_verification' && setVerificationModalState({ isOpen: true, member: m })} onViewProfile={onViewProfile} onStartChat={(user) => handleStartChat(user.id)} />
+                    <MemberList members={(filteredItems as Member[])} isAdminView onMarkAsComplete={handleMarkComplete} onResetQuota={(m) => setDialogState({isOpen: true, member: m, action: 'reset'})} onClearDistressPost={(m) => setDialogState({isOpen: true, member: m, action: 'clear'})} onSelectMember={(m) => m.payment_status === 'pending_verification' && setVerificationModalState({ isOpen: true, member: m })} onViewProfile={onViewProfile} />
                 )}
                 {userView === 'roles' && (
                      <div className="flow-root">
@@ -323,6 +318,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
             case 'economy': return <EconomyAdminPage user={user} cvp={cvp} users={allUsers} />;
             case 'profile': return <AdminProfile user={user} onUpdateUser={onUpdateUser} />;
             case 'notifications': return <NotificationsPage user={user} onNavigate={handleNavigate} onViewProfile={onViewProfile} />;
+            case 'chats': onOpenChat(); return null;
             default: return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={handleSendBroadcast} />;
         }
     };
@@ -358,7 +354,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
                     <TabButton label="Dashboard" icon={<LayoutDashboardIcon/>} isActive={view === 'dashboard'} onClick={() => setView('dashboard')} />
                     <TabButton label="Users" icon={<UsersIcon/>} isActive={view === 'users'} onClick={() => setView('users')} />
                     <TabButton label="Feed" icon={<MessageSquareIcon/>} isActive={view === 'feed'} onClick={() => setView('feed')} />
-                    <TabButton label="Connect" icon={<InboxIcon/>} isActive={false} onClick={() => onOpenChat()} />
+                    <TabButton label="Chats" icon={<MessageSquareIcon/>} isActive={view === 'chats'} onClick={() => setView('chats')} />
                     <TabButton label="Proposals" icon={<ScaleIcon/>} isActive={view === 'proposals'} onClick={() => setView('proposals')} />
                     <TabButton label="Ventures" icon={<TrendingUpIcon/>} isActive={view === 'ventures'} onClick={() => setView('ventures')} />
                     <TabButton label="Economy" icon={<DatabaseIcon/>} isActive={view === 'economy'} onClick={() => setView('economy')} />

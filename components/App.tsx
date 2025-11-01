@@ -20,7 +20,7 @@ import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { VerifyEmailPage } from './components/VerifyEmailPage';
 import { UbtVerificationPage } from './components/UbtVerificationPage';
 import { CommonsInduction } from './components/CommonsInduction';
-import { ConnectPage } from './components/ConnectPage';
+import { ChatsPage } from './components/ChatsPage';
 import { PublicProfile } from './components/PublicProfile';
 import { MemberSearchModal } from './components/MemberSearchModal';
 import { CreateGroupModal } from './components/CreateGroupModal';
@@ -69,14 +69,12 @@ const App: React.FC = () => {
         fetchBroadcasts();
         const unsubNotifications = api.listenForNotifications(currentUser.id, (notifications) => {
             setUnreadNotificationCount(notifications.filter(n => !n.read).length);
-
-            // Handle new chat discovery via notifications
+            
             notifications.forEach(notif => {
                 if (notif.type === 'NEW_CHAT' && !notif.read) {
                     const convoId = notif.link;
                     if (convoId && !currentUser.conversationIds?.includes(convoId)) {
                         console.log(`Discovered new chat ${convoId}, adding to user profile.`);
-                        // Add conversation to user's list and mark notification as read
                         updateUser({ conversationIds: arrayUnion(convoId) as any });
                         api.markNotificationAsRead(notif.id);
                     }
@@ -152,6 +150,19 @@ const App: React.FC = () => {
 
     if (!currentUser) {
       return <AuthPage />;
+    }
+
+    if (chatTarget) {
+      return (
+        <ChatsPage
+          user={currentUser}
+          initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null}
+          onClose={() => setChatTarget(null)}
+          onViewProfile={handleViewProfile}
+          onNewMessageClick={() => setIsNewChatModalOpen(true)}
+          onNewGroupClick={() => setIsNewGroupModalOpen(true)}
+        />
+      );
     }
 
     if (viewingProfileId) {
@@ -234,7 +245,6 @@ const App: React.FC = () => {
             <MemberDashboard 
                 user={currentUser as MemberUser} onUpdateUser={updateUser}
                 unreadCount={unreadNotificationCount} onLogout={requestLogout}
-                onOpenChat={handleOpenChat}
                 onViewProfile={handleViewProfile}
             />
         </div>
@@ -245,17 +255,6 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-900 text-white dark">
       <Header user={currentUser} onLogout={requestLogout} onViewProfile={handleViewProfile} />
       {renderContent()}
-      
-      {currentUser && chatTarget && (
-        <ConnectPage
-          user={currentUser}
-          initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null}
-          onClose={() => setChatTarget(null)}
-          onViewProfile={handleViewProfile}
-          onNewMessageClick={() => setIsNewChatModalOpen(true)}
-          onNewGroupClick={() => setIsNewGroupModalOpen(true)}
-        />
-      )}
       
       {currentUser && isNewChatModalOpen && (
         <MemberSearchModal 

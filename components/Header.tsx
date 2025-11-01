@@ -47,7 +47,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile })
             {user ? (
               <div className="flex items-center space-x-4">
                 <div className="hidden md:flex items-center space-x-2">
-                  <UserCircleIcon className="h-6 w-6 text-slate-500 dark:text-gray-400" />
+                  <UserCircleIcon className="h-8 w-8 text-slate-500 dark:text-gray-400" />
                   <span className="text-slate-700 dark:text-gray-300 font-medium">{user.name}</span>
                 </div>
                 <button

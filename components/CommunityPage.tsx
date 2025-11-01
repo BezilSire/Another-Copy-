@@ -7,6 +7,7 @@ import { UserCard } from './UserCard';
 import { useAuth } from '../contexts/AuthContext';
 import { useDebounce } from '../hooks/useDebounce';
 import { SearchIcon } from './icons/SearchIcon';
+import { MessageSquareIcon } from './icons/MessageSquareIcon';
 
 interface CommunityPageProps {
   currentUser: User;
@@ -50,7 +51,9 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ currentUser, onVie
 
   return (
     <div className="space-y-6">
-      <h1 className="text-3xl font-bold text-white">Community</h1>
+      <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+        <h1 className="text-3xl font-bold text-white">Community</h1>
+      </div>
 
       <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-// FIX: Added Distribution to type imports
 import { MemberUser, Venture, Distribution, VentureEquityHolding, User } from '../types';
 import { api } from '../services/apiService';
 import { LoaderIcon } from './icons/LoaderIcon';
@@ -7,6 +6,7 @@ import { TrendingUpIcon } from './icons/TrendingUpIcon';
 import { ChevronDownIcon } from './icons/ChevronDownIcon';
 import { formatTimeAgo } from '../utils';
 import { VeqRedemptionModal } from './VeqRedemptionModal';
+import { BriefcaseIcon } from './icons/BriefcaseIcon';
 
 interface VentureHoldingCardProps {
     holding: VentureEquityHolding;
@@ -24,11 +24,9 @@ const VentureHoldingCard: React.FC<VentureHoldingCardProps> = ({ holding, user, 
         const fetchData = async () => {
             setIsLoading(true);
             try {
-                // FIX: Corrected API call from getVentureDetails to getVentureById
                 const ventureDetails = await api.getVentureById(holding.ventureId);
                 setVenture(ventureDetails);
                 if (ventureDetails) {
-                    // FIX: Pass user.id instead of the full user object
                     const userDists = await api.getDistributionsForUserInVenture(user.id, holding.ventureId, holding.shares, ventureDetails.totalSharesIssued);
                     setDistributions(userDists);
                 }
@@ -39,7 +37,7 @@ const VentureHoldingCard: React.FC<VentureHoldingCardProps> = ({ holding, user, 
             }
         };
         fetchData();
-    }, [holding, user.id]);
+    }, [holding.ventureId, holding.shares, user.id]);
 
     const equityPercentage = venture && venture.totalSharesIssued > 0 ? (holding.shares / venture.totalSharesIssued) * 100 : 0;
     
@@ -117,7 +115,7 @@ interface InvestmentsPageProps {
   onNavigateToMarketplace: () => void;
 }
 
-export const MyInvestmentsPage: React.FC<InvestmentsPageProps> = ({ user, onNavigateToMarketplace }) => {
+export const InvestmentsPage: React.FC<InvestmentsPageProps> = ({ user, onNavigateToMarketplace }) => {
   const holdings = user.ventureEquity || [];
   const [redeemModalHolding, setRedeemModalHolding] = useState<VentureEquityHolding | null>(null);
 

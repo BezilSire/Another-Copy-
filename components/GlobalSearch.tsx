@@ -60,7 +60,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onViewProfile }) => 
                 </div>
                 <input
                     type="search"
-                    placeholder="Search for members..."
+                    placeholder="Search for members by name or skill..."
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onFocus={() => setIsFocused(true)}
