@@ -53,7 +53,7 @@ export const CreatorSignupPage: React.FC<CreatorSignupPageProps> = ({ creator, o
                  <UserCircleIcon className="h-8 w-8 text-gray-400" />
                  <h2 className="text-xl font-bold text-center text-white">Join {creator.name}'s Community</h2>
             </div>
-            <p className="text-center text-gray-300 mt-2">Become a full member of the Global Commons and get exclusive access to {creator.name}'s content and mentorship.</p>
+            <p className="text-center text-gray-300 mt-2">Become a full member of the Global Commons 🇿🇼 and get exclusive access to {creator.name}'s content and mentorship.</p>
         </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">

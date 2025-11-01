@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { User } from '../types';
 import { useToast } from '../contexts/ToastContext';
 import { ProfileCompletionMeter } from './ProfileCompletionMeter';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
 const SKILLS_LIST = ['Software Development', 'Marketing', 'Sales', 'Product Management', 'Design (UI/UX)', 'Finance', 'Legal', 'Operations', 'Human Resources', 'Agriculture', 'Education', 'Healthcare'];
 const LOOKING_FOR_LIST = ['Co-founder', 'Business Partner', 'Investor', 'Mentor', 'Advisor', 'Employee', 'Freelancer'];
@@ -131,7 +132,7 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
                                     <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                                         {LOOKING_FOR_LIST.map(item => (
                                             <label key={item} className="flex items-center space-x-2 text-sm text-gray-300">
-                                                <input type="checkbox" value={item} checked={formData.lookingFor.includes(item)} onChange={handleCheckboxChange} className="text-green-600 bg-slate-700 border border-slate-600 rounded focus:ring-green-500"/>
+                                                <input type="checkbox" value={item} checked={formData.lookingFor.includes(item)} onChange={handleCheckboxChange} className="text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500"/>
                                                 <span>{item}</span>
                                             </label>
                                         ))}
@@ -149,18 +150,25 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
 
                  { (user.role === 'agent' || user.role === 'admin') && (
                      <>
+                        <div className="p-4 bg-yellow-900/50 border border-yellow-700 rounded-lg flex items-start space-x-3">
+                            <AlertTriangleIcon className="h-5 w-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+                            <div>
+                                <h4 className="font-bold text-yellow-200">Important Information</h4>
+                                <p className="text-sm text-yellow-300 mt-1">To ensure account security and process commission payouts, please provide your phone number, ID card number, and address.</p>
+                            </div>
+                        </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                             <div>
-                                <label htmlFor="phone" className="block text-sm font-medium text-gray-300">Phone Number <span className="text-red-400">*</span></label>
+                                <label htmlFor="phone" className="block text-sm font-medium text-gray-300">Phone Number <span className="text-red-400">*</span> <span className="text-yellow-400 text-xs">(for payouts)</span></label>
                                 <input type="tel" name="phone" id="phone" value={formData.phone} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
                             </div>
                             <div>
-                                <label htmlFor="id_card_number" className="block text-sm font-medium text-gray-300">ID Card Number <span className="text-red-400">*</span></label>
+                                <label htmlFor="id_card_number" className="block text-sm font-medium text-gray-300">ID Card Number <span className="text-red-400">*</span> <span className="text-yellow-400 text-xs">(for verification)</span></label>
                                 <input type="text" name="id_card_number" id="id_card_number" value={formData.id_card_number} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
                             </div>
                         </div>
                          <div>
-                            <label htmlFor="address" className="block text-sm font-medium text-gray-300">Address <span className="text-red-400">*</span></label>
+                            <label htmlFor="address" className="block text-sm font-medium text-gray-300">Address <span className="text-red-400">*</span> <span className="text-yellow-400 text-xs">(for verification)</span></label>
                             <textarea name="address" id="address" rows={3} value={formData.address} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
                         </div>
                         <div>

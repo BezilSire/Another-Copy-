@@ -33,7 +33,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isProcessing, onS
     <div className="bg-slate-800 p-8 rounded-lg shadow-lg">
       <div className="flex flex-col items-center mb-6">
         <LogoIcon className="h-12 w-12 text-green-500" />
-        <h2 className="text-2xl font-bold text-center text-white mt-4">The Global Commons Network</h2>
+        <h2 className="text-2xl font-bold text-center text-white mt-4">The Global Commons Network 🇿🇼</h2>
         <p className="text-gray-400 text-center mt-1">Welcome Member or Agent</p>
       </div>
       <form onSubmit={handleSubmit}>

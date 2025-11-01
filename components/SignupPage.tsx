@@ -33,7 +33,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, isProcessing, 
     <div className="bg-slate-800 p-8 rounded-lg shadow-lg">
       <div className="flex flex-col items-center mb-6">
         <LogoIcon className="h-12 w-12 text-green-500" />
-        <h2 className="text-2xl font-bold text-center text-white mt-4">Create Agent Account</h2>
+        <h2 className="text-2xl font-bold text-center text-white mt-4">Create Agent Account 🇿🇼</h2>
       </div>
       <form onSubmit={handleSubmit}>
         <div className="mb-4">
@@ -103,6 +103,9 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, isProcessing, 
               {isPasswordVisible ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
             </button>
           </div>
+        </div>
+        <div className="text-xs text-gray-400 mb-6 p-3 bg-slate-900/50 rounded-md border border-slate-700">
+            <strong>Note:</strong> After signing up, you will be required to provide your Phone Number, ID Card Number, and Address for account verification and to receive commission payouts.
         </div>
         <div className="flex items-center justify-between">
           <button

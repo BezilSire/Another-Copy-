@@ -9,6 +9,7 @@ import { DollarSignIcon } from './icons/DollarSignIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { formatTimeAgo } from '../utils';
 import { UserCircleIcon } from './icons/UserCircleIcon';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
 interface AgentProfileProps {
   agent: Agent;
@@ -120,6 +121,8 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
                      formData.id_card_number !== (agent.id_card_number || '') ||
                      formData.address !== (agent.address || '') ||
                      formData.bio !== (agent.bio || '');
+  
+  const isPayoutInfoMissing = !agent.phone || !agent.id_card_number || !agent.address;
 
   return (
     <div className="bg-slate-800 p-6 rounded-lg shadow-lg animate-fade-in max-w-2xl mx-auto">
@@ -137,6 +140,16 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
                 </span>
             </div>
         </div>
+      
+      {isPayoutInfoMissing && (
+        <div className="my-6 p-4 bg-yellow-900/50 border border-yellow-700 rounded-lg flex items-start space-x-3">
+            <AlertTriangleIcon className="h-5 w-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+            <div>
+                <h4 className="font-bold text-yellow-200">Incomplete Payout Information</h4>
+                <p className="text-sm text-yellow-300 mt-1">Please add your phone number, ID card number, and address to ensure you can receive commission payouts.</p>
+            </div>
+        </div>
+      )}
       
       <ProfileCompletionMeter profileData={formData} role="agent" />
 
@@ -264,7 +277,7 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
                     <form onSubmit={handlePayoutRequest} className="mt-4 space-y-3">
                         <input type="text" value={payoutData.ecocashName} onChange={e => setPayoutData(p => ({...p, ecocashName: e.target.value}))} placeholder="Ecocash Full Name" required className="block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
                         <input type="tel" value={payoutData.ecocashNumber} onChange={e => setPayoutData(p => ({...p, ecocashNumber: e.target.value}))} placeholder="Ecocash Phone Number" required className="block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                        <button type="submit" disabled={isRequestingPayout} className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold disabled:bg-slate-600">
+                        <button type="submit" disabled={isRequestingPayout || isPayoutInfoMissing} className="w-full px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold disabled:bg-slate-600 disabled:cursor-not-allowed" title={isPayoutInfoMissing ? "Please complete your profile to request a payout." : ""}>
                             {isRequestingPayout ? 'Processing...' : `Request Payout`}
                         </button>
                     </form>

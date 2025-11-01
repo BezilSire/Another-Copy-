@@ -23,7 +23,7 @@ export const MemberLookup: React.FC<MemberLookupProps> = ({ onLookup, onBack, me
     <div className="bg-slate-800 p-8 rounded-lg shadow-lg">
       <div className="flex flex-col items-center mb-6">
         <LogoIcon className="h-12 w-12 text-green-500" />
-        <h2 className="text-2xl font-bold text-center text-white mt-4">Member Registration</h2>
+        <h2 className="text-2xl font-bold text-center text-white mt-4">Member Registration 🇿🇼</h2>
         <p className="text-gray-400 text-center mt-1">Let's check if you're already in our system.</p>
       </div>
       

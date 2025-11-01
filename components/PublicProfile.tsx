@@ -23,6 +23,7 @@ interface PublicProfileProps {
   onBack: () => void;
   onStartChat: (targetUserId: string) => void;
   onViewProfile: (userId: string) => void; // For viewing profiles from posts
+  isAdminView?: boolean;
 }
 
 const DetailItem: React.FC<{label: string, value: string | undefined}> = ({label, value}) => (
@@ -38,8 +39,8 @@ const Pill: React.FC<{text: string}> = ({ text }) => (
     </span>
 );
 
-export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUser, onBack, onStartChat, onViewProfile }) => {
-    const [publicProfile, setPublicProfile] = useState<PublicUserProfile | null>(null);
+export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUser, onBack, onStartChat, onViewProfile, isAdminView = false }) => {
+    const [publicProfile, setPublicProfile] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<'activity' | 'about' | 'card' | 'venture'>('activity');
@@ -54,9 +55,12 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
 
         const fetchProfileData = async () => {
             try {
-                const profileData = await api.getPublicUserProfile(userId);
+                const profileData = isAdminView
+                    ? await api.getUser(userId)
+                    : await api.getPublicUserProfile(userId);
+
                 if (profileData) {
-                    setPublicProfile(profileData);
+                    setPublicProfile(profileData as User);
                 } else {
                     addToast("Could not find user profile.", "error");
                 }
@@ -74,12 +78,12 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
             addToast("User ID is missing.", "error");
             setIsLoading(false);
         }
-    }, [userId, addToast]);
+    }, [userId, addToast, isAdminView]);
     
     const handleReportSubmit = async (reason: string, details: string) => {
         if (!publicProfile) return;
         try {
-            await api.reportUser(currentUser, publicProfile, reason, details);
+            await api.reportUser(currentUser, publicProfile as PublicUserProfile, reason, details);
             addToast("Report submitted successfully. An admin will review it.", "success");
         } catch (error) {
             addToast("Failed to submit report.", "error");
@@ -120,12 +124,12 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
                 <p className="text-gray-300 whitespace-pre-wrap">{publicProfile.bio || 'No bio provided.'}</p>
             </div>
             
-            {isOwnProfile && (
-                <div>
+            {(isOwnProfile || isAdminView) && (
+                <div className="pt-6 mt-6 border-t border-slate-700">
                     <h3 className="text-md font-semibold text-gray-300 mb-2">Contact Information</h3>
                     <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
-                        <DetailItem label="Email" value={currentUser.email} />
-                        <DetailItem label="Phone Number" value={currentUser.phone} />
+                        <DetailItem label="Email" value={publicProfile.email} />
+                        <DetailItem label="Phone Number" value={publicProfile.phone} />
                     </dl>
                 </div>
             )}
@@ -145,6 +149,18 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
                         </div>
                     )}
                 </>
+            )}
+
+            {isAdminView && (
+                 <div className="pt-6 mt-6 border-t border-slate-700">
+                    <h3 className="text-md font-semibold text-red-400 mb-2">Private Details (Admin View)</h3>
+                    <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-4 text-sm">
+                        <DetailItem label="Address" value={publicProfile.address} />
+                        <DetailItem label="ID Card Number" value={publicProfile.id_card_number} />
+                        <DetailItem label="Gender" value={publicProfile.gender} />
+                        <DetailItem label="Age" value={publicProfile.age} />
+                    </dl>
+                </div>
             )}
         </div>
     );
@@ -276,7 +292,7 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
                 {activeTab === 'venture' && hasPitchDeck && renderVentureTab()}
                 {activeTab === 'card' && publicProfile.role === 'member' && (
                     <div className="animate-fade-in">
-                        <MemberCard user={publicProfile} />
+                        <MemberCard user={publicProfile as PublicUserProfile} />
                     </div>
                 )}
             </div>

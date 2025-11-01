@@ -28,7 +28,7 @@ export const MemberActivationForm: React.FC<MemberActivationFormProps> = ({ memb
   return (
     <div className="bg-slate-800 p-8 rounded-lg shadow-lg">
         <h2 className="text-2xl font-bold text-center text-white mb-2">Welcome back, {member.full_name}!</h2>
-        <p className="text-center text-gray-400 mb-6">Let's activate your account. Please create a password.</p>
+        <p className="text-center text-gray-400 mb-6">Let's activate your account on the Global Commons Network 🇿🇼. Please create a password.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
             <div>

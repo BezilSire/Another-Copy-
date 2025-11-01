@@ -31,7 +31,7 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile })
             <LogoIcon className="h-10 w-10 text-green-500" />
             <div className="hidden sm:block">
               <div className="flex items-center">
-                <h1 className="text-xl font-bold text-slate-900 dark:text-white">Ubuntium Global Commons</h1>
+                <h1 className="text-xl font-bold text-slate-900 dark:text-white">Global Commons Network 🇿🇼</h1>
                 <span className="ml-2 px-2 py-0.5 bg-blue-600 text-white text-xs font-bold rounded-full uppercase">Beta</span>
               </div>
               <p className="text-xs text-green-600 dark:text-green-400 italic">the commons protect those who protects the commons</p>

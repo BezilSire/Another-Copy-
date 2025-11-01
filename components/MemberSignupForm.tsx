@@ -41,7 +41,7 @@ export const MemberSignupForm: React.FC<MemberSignupFormProps> = ({ email, onReg
   
   return (
     <div className="bg-slate-800 p-8 rounded-lg shadow-lg">
-        <h2 className="text-2xl font-bold text-center text-white mb-2">Create Your Member Account</h2>
+        <h2 className="text-2xl font-bold text-center text-white mb-2">Create Your Member Account 🇿🇼</h2>
         <p className="text-center text-gray-400 mb-6">Welcome! Complete your registration below.</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

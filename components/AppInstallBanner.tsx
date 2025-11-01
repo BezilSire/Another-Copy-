@@ -90,7 +90,7 @@ export const AppInstallBanner: React.FC = () => {
      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-lg bg-slate-800 border border-slate-700 rounded-lg shadow-2xl p-4 flex items-center space-x-4 animate-fade-in z-50">
         <LogoIcon className="h-10 w-10 text-green-500 flex-shrink-0" />
         <div className="flex-grow">
-            <p className="font-bold text-white text-sm">Install the Ubuntium App</p>
+            <p className="font-bold text-white text-sm">Install Global Commons Network</p>
             <p className="text-xs text-gray-300">
                 Tap the <ShareIcon className="inline-block h-4 w-4 mx-0.5" /> icon, then scroll down and tap <AddToHomeScreenIcon className="inline-block h-4 w-4 mx-0.5" /> 'Add to Home Screen'.
             </p>
@@ -105,7 +105,7 @@ export const AppInstallBanner: React.FC = () => {
      <div className="fixed bottom-4 left-1/2 -translate-x-1/2 w-[95%] max-w-lg bg-slate-800 border border-slate-700 rounded-lg shadow-2xl p-4 flex items-center space-x-4 animate-fade-in z-50">
       <LogoIcon className="h-10 w-10 text-green-500 flex-shrink-0" />
       <div className="flex-grow">
-        <p className="font-bold text-white">Install Ubuntium App</p>
+        <p className="font-bold text-white">Install Global Commons Network</p>
         <p className="text-sm text-gray-300">Add to your home screen for a better experience.</p>
       </div>
       <button

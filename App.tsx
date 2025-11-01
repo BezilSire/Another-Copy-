@@ -173,6 +173,7 @@ const App: React.FC = () => {
           onBack={() => setViewingProfileId(null)}
           onStartChat={handleStartChatFromProfile}
           onViewProfile={handleViewProfile}
+          isAdminView={currentUser.role === 'admin'}
         />
       );
     }

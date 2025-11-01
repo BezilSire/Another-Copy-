@@ -179,7 +179,7 @@ export const AuthPage: React.FC = () => {
                     Support
                 </a>
             </div>
-            <p>© Ubuntium Global Commons 2025. All rights reserved.</p>
+            <p>© Global Commons Network 2025. All rights reserved.</p>
         </div>
 
         <PrivacyPolicyModal isOpen={isPolicyVisible} onClose={() => setIsPolicyVisible(false)} />
