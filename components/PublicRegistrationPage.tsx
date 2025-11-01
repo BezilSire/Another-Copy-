@@ -84,7 +84,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                 </div>
                 <div>
                     <label htmlFor="circle" className="block text-sm font-medium text-gray-300">Circle (Your City/Area)</label>
-                    <input type="text" name="circle" id="circle" placeholder="e.g. Kampala" value={formData.circle} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md shadow-sm text-white focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" />
+                    <input type="text" name="circle" id="circle" placeholder="e.g., Bulawayo" value={formData.circle} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md shadow-sm text-white focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" />
                 </div>
             </div>
 

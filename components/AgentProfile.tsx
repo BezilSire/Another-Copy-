@@ -216,7 +216,7 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
               rows={3}
               value={formData.address}
               onChange={handleChange}
-              placeholder="123 Ubuntu Lane, Kampala, Uganda"
+              placeholder="123 Ubuntu Lane, Bulawayo, Zimbabwe"
               className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md shadow-sm text-white focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
             />
         </div>

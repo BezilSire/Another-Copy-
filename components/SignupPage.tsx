@@ -74,7 +74,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, isProcessing, 
             value={circle}
             onChange={(e) => setCircle(e.target.value)}
             className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="e.g., Kampala"
+            placeholder="e.g., Bulawayo"
             required
             disabled={isProcessing}
           />
