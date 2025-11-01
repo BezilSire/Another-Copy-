@@ -3,6 +3,7 @@ import { getAuth } from 'firebase/auth';
 import { getFirestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
+import { getMessaging, isSupported } from 'firebase/messaging';
 import { firebaseConfig } from './firebaseConfig';
 
 // A robust way to initialize Firebase that prevents re-initialization errors.
@@ -14,6 +15,20 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const rtdb = getDatabase(app);
+
+// Create an async function to get the messaging instance, preventing initialization on unsupported browsers.
+export const getMessagingInstance = async () => {
+  try {
+    const isMessagingSupported = await isSupported();
+    if (isMessagingSupported) {
+      return getMessaging(app);
+    }
+    return null;
+  } catch (error) {
+    console.error("Error checking for messaging support:", error);
+    return null;
+  }
+};
 
 // Explicitly enable Firestore persistence with multi-tab support to improve stability
 // and prevent crashes related to IndexedDB connection loss, especially when multiple tabs are open.

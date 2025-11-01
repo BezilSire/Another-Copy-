@@ -75,7 +75,9 @@ export const ConversationList: React.FC<ConversationListProps> = ({ currentUser,
                     <div className="flex-1 min-w-0">
                       <div className="flex justify-between items-center">
                         <p className="font-semibold text-white truncate">{convo.isGroup ? convo.name : otherMemberName}</p>
-                        <p className="text-xs text-gray-500 flex-shrink-0 ml-2">{formatTimeAgo(convo.lastMessageTimestamp.toDate().toISOString())}</p>
+                        <p className="text-xs text-gray-500 flex-shrink-0 ml-2">
+                          {convo.lastMessageTimestamp ? formatTimeAgo(convo.lastMessageTimestamp.toDate().toISOString()) : ''}
+                        </p>
                       </div>
                       <p className={`text-sm truncate ${isUnread ? 'text-white font-medium' : 'text-gray-400'}`}>
                         {lastMessageText}

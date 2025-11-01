@@ -360,7 +360,7 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
                                                 {p.type === 'referral' && `Referral Payout: $${p.amount.toFixed(2)}`}
                                                 {p.type === 'admin_referral_bonus' && `Signup Bonus: $${p.amount.toFixed(2)}`}
                                             </p>
-                                            <p className="text-xs text-gray-400">{formatTimeAgo(p.requestedAt.toDate().toISOString())}</p>
+                                            <p className="text-xs text-gray-400">{p.requestedAt ? formatTimeAgo(p.requestedAt.toDate().toISOString()) : 'Processing...'}</p>
                                         </div>
                                         {isBonusToClaim ? (
                                             <button onClick={() => setClaimingBonus(p)} className="px-3 py-1 bg-green-600 text-white text-sm font-semibold rounded-md hover:bg-green-700">

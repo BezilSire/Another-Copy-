@@ -221,6 +221,12 @@ export const api = {
         return { id: userDoc.id, ...userDoc.data() } as User;
     },
     updateUser: (uid: string, data: Partial<User>) => updateDoc(doc(db, 'users', uid), data),
+    saveFcmToken: (userId: string, token: string): Promise<void> => {
+        const userRef = doc(usersCollection, userId);
+        return updateDoc(userRef, {
+            fcmTokens: arrayUnion(token),
+        });
+    },
     getPublicUserProfile: async (uid: string): Promise<PublicUserProfile | null> => {
         const userDoc = await getDoc(doc(usersCollection, uid));
         if (!userDoc.exists()) return null;
@@ -642,39 +648,23 @@ export const api = {
     dismissReport: (admin: User, reportId: string) => updateDoc(doc(reportsCollection, reportId), { status: 'resolved' }),
     
     // Connect/Chat
-    listenForConversations: (userId: string, callback: (convos: Conversation[]) => void, onError: (error: Error) => void) => 
-        onSnapshot(
-            query(conversationsCollection, where('members', 'array-contains', userId)), 
-            (snapshot) => {
-                const conversations = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
-                conversations.sort((a, b) => {
-                    const timeA = a.lastMessageTimestamp?.toMillis() || 0;
-                    const timeB = b.lastMessageTimestamp?.toMillis() || 0;
-                    return timeB - timeA;
-                });
-                callback(conversations);
-            },
-            onError
-        ),
     startChat: async (currentUser: User, targetUser: PublicUserProfile): Promise<Conversation> => {
         const currentUserId = currentUser.id;
         const targetUserId = targetUser.id;
 
-        const q = query(
-            conversationsCollection,
-            where('isGroup', '==', false),
-            where('members', 'array-contains', currentUserId)
-        );
-        const querySnapshot = await getDocs(q);
-        const existingConvoDoc = querySnapshot.docs.find(doc => doc.data().members.includes(targetUserId));
-
-        if (existingConvoDoc) {
-            return { id: existingConvoDoc.id, ...existingConvoDoc.data() } as Conversation;
-        }
-
+        // Create a predictable, sorted ID for 1-on-1 conversations.
         const convoId = [currentUserId, targetUserId].sort().join('_');
         const convoRef = doc(conversationsCollection, convoId);
         
+        // Attempt to get the document directly. This is more efficient and security-rule-friendly
+        // than querying the entire collection.
+        const convoSnap = await getDoc(convoRef);
+
+        if (convoSnap.exists()) {
+            return { id: convoSnap.id, ...convoSnap.data() } as Conversation;
+        }
+
+        // If no conversation exists, create one.
         const newConvoData: Omit<Conversation, 'id'> = {
             members: [currentUserId, targetUserId],
             memberNames: { [currentUserId]: currentUser.name, [targetUserId]: targetUser.name },
@@ -685,12 +675,15 @@ export const api = {
             isGroup: false
         };
 
+        // Use a transaction to ensure all writes succeed or fail together.
         await runTransaction(db, async (transaction) => {
             transaction.set(convoRef, newConvoData);
 
+            // Add conversation ID to both users' profiles
             transaction.update(doc(usersCollection, currentUserId), { conversationIds: arrayUnion(convoId) });
             transaction.update(doc(usersCollection, targetUserId), { conversationIds: arrayUnion(convoId) });
             
+            // Create a notification for the target user
             const notifRef = doc(collection(db, 'users', targetUserId, 'notifications'));
             transaction.set(notifRef, {
                 userId: targetUserId,
@@ -743,6 +736,22 @@ export const api = {
 
         return { id: groupRef.id, ...newGroup };
     },
+    // FIX: Added missing listenForConversations function
+    listenForConversations: (userId: string, callback: (convos: Conversation[]) => void, onError: (error: Error) => void) => 
+        onSnapshot(
+            query(conversationsCollection, where('members', 'array-contains', userId)), 
+            (snapshot) => {
+                const conversations = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
+                // Sort client-side to avoid index requirement
+                conversations.sort((a, b) => {
+                    const timeA = a.lastMessageTimestamp?.toMillis() || 0;
+                    const timeB = b.lastMessageTimestamp?.toMillis() || 0;
+                    return timeB - timeA;
+                });
+                callback(conversations);
+            },
+            onError
+        ),
     listenForMessages: (convoId: string, callback: (messages: Message[]) => void) => onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Message)))),
     sendMessage: async (convoId: string, message: Omit<Message, 'id' | 'timestamp'>, convo: Conversation) => {
         const batch = writeBatch(db);

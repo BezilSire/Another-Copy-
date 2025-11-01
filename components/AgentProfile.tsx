@@ -280,7 +280,7 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
                                     <p className="font-semibold text-gray-200">
                                        ${p.amount.toFixed(2)} - {p.type}
                                     </p>
-                                    <p className="text-xs text-gray-400">{formatTimeAgo(p.requestedAt.toDate().toISOString())}</p>
+                                    <p className="text-xs text-gray-400">{p.requestedAt ? formatTimeAgo(p.requestedAt.toDate().toISOString()) : 'pending'}</p>
                                 </div>
                                 <PayoutStatusBadge status={p.status} />
                             </div>

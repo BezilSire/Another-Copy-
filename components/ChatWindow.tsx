@@ -78,7 +78,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, currentUse
                          </div>
                     </div>
                      <p className={`text-xs text-gray-500 mt-1 ${isOwnMessage ? 'mr-2' : 'ml-2'}`}>
-                        {formatTimeAgo(msg.timestamp.toDate().toISOString())}
+                        {msg.timestamp ? formatTimeAgo(msg.timestamp.toDate().toISOString()) : 'sending...'}
                     </p>
                 </div>
             )

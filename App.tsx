@@ -245,7 +245,6 @@ const App: React.FC = () => {
             <MemberDashboard 
                 user={currentUser as MemberUser} onUpdateUser={updateUser}
                 unreadCount={unreadNotificationCount} onLogout={requestLogout}
-                onOpenChat={handleOpenChat}
                 onViewProfile={handleViewProfile}
             />
         </div>

@@ -73,7 +73,7 @@ export const PayoutsAdminPage: React.FC<PayoutsAdminPageProps> = ({ payouts }) =
                                     {req.meta?.ventureName && <div className="text-xs">({req.meta.ventureName})</div>}
                                 </td>
                                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400 capitalize">{(req.type || 'referral').replace(/_/g, ' ')}</td>
-                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{formatTimeAgo(req.requestedAt.toDate().toISOString())}</td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{req.requestedAt ? formatTimeAgo(req.requestedAt.toDate().toISOString()) : '...'}</td>
                                 <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">
                                     {req.status === 'pending' && (
                                         <div className="flex items-center space-x-3">

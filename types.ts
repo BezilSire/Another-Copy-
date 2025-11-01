@@ -47,6 +47,7 @@ export interface User {
   stakedCcap?: number;
   currentCycleCcap?: number;
   lastCycleChoice?: 'redeemed' | 'staked' | 'invested';
+  fcmTokens?: string[];
 }
 
 // Specific User Roles
