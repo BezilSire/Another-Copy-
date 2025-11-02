@@ -21,10 +21,18 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, currentUse
 
   useEffect(() => {
     setIsLoading(true);
-    const unsubscribe = api.listenForMessages(conversation.id, (msgs) => {
-      setMessages(msgs);
-      setIsLoading(false);
-    });
+    // FIX: Added the missing onError callback to the listenForMessages function call.
+    const unsubscribe = api.listenForMessages(
+      conversation.id,
+      (msgs) => {
+        setMessages(msgs);
+        setIsLoading(false);
+      },
+      (error) => {
+        console.error("Failed to listen for messages:", error);
+        setIsLoading(false);
+      }
+    );
     return () => unsubscribe();
   }, [conversation.id]);
   
@@ -94,6 +102,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, currentUse
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder="Type a message..."
             className="flex-1 bg-slate-700 rounded-full py-2 px-4 text-white border border-slate-600 focus:outline-none focus:ring-2 focus:ring-green-500"
+            disabled={isLoading}
           />
           <button type="submit" className="bg-green-600 text-white p-3 rounded-full hover:bg-green-700 disabled:bg-slate-600" disabled={!newMessage.trim()}>
             <SendIcon className="h-5 w-5" />

@@ -76,7 +76,7 @@ const App: React.FC = () => {
                     if (convoId && !currentUser.conversationIds?.includes(convoId)) {
                         console.log(`Discovered new chat ${convoId}, adding to user profile.`);
                         updateUser({ conversationIds: arrayUnion(convoId) as any });
-                        api.markNotificationAsRead(notif.id);
+                        api.markNotificationAsRead(currentUser.id, notif.id);
                     }
                 }
             });

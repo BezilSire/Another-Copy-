@@ -112,7 +112,7 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
     const interestsArray = Array.isArray(interests) ? interests : (typeof interests === 'string' ? interests.split(',').map(s => s.trim()).filter(Boolean) : []);
     
     const lookingForArray = publicProfile.lookingFor?.filter(Boolean) || [];
-    const hasPitchDeck = !!(publicProfile.businessIdea);
+    const hasVentureInfo = !!publicProfile.isLookingForPartners;
 
 
     const isOwnProfile = publicProfile.id === currentUser.id;
@@ -266,7 +266,7 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
                     <nav className="-mb-px flex space-x-8" aria-label="Tabs">
                         <TabButton label="Activity" isActive={activeTab === 'activity'} onClick={() => setActiveTab('activity')} />
                         <TabButton label="About" isActive={activeTab === 'about'} onClick={() => setActiveTab('about')} />
-                        {hasPitchDeck && (
+                        {hasVentureInfo && (
                              <TabButton label="Venture Idea" isActive={activeTab === 'venture'} onClick={() => setActiveTab('venture')} />
                         )}
                         {publicProfile.role === 'member' && (
@@ -289,7 +289,7 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
                     </div>
                 )}
                 {activeTab === 'about' && renderAboutTab()}
-                {activeTab === 'venture' && hasPitchDeck && renderVentureTab()}
+                {activeTab === 'venture' && hasVentureInfo && renderVentureTab()}
                 {activeTab === 'card' && publicProfile.role === 'member' && (
                     <div className="animate-fade-in">
                         <MemberCard user={publicProfile as PublicUserProfile} />

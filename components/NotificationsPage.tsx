@@ -99,7 +99,7 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ user, onNa
 
   const handleItemClick = (item: NotificationItem) => {
     if (item.itemType === 'notification' && !(item as Notification).read) {
-      api.markNotificationAsRead(item.id).catch(err => console.error("Failed to mark as read:", err));
+      api.markNotificationAsRead(user.id, item.id).catch(err => console.error("Failed to mark as read:", err));
     }
     // If onViewProfile is provided and it's a profile link, use it. Otherwise, use onNavigate.
     if (onViewProfile && (item.type === 'NEW_MEMBER' || item.type === 'POST_LIKE' || item.type === 'NEW_FOLLOWER')) {

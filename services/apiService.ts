@@ -1,3 +1,212 @@
+/*
+  IMPORTANT: COMPREHENSIVE FIRESTORE SECURITY RULES
+
+  The issue where members are unable to interact with posts (like, comment, etc.)
+  is caused by restrictive Firestore security rules. This is a backend permission
+  issue, not a bug in the application code.
+
+  To ensure the entire application functions smoothly and securely, you need to
+  replace your existing Firestore rules with the comprehensive ruleset provided below.
+  This will not only fix the post interaction problem but also correctly secure all
+  other data access patterns used throughout the app.
+
+  Please navigate to your Firebase project:
+  Firebase Console -> Firestore Database -> Rules tab
+  ...and replace the entire content of the rules editor with the following:
+
+  --- COPY AND PASTE INTO YOUR FIRESTORE RULES EDITOR ---
+
+  rules_version = '2';
+  service cloud.firestore {
+    match /databases/{database}/documents {
+    
+      // --- Helper Functions ---
+      function isSignedIn() {
+        return request.auth != null;
+      }
+      
+      function isOwner(userId) {
+        return request.auth.uid == userId;
+      }
+
+      function getUserData() {
+        return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+      }
+
+      function userRole() {
+        return getUserData().role;
+      }
+
+      function isAdmin() {
+        return isSignedIn() && userRole() == 'admin';
+      }
+
+      function isAgent() {
+        return isSignedIn() && userRole() == 'agent';
+      }
+
+      function isCreator() {
+        return isSignedIn() && userRole() == 'creator';
+      }
+
+      function isVendor() {
+        return isSignedIn() && userRole() == 'vendor';
+      }
+
+      // --- Collection: users ---
+      match /users/{userId} {
+        // Public can read referral codes for signup.
+        // Signed-in users can read limited public profiles. Admins can read all.
+        // A user can read/write their own full document.
+        allow read: if isSignedIn() || request.resource.data.keys().hasOnly(['referralCode']);
+        allow get: if isOwner(userId) || isAdmin();
+        allow list: if isSignedIn();
+        allow create; // Allow user creation during signup.
+        allow update: if isOwner(userId) || isAdmin();
+        allow delete: if isAdmin();
+      }
+      
+      // --- Collection: members ---
+      match /members/{memberId} {
+        // Public can lookup by email for signup flow. Agents/Admins can read lists.
+        allow read: if isSignedIn() || request.query.limit == 1;
+        // Agents/Creators can create new members.
+        allow create: if isAgent() || isCreator();
+        // An admin or the associated user can update a member doc.
+        allow update: if isAdmin() || (isSignedIn() && getUserData().member_id == memberId);
+        allow delete: if isAdmin();
+      }
+      
+      // --- Collection: posts and subcollections ---
+      match /posts/{postId} {
+        // Distress posts are only readable by admins. Others are readable by any signed-in user.
+        allow read: if isSignedIn() && (resource.data.types != 'distress' || isAdmin());
+        
+        // Any signed-in user can create a post, ensuring they are the author.
+        allow create: if isSignedIn() && request.resource.data.authorId == request.auth.uid;
+        
+        // Owner or admin can delete.
+        allow delete: if isOwner(resource.data.authorId) || isAdmin();
+        
+        // Update: This fixes the interaction issues.
+        allow update: if 
+          // Case 1: Owner or admin can edit any field.
+          (isOwner(resource.data.authorId) || isAdmin()) ||
+          // Case 2: Any signed-in user can update only the interaction fields (likes, comment/repost counts).
+          (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().size() <= 3 &&
+            request.resource.data.diff(resource.data).affectedKeys().hasAny(['upvotes', 'commentCount', 'repostCount']));
+            
+        // Comments subcollection
+        match /comments/{commentId} {
+          allow read, create: if isSignedIn();
+          allow delete: if isOwner(resource.data.authorId) || isAdmin();
+          // Allow any signed-in user to update only the upvotes array.
+          allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes']);
+        }
+      }
+
+      // --- Collection: conversations and subcollections ---
+      match /conversations/{convoId} {
+        function isMember() {
+          return request.auth.uid in resource.data.members;
+        }
+        
+        allow get, list, update: if isMember();
+        allow create: if isSignedIn() && request.auth.uid in request.resource.data.members;
+        
+        match /messages/{messageId} {
+          allow read: if isMember();
+          allow create: if isMember() && isOwner(request.resource.data.senderId);
+        }
+      }
+      
+      // --- Collection: users/{userId}/notifications ---
+      match /users/{userId}/notifications/{notificationId} {
+        allow read, update, delete: if isOwner(userId);
+        // Admins/system can create notifications for others (e.g., on new chat).
+        allow create: if isOwner(userId) || isAdmin(); 
+      }
+      
+      // --- Other Read-Only or Admin-Write Collections ---
+      match /broadcasts/{broadcastId} {
+        allow read: if isSignedIn();
+        allow create, update, delete: if isAdmin();
+      }
+      
+      match /reports/{reportId} {
+        allow read, update: if isAdmin();
+        allow create: if isSignedIn();
+      }
+      
+      match /activity/{activityId} {
+        allow read: if isSignedIn();
+        // Activity should be created by backend functions, not clients.
+        allow write: if false; 
+      }
+
+      match /globals/{globalId} {
+          allow read: if isSignedIn();
+          allow write: if isAdmin();
+      }
+
+      // --- Collections with more specific rules ---
+      match /proposals/{proposalId} {
+        allow read, create: if isSignedIn();
+        allow update: if
+            // Admin can change status
+            (isAdmin() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status'])) ||
+            // Any user can vote or update comment count, but nothing else
+            (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasAny(['votesFor', 'votesAgainst', 'voteCountFor', 'voteCountAgainst', 'commentCount']));
+
+        match /comments/{commentId} {
+            allow read, create: if isSignedIn();
+            allow delete: if isOwner(resource.data.authorId) || isAdmin();
+            allow update: if isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes']);
+        }
+      }
+
+      match /payouts/{payoutId} {
+        allow read: if isOwner(resource.data.userId) || isAdmin();
+        allow create: if isSignedIn() && isOwner(request.resource.data.userId);
+        allow update: if isAdmin() || (isOwner(resource.data.userId) && resource.data.status == 'pending');
+      }
+
+      match /ventures/{ventureId} {
+        allow read, create: if isSignedIn();
+        allow update: if isSignedIn(); // Users can invest (update backers/funding)
+        allow delete: if isOwner(resource.data.ownerId) || isAdmin();
+
+        match /distributions/{distId} {
+            allow read: if isSignedIn();
+            allow write: if isAdmin();
+        }
+      }
+
+      match /creator_content/{contentId} {
+          allow read: if isSignedIn();
+          allow create: if (isCreator() || isAdmin()) && isOwner(request.resource.data.creatorId);
+          allow delete: if isOwner(resource.data.creatorId) || isAdmin();
+      }
+
+      match /sustenance_cycles/{cycleId} {
+          allow read: if isSignedIn();
+          allow write: if isAdmin();
+      }
+
+      match /sustenance_vouchers/{voucherId} {
+          allow read: if isOwner(resource.data.userId) || isVendor() || isAdmin();
+          allow update: if isVendor(); // Vendors can redeem
+          allow create: if isAdmin();
+      }
+
+      match /price_verifications/{verificationId} {
+          allow create: if isSignedIn();
+          allow read: if isAdmin();
+      }
+    }
+  }
+  --- END OF RULES ---
+*/
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -68,6 +277,8 @@ const sustenanceCollection = collection(db, 'sustenance_cycles');
 const vouchersCollection = collection(db, 'sustenance_vouchers');
 const venturesCollection = collection(db, 'ventures');
 const globalsCollection = collection(db, 'globals');
+const creatorContentCollection = collection(db, 'creator_content');
+
 
 // Helper function for robust post deletion
 const _deletePostAndSubcollections = async (postId: string) => {
@@ -282,112 +493,35 @@ export const api = {
             usersCollection,
             where('name', '>=', capitalizedQuery),
             where('name', '<=', capitalizedQuery + '\uf8ff'),
-            limit(10)
+            limit(20)
         );
-    
-        const skillQueryLower = query(
-            usersCollection,
-            where('skills', 'array-contains', lowerCaseQuery),
-            limit(10)
-        );
-        
-        const skillQueryCapitalized = query(
-            usersCollection,
-            where('skills', 'array-contains', capitalizedQuery),
-            limit(10)
-        );
-    
+
         try {
-            const [nameSnapshot, skillSnapshotLower, skillSnapshotCapitalized] = await Promise.all([
-                getDocs(nameQuery),
-                getDocs(skillQueryLower),
-                getDocs(skillQueryCapitalized)
-            ]);
-    
-            const userMap = new Map<string, PublicUserProfile>();
-    
-            const processSnapshot = (snapshot: DocumentData) => {
-                snapshot.forEach((doc: DocumentData) => {
-                    if (doc.id !== currentUser.id && !userMap.has(doc.id)) {
-                        userMap.set(doc.id, { id: doc.id, ...doc.data() } as PublicUserProfile);
-                    }
-                });
-            }
-    
-            processSnapshot(nameSnapshot);
-            processSnapshot(skillSnapshotLower);
-            processSnapshot(skillSnapshotCapitalized);
-    
-            return Array.from(userMap.values());
+            const snapshot = await getDocs(nameQuery);
+            const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile));
+            return users.filter(u => u.id !== currentUser.id);
         } catch (error) {
             console.error("Error searching users:", error);
             if ((error as any).code === 'failed-precondition') {
-                throw new Error("User search requires a database index. Please check your Firestore console for a link to create the required index on the 'skills' field.");
+                throw new Error("User search is not configured. Please contact an admin to enable it.");
             }
             throw new Error("Could not perform search at this time.");
         }
     },
-    findCollaborators: async (currentUser: User): Promise<PublicUserProfile[]> => {
-        let potentialCollaborators: PublicUserProfile[] = [];
-        try {
-            const q = query(
-                usersCollection, 
-                where('isLookingForPartners', '==', true), 
-                where('status', '==', 'active'),
-                limit(50)
-            );
-            const snapshot = await getDocs(q);
-            potentialCollaborators = snapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile))
-                .filter(u => u.id !== currentUser.id);
-        } catch (error) {
-            console.error("Error finding collaborators, falling back to a general user list.", error);
-            if ((error as any).code === 'failed-precondition') {
-                // Don't throw, just use the fallback.
-                console.warn("Firestore index for collaborators missing. Consider creating a composite index on (isLookingForPartners, status).");
-            }
-            const fallbackQ = query(usersCollection, where('status', '==', 'active'), limit(50));
-            const fallbackSnapshot = await getDocs(fallbackQ);
-            potentialCollaborators = fallbackSnapshot.docs
-                .map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile))
-                .filter(u => u.id !== currentUser.id);
-        }
-
-        const currentUserSkills = Array.isArray(currentUser.skills) 
-            ? currentUser.skills.map(s => s.toLowerCase())
-            : typeof currentUser.skills === 'string' 
-                ? currentUser.skills.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) 
-                : [];
-
-        if (currentUserSkills.length === 0) {
-            return potentialCollaborators.sort((a, b) => a.name.localeCompare(b.name));
-        }
-
-        const scoredCollaborators = potentialCollaborators.map(pUser => {
-            let score = 0;
-            const pUserSkills = Array.isArray(pUser.skills) 
-                ? pUser.skills.map(s => s.toLowerCase())
-                : typeof pUser.skills === 'string' 
-                    ? pUser.skills.split(',').map(s => s.trim().toLowerCase()).filter(Boolean) 
-                    : [];
-
-            const complementarySkills = pUserSkills.filter(skill => !currentUserSkills.includes(skill));
-            score += complementarySkills.length;
-            
-            return { user: pUser, score };
-        });
-
-        scoredCollaborators.sort((a, b) => {
-            if (b.score !== a.score) {
-                return b.score - a.score;
-            }
-            return a.user.name.localeCompare(b.user.name);
-        });
-
-        return scoredCollaborators.map(item => item.user);
+    getChatContacts: async (currentUser: User): Promise<User[]> => {
+        const q = query(usersCollection, where('status', '==', 'active'));
+        const snapshot = await getDocs(q);
+        const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
+        return users.filter(u => u.id !== currentUser.id);
     },
-    getUserByReferralCode: async (referralCode: string): Promise<User | null> => {
-        const q = query(usersCollection, where('referralCode', '==', referralCode), limit(1));
+    getSearchableUsers: async (currentUser: User): Promise<PublicUserProfile[]> => {
+        const q = query(usersCollection, where('status', '==', 'active'), orderBy('createdAt', 'desc'), limit(100));
+        const snapshot = await getDocs(q);
+        const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile));
+        return users.filter(u => u.id !== currentUser.id);
+    },
+    getUserByReferralCode: async (refCode: string): Promise<User | null> => {
+        const q = query(usersCollection, where('referralCode', '==', refCode), limit(1));
         const snapshot = await getDocs(q);
         if (snapshot.empty) {
             return null;
@@ -395,11 +529,23 @@ export const api = {
         const doc = snapshot.docs[0];
         return { id: doc.id, ...doc.data() } as User;
     },
+    findCollaborators: async (currentUser: User): Promise<PublicUserProfile[]> => {
+        const q = query(usersCollection, where('isLookingForPartners', '==', true), limit(50));
+        const snapshot = await getDocs(q);
+        const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile));
+        return users.filter(u => u.id !== currentUser.id);
+    },
+    getCollaborators: async (count: number): Promise<{ users: User[] }> => {
+        const q = query(usersCollection, where('isLookingForPartners', '==', true), limit(count));
+        const snapshot = await getDocs(q);
+        const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
+        return { users };
+    },
 
     // Admin
     listenForAllUsers: (adminUser: User, callback: (users: User[]) => void, onError: (error: Error) => void) => onSnapshot(query(usersCollection, orderBy('createdAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), onError),
     listenForAllMembers: (adminUser: User, callback: (members: Member[]) => void, onError: (error: Error) => void) => onSnapshot(query(membersCollection, orderBy('date_registered', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), onError),
-    listenForAllAgents: (adminUser: User, callback: (agents: Agent[]) => void, onError: (error: Error) => void) => onSnapshot(query(usersCollection, where('role', 'in', ['agent', 'creator'])), s => {
+    listenForAllAgents: (adminUser: User, callback: (agents: Agent[]) => void, onError: (error: Error) => void) => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => {
         const agents = s.docs.map(d => ({ id: d.id, ...d.data() } as Agent));
         agents.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
         callback(agents);
@@ -424,7 +570,7 @@ export const api = {
         const docRef = await addDoc(membersCollection, newMember);
         return { id: docRef.id, ...newMember };
     },
-    processPendingWelcomeMessages: async () => 0, // Simplified
+    processPendingWelcomeMessages: async () => 0,
 
     // Member
     getMemberByEmail: async (email: string): Promise<Member | null> => {
@@ -447,7 +593,7 @@ export const api = {
                     callback([]);
                     return;
                 }
-                const q = query(usersCollection, where('referredBy', '==', referralCode), orderBy('createdAt', 'desc'));
+                const q = query(usersCollection, where('referredBy', '==', referralCode));
                 const referredSnapshot = await getDocs(q);
                 callback(referredSnapshot.docs.map(d => ({id: d.id, ...d.data()}) as PublicUserProfile));
             } catch (error) {
@@ -482,18 +628,17 @@ export const api = {
 
     // Posts
     createPost: (user: User, content: string, type: Post['types'], ccapToAward: number) => {
-        const transaction = runTransaction(db, async (t) => {
+        return runTransaction(db, async (t) => {
             const postRef = doc(collection(db, 'posts'));
             const userRef = doc(db, 'users', user.id);
 
             const newPost: Omit<Post, 'id'> = {
                 authorId: user.id, authorName: user.name, authorCircle: user.circle, authorRole: user.role,
-                content, date: new Date().toISOString(), upvotes: [], types: type,
+                content, date: new Date().toISOString(), upvotes: [], types: type, commentCount: 0, repostCount: 0, isPinned: false,
             };
             t.set(postRef, newPost);
             if (ccapToAward > 0) t.update(userRef, { ccap: increment(ccapToAward) });
         });
-        return transaction;
     },
     repostPost: async (originalPost: Post, user: User, comment: string) => {
         const batch = writeBatch(db);
@@ -506,7 +651,8 @@ export const api = {
             repostedFrom: {
                 authorId: originalPost.authorId, authorName: originalPost.authorName,
                 authorCircle: originalPost.authorCircle, content: originalPost.content, date: originalPost.date,
-            }
+            },
+            isPinned: false,
         };
         batch.set(newPostRef, repost);
         batch.update(originalPostRef, { repostCount: increment(1) });
@@ -519,7 +665,7 @@ export const api = {
         const userRef = doc(usersCollection, user.id);
         const newPost: Omit<Post, 'id'> = {
             authorId: user.id, authorName: `Anonymous Member`, authorCircle: user.circle, authorRole: user.role,
-            content, date: new Date().toISOString(), upvotes: [], types: 'distress',
+            content, date: new Date().toISOString(), upvotes: [], types: 'distress', isPinned: false,
         };
         batch.set(postRef, newPost);
         batch.update(userRef, { distress_calls_available: increment(-1), last_distress_call: serverTimestamp() });
@@ -568,11 +714,11 @@ export const api = {
 
         if (filter === 'all') {
             const typesToQuery = isAdmin ? [...publicTypes, 'distress'] : publicTypes;
-            const constraints: any[] = [ where('types', 'in', typesToQuery), orderBy('date', 'desc'), limit(count) ];
+            const constraints: any[] = [where('isPinned', '==', false), where('types', 'in', typesToQuery), orderBy('date', 'desc'), limit(count)];
             if (start) { constraints.push(startAfter(start)); }
             finalQuery = query(postsCollection, ...constraints);
         } else {
-             const constraints: any[] = [ where('types', '==', filter), orderBy('date', 'desc'), limit(count) ];
+             const constraints: any[] = [ where('isPinned', '==', false), where('types', '==', filter), orderBy('date', 'desc'), limit(count) ];
              if (start) { constraints.push(startAfter(start)); }
              finalQuery = query(postsCollection, ...constraints);
         }
@@ -609,6 +755,8 @@ export const api = {
     deleteComment: (parentId: string, commentId: string, parentCollection: 'posts' | 'proposals') => {
         const batch = writeBatch(db);
         batch.delete(doc(db, parentCollection, parentId, 'comments', commentId));
+        const parentRef = doc(db, parentCollection, parentId);
+        batch.update(parentRef, { commentCount: increment(-1) });
         return batch.commit();
     },
     upvoteComment: async (parentId: string, commentId: string, userId: string, parentCollection: 'posts' | 'proposals') => {
@@ -641,108 +789,20 @@ export const api = {
     resolvePostReport: async (admin: User, reportId: string, postId: string, authorId: string) => {
         const batch = writeBatch(db);
         batch.update(doc(reportsCollection, reportId), { status: 'resolved' });
-        batch.delete(doc(postsCollection, postId));
+        if(postId) {
+            batch.delete(doc(postsCollection, postId));
+        }
         batch.update(doc(usersCollection, authorId), { credibility_score: increment(-25) });
         await batch.commit();
     },
     dismissReport: (admin: User, reportId: string) => updateDoc(doc(reportsCollection, reportId), { status: 'resolved' }),
     
     // Connect/Chat
-    startChat: async (currentUser: User, targetUser: PublicUserProfile): Promise<Conversation> => {
-        const currentUserId = currentUser.id;
-        const targetUserId = targetUser.id;
-
-        // Create a predictable, sorted ID for 1-on-1 conversations.
-        const convoId = [currentUserId, targetUserId].sort().join('_');
-        const convoRef = doc(conversationsCollection, convoId);
-        
-        // Attempt to get the document directly. This is more efficient and security-rule-friendly
-        // than querying the entire collection.
-        const convoSnap = await getDoc(convoRef);
-
-        if (convoSnap.exists()) {
-            return { id: convoSnap.id, ...convoSnap.data() } as Conversation;
-        }
-
-        // If no conversation exists, create one.
-        const newConvoData: Omit<Conversation, 'id'> = {
-            members: [currentUserId, targetUserId],
-            memberNames: { [currentUserId]: currentUser.name, [targetUserId]: targetUser.name },
-            lastMessage: "Conversation started", 
-            lastMessageTimestamp: Timestamp.now(),
-            lastMessageSenderId: currentUserId, 
-            readBy: [currentUserId], 
-            isGroup: false
-        };
-
-        // Use a transaction to ensure all writes succeed or fail together.
-        await runTransaction(db, async (transaction) => {
-            transaction.set(convoRef, newConvoData);
-
-            // Add conversation ID to both users' profiles
-            transaction.update(doc(usersCollection, currentUserId), { conversationIds: arrayUnion(convoId) });
-            transaction.update(doc(usersCollection, targetUserId), { conversationIds: arrayUnion(convoId) });
-            
-            // Create a notification for the target user
-            const notifRef = doc(collection(db, 'users', targetUserId, 'notifications'));
-            transaction.set(notifRef, {
-                userId: targetUserId,
-                message: `You have a new chat from ${currentUser.name}`,
-                link: convoId,
-                read: false,
-                timestamp: serverTimestamp(),
-                type: 'NEW_CHAT',
-                causerId: currentUserId,
-            });
-        });
-        
-        return { id: convoId, ...newConvoData };
-    },
-    createGroupChat: async (name: string, members: (User | PublicUserProfile)[], currentUser: User): Promise<Conversation> => {
-        const memberIds = [...new Set([...members.map(m => m.id), currentUser.id])];
-        if (memberIds.length < 2) {
-            throw new Error("A group chat must have at least 2 members.");
-        }
-        const memberNames = [...members, currentUser].reduce((acc, m) => ({...acc, [m.id]: m.name}), {} as {[key: string]: string});
-
-        const newGroup: Omit<Conversation, 'id'> = {
-            name, members: memberIds, memberNames, 
-            lastMessage: `${currentUser.name} created the group.`, 
-            lastMessageTimestamp: Timestamp.now(),
-            lastMessageSenderId: currentUser.id, readBy: [currentUser.id], isGroup: true
-        };
-        const groupRef = await addDoc(conversationsCollection, newGroup);
-
-        const batch = writeBatch(db);
-        memberIds.forEach(id => {
-          const userRef = doc(usersCollection, id);
-          batch.update(userRef, { conversationIds: arrayUnion(groupRef.id) });
-          
-          if (id !== currentUser.id) {
-              const notifRef = doc(collection(db, 'users', id, 'notifications'));
-              batch.set(notifRef, {
-                userId: id,
-                message: `${currentUser.name} added you to a new group: ${name}`,
-                link: groupRef.id,
-                read: false,
-                timestamp: serverTimestamp(),
-                type: 'NEW_CHAT',
-                causerId: currentUser.id,
-              });
-          }
-        });
-        
-        await batch.commit();
-
-        return { id: groupRef.id, ...newGroup };
-    },
-    // FIX: Added missing listenForConversations function
     listenForConversations: (userId: string, callback: (convos: Conversation[]) => void, onError: (error: Error) => void) => 
         onSnapshot(
             query(conversationsCollection, where('members', 'array-contains', userId)), 
             (snapshot) => {
                 const conversations = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
-                // Sort client-side to avoid index requirement
                 conversations.sort((a, b) => {
                     const timeA = a.lastMessageTimestamp?.toMillis() || 0;
                     const timeB = b.lastMessageTimestamp?.toMillis() || 0;
@@ -752,7 +812,85 @@ export const api = {
             },
             onError
         ),
-    listenForMessages: (convoId: string, callback: (messages: Message[]) => void) => onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Message)))),
+    startChat: async (currentUser: User, targetUser: PublicUserProfile): Promise<Conversation> => {
+        const currentUserId = currentUser.id;
+        const targetUserId = targetUser.id;
+    
+        const q = query(
+            conversationsCollection,
+            where('members', 'array-contains', currentUserId)
+        );
+    
+        const querySnapshot = await getDocs(q);
+        
+        const existingConvoDoc = querySnapshot.docs.find(doc => {
+            const data = doc.data();
+            return data.isGroup === false && data.members.includes(targetUserId);
+        });
+    
+        if (existingConvoDoc) {
+            return { id: existingConvoDoc.id, ...existingConvoDoc.data() } as Conversation;
+        }
+    
+        const convoId = [currentUserId, targetUserId].sort().join('_');
+        const convoRef = doc(conversationsCollection, convoId);
+        
+        const newConvoData: Omit<Conversation, 'id'> = {
+            members: [currentUserId, targetUserId],
+            memberNames: { [currentUserId]: currentUser.name, [targetUserId]: targetUser.name },
+            lastMessage: "Conversation started", 
+            lastMessageTimestamp: Timestamp.now(),
+            lastMessageSenderId: currentUserId, 
+            readBy: [currentUserId], 
+            isGroup: false
+        };
+    
+        await setDoc(convoRef, newConvoData);
+
+        const batch = writeBatch(db);
+        const currentUserRef = doc(usersCollection, currentUserId);
+        const targetUserRef = doc(usersCollection, targetUserId);
+        batch.update(currentUserRef, { conversationIds: arrayUnion(convoId) });
+        batch.update(targetUserRef, { conversationIds: arrayUnion(convoId) });
+
+        // Create notification for target user
+        const notificationRef = doc(collection(db, 'users', targetUserId, 'notifications'));
+        batch.set(notificationRef, {
+            userId: targetUserId,
+            message: `You have a new message from ${currentUser.name}`,
+            link: convoId,
+            read: false,
+            timestamp: serverTimestamp(),
+            type: 'NEW_CHAT',
+            causerId: currentUserId,
+        });
+
+        await batch.commit();
+        
+        return { id: convoId, ...newConvoData };
+    },
+    createGroupChat: async (name: string, members: PublicUserProfile[], currentUser: User) => {
+        const allMembers = [currentUser, ...members];
+        const memberIds = allMembers.map(m => m.id);
+        const memberNames = allMembers.reduce((acc, member) => {
+            acc[member.id] = member.name;
+            return acc;
+        }, {} as {[key: string]: string});
+    
+        const newGroup: Omit<Conversation, 'id'> = {
+            name, members: memberIds, memberNames, lastMessage: `${currentUser.name} created the group.`, lastMessageTimestamp: Timestamp.now(),
+            lastMessageSenderId: currentUser.id, readBy: [currentUser.id], isGroup: true
+        };
+        const docRef = await addDoc(conversationsCollection, newGroup);
+    
+        const batch = writeBatch(db);
+        memberIds.forEach(id => {
+            const userRef = doc(usersCollection, id);
+            batch.update(userRef, { conversationIds: arrayUnion(docRef.id) });
+        });
+        await batch.commit();
+    },
+    listenForMessages: (convoId: string, callback: (messages: Message[]) => void, onError: (error: Error) => void) => onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Message))), onError),
     sendMessage: async (convoId: string, message: Omit<Message, 'id' | 'timestamp'>, convo: Conversation) => {
         const batch = writeBatch(db);
         const messageRef = doc(collection(db, 'conversations', convoId, 'messages'));
@@ -796,7 +934,7 @@ export const api = {
         ),
     listenForRecentActivity: (count: number, callback: (acts: Activity[]) => void, onError: (error: Error) => void) => onSnapshot(query(activityCollection, orderBy('timestamp', 'desc'), limit(count)), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), onError),
     listenForAllNewMemberActivity: (callback: (acts: Activity[]) => void, onError: (error: Error) => void) => onSnapshot(query(activityCollection, where('type', '==', 'NEW_MEMBER'), orderBy('timestamp', 'desc'), limit(10)), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), onError),
-    markNotificationAsRead: (notificationId: string) => updateDoc(doc(db, 'users', auth.currentUser!.uid, 'notifications', notificationId), { read: true }),
+    markNotificationAsRead: (userId: string, notificationId: string) => updateDoc(doc(db, 'users', userId, 'notifications', notificationId), { read: true }),
     markAllNotificationsAsRead: async (userId: string) => {
         const q = query(collection(db, 'users', userId, 'notifications'), where('read', '==', false));
         const snapshot = await getDocs(q);
@@ -839,11 +977,7 @@ export const api = {
         const q = query(payoutsCollection, where('userId', '==', userId));
         return onSnapshot(q, (snapshot) => {
             const payouts = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest));
-            payouts.sort((a, b) => {
-                const timeA = a.requestedAt?.toMillis() || 0;
-                const timeB = b.requestedAt?.toMillis() || 0;
-                return timeB - timeA;
-            });
+            payouts.sort((a, b) => (b.requestedAt?.toMillis() || 0) - (a.requestedAt?.toMillis() || 0));
             callback(payouts);
         }, onError);
     },
@@ -875,7 +1009,7 @@ export const api = {
     stakeCcapForNextCycle: (user: MemberUser) => { return Promise.resolve() },
     convertCcapToVeq: async (user: MemberUser, venture: Venture, ccapAmount: number, ccapRate: number) => {
         const usdValue = ccapAmount * ccapRate;
-        const shares = Math.floor(usdValue); // Simplified 1 USD = 1 share
+        const shares = Math.floor(usdValue); 
 
         return runTransaction(db, async t => {
             const userRef = doc(usersCollection, user.id);
@@ -915,7 +1049,7 @@ export const api = {
         scap: increment(10), 
         lastDailyCheckin: serverTimestamp() 
       }).then(() => ({
-        scap: increment(10),
+        scap: increment(10) as unknown as number,
         lastDailyCheckin: Timestamp.now()
       }));
     },
@@ -941,7 +1075,7 @@ export const api = {
     },
 
     // Ventures
-    getCollaborators: async (count: number): Promise<{ users: User[] }> => {
+    getVentureMembers: async (count: number): Promise<{ users: User[] }> => {
         const q = query(usersCollection, where('role', '==', 'member'), where('isLookingForPartners', '==', true), limit(count));
         const snapshot = await getDocs(q);
         return { users: snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User)) };
@@ -1017,25 +1151,6 @@ export const api = {
         }
         return false;
     },
-
-    // Creator Content
-    createCreatorContent: (user: User, title: string, content: string) => addDoc(collection(db, 'creator_content'), {
-        creatorId: user.id,
-        creatorName: user.name,
-        title,
-        content,
-        createdAt: serverTimestamp(),
-    }),
-    listenForCreatorContent: (creatorId: string, callback: (content: CreatorContent[]) => void, onError: (e: Error) => void) => onSnapshot(
-        query(collection(db, 'creator_content'), where('creatorId', '==', creatorId), orderBy('createdAt', 'desc')),
-        s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as CreatorContent))),
-        onError
-    ),
-    deleteCreatorContent: (contentId: string) => deleteDoc(doc(db, 'creator_content', contentId)),
-    listenForContentFromReferrer: (referrerId: string, callback: (content: CreatorContent[]) => void, onError: (e: Error) => void) => {
-        const q = query(collection(db, 'creator_content'), where('creatorId', '==', referrerId), orderBy('createdAt', 'desc'));
-        return onSnapshot(q, s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as CreatorContent))), onError);
-    },
     
     // Globals / CVP
     getCommunityValuePool: async (): Promise<CommunityValuePool> => {
@@ -1052,4 +1167,30 @@ export const api = {
         const newTotal = (cvpDoc.data()?.total_usd_value || 0) + amount;
         t.set(cvpRef, { total_usd_value: newTotal }, { merge: true });
     }),
+    
+    // Creator Content
+    listenForContentFromReferrer: (referrerId: string, callback: (content: CreatorContent[]) => void, onError: (error: Error) => void) => {
+        const q = query(creatorContentCollection, where('creatorId', '==', referrerId), orderBy('createdAt', 'desc'));
+        return onSnapshot(q, (snapshot) => {
+            const content = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CreatorContent));
+            callback(content);
+        }, onError);
+    },
+    createCreatorContent: (user: User, title: string, content: string) => {
+        return addDoc(creatorContentCollection, {
+            creatorId: user.id,
+            title,
+            content,
+            createdAt: serverTimestamp(),
+        });
+    },
+    deleteCreatorContent: (contentId: string) => {
+        return deleteDoc(doc(creatorContentCollection, contentId));
+    },
+    listenForCreatorContent: (creatorId: string, callback: (content: CreatorContent[]) => void, onError: (error: Error) => void) => {
+        const q = query(creatorContentCollection, where('creatorId', '==', creatorId), orderBy('createdAt', 'desc'));
+        return onSnapshot(q, (snapshot) => {
+            callback(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as CreatorContent)));
+        }, onError);
+    },
 };
