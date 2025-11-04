@@ -1,89 +1,54 @@
-
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
+const { GoogleGenAI } = require("@google/genai");
 
 admin.initializeApp();
-
 const db = admin.firestore();
 
-exports.sendChatNotification = functions.firestore
-  .document("conversations/{convoId}/messages/{messageId}")
-  .onCreate(async (snap, context) => {
-    const message = snap.data();
-    const convoId = context.params.convoId;
+// --- Utils ---
+const generateAgentCode = () => {
+  const prefix = 'UGC';
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `${prefix}-${result}`;
+};
 
-    // Get the conversation document
-    const convoRef = db.collection("conversations").doc(convoId);
-    const convoDoc = await convoRef.get();
-    if (!convoDoc.exists) {
-      console.log("Conversation doc not found:", convoId);
-      return null;
-    }
-    const conversation = convoDoc.data();
+const generateReferralCode = () => {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // Exclude confusing chars like I, O, 0, 1
+  let result = '';
+  for (let i = 0; i < 6; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+};
 
-    // Get sender ID
-    const senderId = message.senderId;
+// --- Gemini ---
+// Ensure you have set the API key in your Firebase environment configuration
+// firebase functions:config:set env.api_key="YOUR_API_KEY"
+const GEMINI_API_KEY = functions.config().env.api_key;
+let ai;
+if (GEMINI_API_KEY) {
+  ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+} else {
+  console.warn("Gemini API Key is missing from Firebase environment config.");
+}
 
-    // Get recipient IDs
-    const recipientIds = conversation.members.filter((id) => id !== senderId);
-    if (recipientIds.length === 0) {
-      console.log("No recipients to send notification to.");
-      return null;
-    }
-
-    // Get recipient tokens
-    const tokens = [];
-    const userDocs = await db.collection("users").where(admin.firestore.FieldPath.documentId(), 'in', recipientIds).get();
-    
-    userDocs.forEach(doc => {
-      const userData = doc.data();
-      if (userData.fcmTokens && Array.isArray(userData.fcmTokens)) {
-        tokens.push(...userData.fcmTokens);
-      }
+const generateWelcomeMessage = async (name) => {
+  if (!ai) {
+    return `Welcome, ${name}! We are excited to have you in the Global Commons Network.`;
+  }
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: `Generate a short, friendly, and inspiring welcome message for a new member named "${name}" joining the Global Commons Network. Keep it under 280 characters. Be warm and encouraging.`,
+      config: { temperature: 0.8 },
     });
-
-    if (tokens.length === 0) {
-      console.log("No FCM tokens found for any recipient.");
-      return null;
-    }
-
-    // Notification payload
-    const payload = {
-      notification: {
-        title: message.senderName,
-        body: message.text.substring(0, 100), // Truncate message for notification
-      },
-      data: {
-        convoId: convoId,
-        // This allows the client to navigate to the correct chat on notification click
-      },
-    };
-
-    try {
-      // Send notification
-      const response = await admin.messaging().sendToDevice(tokens, payload);
-      console.log("Successfully sent notification for message:", context.params.messageId);
-
-      // --- Optional: Clean up invalid tokens ---
-      const tokensToRemove = [];
-      response.results.forEach((result, index) => {
-        const error = result.error;
-        if (error) {
-          console.error("Failure sending notification to", tokens[index], error);
-          if (
-            error.code === "messaging/invalid-registration-token" ||
-            error.code === "messaging/registration-token-not-registered"
-          ) {
-            // This token is invalid and should be removed from the user's document
-            // For simplicity, this part is omitted but would be a good addition for production.
-          }
-        }
-      });
-      // --- End of optional cleanup ---
-
-      return response;
-    } catch (error) {
-      console.error("Error sending message:", error);
-      return null;
-    }
-  });
+    return response.text;
+  } catch (error) {
+    console.error("Error generating welcome message with Gemini:", error);
+    return `Welcome, ${name}! We are excited to have you in the Global Commons Network.`;
+  }
+};

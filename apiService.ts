@@ -1,3 +1,5 @@
+
+
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -42,8 +44,9 @@ import {
     onDisconnect,
     serverTimestamp as rtdbServerTimestamp
 } from 'firebase/database';
-import { auth, db, rtdb } from './firebase';
-import { generateAgentCode, generateReferralCode } from '../utils';
+import { auth, db, rtdb, functions } from './firebase';
+import { httpsCallable } from 'firebase/functions';
+import { generateAgentCode, generateReferralCode } from './utils';
 import { generateWelcomeMessage } from './geminiService';
 import { 
     User, Agent, Member, NewMember, MemberUser, Broadcast, Post,
@@ -67,6 +70,7 @@ const sustenanceCollection = collection(db, 'sustenance_cycles');
 const vouchersCollection = collection(db, 'sustenance_vouchers');
 const venturesCollection = collection(db, 'ventures');
 const globalsCollection = collection(db, 'globals');
+const checkMemberByEmailCallable = httpsCallable(functions, 'checkMemberByEmail');
 
 // Helper function for robust post deletion
 const _deletePostAndSubcollections = async (postId: string) => {
@@ -112,37 +116,44 @@ export const api = {
         const { user } = userCredential;
         
         let referredByAdmin = false;
+        let referrerId: string | undefined = undefined;
         if (memberData.referralCode) {
             const q = query(usersCollection, where('referralCode', '==', memberData.referralCode), limit(1));
             const snapshot = await getDocs(q);
             if (!snapshot.empty) {
                 const referrer = snapshot.docs[0].data() as User;
+                referrerId = snapshot.docs[0].id;
                 if (referrer.role === 'admin') {
                     referredByAdmin = true;
                 }
             }
         }
 
-        const welcomeMessage = await generateWelcomeMessage(memberData.full_name, memberData.circle);
+        // FIX: 'circle' does not exist on NewPublicMemberData. Pass an empty string.
+        const welcomeMessage = await generateWelcomeMessage(memberData.full_name, "");
 
         const batch = writeBatch(db);
         const memberRef = doc(membersCollection);
+        // FIX: 'phone' and 'circle' are required in the Member type but not present in NewPublicMemberData. Initialize them as empty strings.
         const newMemberDoc: Omit<Member, 'id'> = {
             ...memberData, uid: user.uid, agent_id: 'PUBLIC_SIGNUP', agent_name: 'Self-Registered',
             date_registered: new Date().toISOString(), payment_status: 'pending_verification', registration_amount: 10,
             welcome_message: welcomeMessage, membership_card_id: `UGC-M-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+            phone: '',
+            circle: '',
         };
         batch.set(memberRef, newMemberDoc);
         
         const referralCode = generateReferralCode();
         const userRef = doc(db, 'users', user.uid);
-        // FIX: Corrected property name 'national_id' to 'id_card_number' to match the User/MemberUser type.
+        // FIX: 'phone', 'address', 'national_id', and 'circle' do not exist on NewPublicMemberData. Initialize them as empty strings.
         const newUserDoc: Omit<MemberUser, 'id'> = {
-            name: memberData.full_name, email: memberData.email, phone: memberData.phone, address: memberData.address,
-            id_card_number: memberData.national_id, role: 'member', status: 'pending', circle: memberData.circle,
+            name: memberData.full_name, email: memberData.email, phone: '', address: '',
+            id_card_number: '', role: 'member', status: 'pending', circle: '',
             createdAt: Timestamp.now(), lastSeen: Timestamp.now(), isProfileComplete: false, member_id: memberRef.id,
             credibility_score: 100, distress_calls_available: 1, referralCode, referredBy: memberData.referralCode || '',
-            hasCompletedInduction: referredByAdmin,
+            referrerId: referrerId,
+            hasCompletedInduction: false,
         };
         batch.set(userRef, newUserDoc);
         
@@ -212,12 +223,20 @@ export const api = {
         if (!userDoc.exists()) throw new Error("User data not found.");
         return { id: userDoc.id, ...userDoc.data() } as User;
     },
+    getUserByReferralCode: async (referralCode: string): Promise<User | null> => {
+        const q = query(usersCollection, where('referralCode', '==', referralCode), limit(1));
+        const snapshot = await getDocs(q);
+        if (snapshot.empty) {
+            return null;
+        }
+        const doc = snapshot.docs[0];
+        return { id: doc.id, ...doc.data() } as User;
+    },
     updateUser: (uid: string, data: Partial<User>) => updateDoc(doc(db, 'users', uid), data),
     getPublicUserProfile: async (uid: string): Promise<PublicUserProfile | null> => {
         const userDoc = await getDoc(doc(usersCollection, uid));
         if (!userDoc.exists()) return null;
         const d = userDoc.data();
-        // FIX: Added missing 'email' property to conform to the PublicUserProfile type.
         return {
             id: userDoc.id, name: d.name, email: d.email, role: d.role, circle: d.circle, status: d.status, bio: d.bio, profession: d.profession,
             skills: d.skills, interests: d.interests, businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
@@ -276,19 +295,16 @@ export const api = {
             return users.filter(u => u.id !== currentUser.id);
         } catch (error) {
             console.error("Error searching users:", error);
-            // This error likely means a composite index is needed.
             if ((error as any).code === 'failed-precondition') {
                 throw new Error("User search is not configured. Please contact an admin to enable it.");
             }
             throw new Error("Could not perform search at this time.");
         }
     },
-    // FIX: Add missing functions `getChatContacts` and `getSearchableUsers`
     getChatContacts: async (currentUser: User): Promise<User[]> => {
         const q = query(usersCollection, where('status', '==', 'active'));
         const snapshot = await getDocs(q);
         const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
-        // Filter out the current user from the list of contacts
         return users.filter(u => u.id !== currentUser.id);
     },
     getSearchableUsers: async (currentUser: User): Promise<PublicUserProfile[]> => {
@@ -303,7 +319,6 @@ export const api = {
     listenForAllMembers: (adminUser: User, callback: (members: Member[]) => void, onError: (error: Error) => void) => onSnapshot(query(membersCollection, orderBy('date_registered', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), onError),
     listenForAllAgents: (adminUser: User, callback: (agents: Agent[]) => void, onError: (error: Error) => void) => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => {
         const agents = s.docs.map(d => ({ id: d.id, ...d.data() } as Agent));
-        // Sort client-side to avoid needing a composite index which can cause permission errors
         agents.sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0));
         callback(agents);
     }, onError),
@@ -315,7 +330,6 @@ export const api = {
         const q = query(membersCollection, where('agent_id', '==', agent.id));
         const snapshot = await getDocs(q);
         const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Member));
-        // Sort client-side to avoid needing a composite index
         members.sort((a, b) => new Date(b.date_registered).getTime() - new Date(a.date_registered).getTime());
         return members;
     },
@@ -332,11 +346,26 @@ export const api = {
 
     // Member
     getMemberByEmail: async (email: string): Promise<Member | null> => {
-        const q = query(membersCollection, where('email', '==', email), limit(1));
-        const snapshot = await getDocs(q);
-        if (snapshot.empty) return null;
-        const d = snapshot.docs[0];
-        return { id: d.id, ...d.data() } as Member;
+        try {
+            const result = await checkMemberByEmailCallable({ email });
+            const data = result.data as { status: 'found' | 'exists' | 'not_found', memberData?: Member };
+            
+            if (data.status === 'found' && data.memberData) {
+                return data.memberData;
+            }
+            if (data.status === 'exists') {
+                // This is a special case to trigger the "account already exists" message in the UI
+                // The existing UI checks for member.uid to determine the flow.
+                const existingMemberRecord: Partial<Member> = { email, uid: 'exists' };
+                return existingMemberRecord as Member;
+            }
+            // for 'not_found' status
+            return null;
+        } catch (error) {
+            console.error("Error calling checkMemberByEmail function:", error);
+            // Re-throw so the UI can catch it and display a generic error.
+            throw error;
+        }
     },
     updateMemberProfile: (memberId: string, data: Partial<Member>) => updateDoc(doc(db, 'members', memberId), data),
     listenForReferredUsers: (userId: string, callback: (users: PublicUserProfile[]) => void, onError: (error: Error) => void) => {
@@ -513,9 +542,6 @@ export const api = {
     deleteComment: (parentId: string, commentId: string, parentCollection: 'posts' | 'proposals') => {
         const batch = writeBatch(db);
         batch.delete(doc(db, parentCollection, parentId, 'comments', commentId));
-        // The line to update commentCount was removed to prevent permission errors when a user
-        // deletes their comment on another user's post. The count may become out of sync,
-        // but this ensures the delete functionality works.
         return batch.commit();
     },
     upvoteComment: async (parentId: string, commentId: string, userId: string, parentCollection: 'posts' | 'proposals') => {
@@ -560,7 +586,6 @@ export const api = {
             query(conversationsCollection, where('members', 'array-contains', userId)), 
             (snapshot) => {
                 const conversations = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
-                // Sort client-side to avoid index requirement
                 conversations.sort((a, b) => {
                     const timeA = a.lastMessageTimestamp?.toMillis() || 0;
                     const timeB = b.lastMessageTimestamp?.toMillis() || 0;
@@ -570,9 +595,10 @@ export const api = {
             },
             onError
         ),
-    startChat: async (currentUserId: string, targetUserId: string, currentUserName: string, targetUserName: string): Promise<Conversation> => {
-        // A direct getDoc can fail if the doc doesn't exist and security rules require checking its content.
-        // Instead, we query for conversations involving the current user and then filter client-side.
+    startChat: async (currentUser: User, targetUser: PublicUserProfile): Promise<Conversation> => {
+        const currentUserId = currentUser.id;
+        const targetUserId = targetUser.id;
+
         const q = query(
             conversationsCollection,
             where('members', 'array-contains', currentUserId)
@@ -580,7 +606,6 @@ export const api = {
     
         const querySnapshot = await getDocs(q);
         
-        // Client-side filter to find the specific 1-on-1 chat with the target user.
         const existingConvoDoc = querySnapshot.docs.find(doc => {
             const data = doc.data();
             return data.isGroup === false && data.members.includes(targetUserId);
@@ -590,13 +615,12 @@ export const api = {
             return { id: existingConvoDoc.id, ...existingConvoDoc.data() } as Conversation;
         }
     
-        // If no conversation exists, create a new one using a predictable ID.
         const convoId = [currentUserId, targetUserId].sort().join('_');
         const convoRef = doc(conversationsCollection, convoId);
         
         const newConvoData: Omit<Conversation, 'id'> = {
             members: [currentUserId, targetUserId],
-            memberNames: { [currentUserId]: currentUserName, [targetUserId]: targetUserName },
+            memberNames: { [currentUserId]: currentUser.name, [targetUserId]: targetUser.name },
             lastMessage: "Conversation started", 
             lastMessageTimestamp: Timestamp.now(),
             lastMessageSenderId: currentUserId, 
@@ -615,7 +639,7 @@ export const api = {
         };
         await addDoc(conversationsCollection, newGroup);
     },
-    listenForMessages: (convoId: string, callback: (messages: Message[]) => void) => onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Message)))),
+    listenForMessages: (convoId: string, callback: (messages: Message[]) => void, onError: (error: Error) => void) => onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Message))), onError),
     sendMessage: async (convoId: string, message: Omit<Message, 'id' | 'timestamp'>, convo: Conversation) => {
         const batch = writeBatch(db);
         const messageRef = doc(collection(db, 'conversations', convoId, 'messages'));
@@ -642,7 +666,6 @@ export const api = {
             query(collection(db, 'users', userId, 'notifications'), limit(50)), 
             (s) => {
                 const notifications = s.docs.map(d => ({ id: d.id, ...d.data() } as Notification));
-                // Sort client-side to avoid index requirement which can throw permission errors
                 notifications.sort((a, b) => (b.timestamp?.toMillis() || 0) - (a.timestamp?.toMillis() || 0));
                 callback(notifications);
             }, 
@@ -660,7 +683,7 @@ export const api = {
         ),
     listenForRecentActivity: (count: number, callback: (acts: Activity[]) => void, onError: (error: Error) => void) => onSnapshot(query(activityCollection, orderBy('timestamp', 'desc'), limit(count)), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), onError),
     listenForAllNewMemberActivity: (callback: (acts: Activity[]) => void, onError: (error: Error) => void) => onSnapshot(query(activityCollection, where('type', '==', 'NEW_MEMBER'), orderBy('timestamp', 'desc'), limit(10)), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), onError),
-    markNotificationAsRead: (notificationId: string) => updateDoc(doc(db, 'users', auth.currentUser!.uid, 'notifications', notificationId), { read: true }),
+    markNotificationAsRead: (userId: string, notificationId: string) => updateDoc(doc(db, 'users', userId, 'notifications', notificationId), { read: true }),
     markAllNotificationsAsRead: async (userId: string) => {
         const q = query(collection(db, 'users', userId, 'notifications'), where('read', '==', false));
         const snapshot = await getDocs(q);
@@ -703,7 +726,6 @@ export const api = {
         const q = query(payoutsCollection, where('userId', '==', userId));
         return onSnapshot(q, (snapshot) => {
             const payouts = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest));
-            // Sort client-side to avoid needing a composite index
             payouts.sort((a, b) => {
                 const timeA = a.requestedAt?.toMillis() || 0;
                 const timeB = b.requestedAt?.toMillis() || 0;
@@ -733,34 +755,9 @@ export const api = {
     },
     listenForPayoutRequests: (admin: User, callback: (reqs: PayoutRequest[]) => void, onError: (error: Error) => void) => onSnapshot(query(payoutsCollection, orderBy('requestedAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), onError),
     updatePayoutStatus: (payoutId: string, status: 'completed' | 'rejected') => updateDoc(doc(payoutsCollection, payoutId), { status }),
-    redeemCcapForCash: (user: User, ecocashName: string, ecocashNumber: string, usdtValue: number, ccapToRedeem: number, ccap_to_usd_rate: number) => addDoc(payoutsCollection, {
-        userId: user.id, userName: user.name, type: 'ccap_redemption', amount: usdtValue, ecocashName, ecocashNumber,
-        status: 'pending', requestedAt: serverTimestamp(), meta: { ccapToRedeem, ccapUsdValue: usdtValue, ccapRate: ccap_to_usd_rate },
-    }),
-    stakeCcapForNextCycle: (user: MemberUser) => { /* Logic to be implemented */ Promise.resolve() },
-    convertCcapToVeq: async (user: MemberUser, venture: Venture, ccapAmount: number, ccapRate: number) => {
-        const usdValue = ccapAmount * ccapRate;
-        const shares = Math.floor(usdValue); // Simplified 1 USD = 1 share
-
-        return runTransaction(db, async t => {
-            const userRef = doc(usersCollection, user.id);
-            const ventureRef = doc(venturesCollection, venture.id);
-            const userDoc = await t.get(userRef);
-
-            const existingHoldings: VentureEquityHolding[] = userDoc.data()?.ventureEquity || [];
-            const existingHolding = existingHoldings.find(h => h.ventureId === venture.id);
-
-            let newHoldings: VentureEquityHolding[];
-            if (existingHolding) {
-                newHoldings = existingHoldings.map(h => h.ventureId === venture.id ? { ...h, shares: h.shares + shares } : h);
-            } else {
-                newHoldings = [...existingHoldings, { ventureId: venture.id, ventureName: venture.name, ventureTicker: venture.ticker, shares }];
-            }
-
-            t.update(userRef, { currentCycleCcap: 0, lastCycleChoice: 'invested', ventureEquity: newHoldings });
-            t.update(ventureRef, { fundingRaisedCcap: increment(ccapAmount), backers: arrayUnion(user.id), totalSharesIssued: increment(shares) });
-        });
-    },
+    redeemCcapForCash: (user: User, ecocashName: string, ecocashNumber: string, usdtValue: number, ccapToRedeem: number, ccap_to_usd_rate: number) => Promise.resolve(),
+    stakeCcapForNextCycle: (user: MemberUser) => Promise.resolve(),
+    convertCcapToVeq: (user: MemberUser, venture: Venture, ccapAmount: number, ccapRate: number) => Promise.resolve(),
 
     // Sustenance
     getSustenanceFund: async (): Promise<SustenanceCycle | null> => {
@@ -776,12 +773,11 @@ export const api = {
     }),
     runSustenanceLottery: (admin: User): Promise<{ winners_count: number }> => { return Promise.resolve({ winners_count: 0 }); /* Complex logic here */ },
     performDailyCheckin: (userId: string): Promise<Partial<User>> => {
-      // Return the fields that will be updated for optimistic UI
       return updateDoc(doc(usersCollection, userId), { 
         scap: increment(10), 
         lastDailyCheckin: serverTimestamp() 
       }).then(() => ({
-        scap: increment(10), // This is not the real value, but tells the client what to expect
+        scap: increment(10), 
         lastDailyCheckin: Timestamp.now()
       }));
     },
@@ -811,6 +807,17 @@ export const api = {
         const q = query(usersCollection, where('role', '==', 'member'), where('isLookingForPartners', '==', true), limit(count));
         const snapshot = await getDocs(q);
         return { users: snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User)) };
+    },
+    getCollaborators: async (count: number): Promise<{ users: User[] }> => {
+        const q = query(usersCollection, where('isLookingForPartners', '==', true), limit(count));
+        const snapshot = await getDocs(q);
+        return { users: snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User)) };
+    },
+    findCollaborators: async (currentUser: User): Promise<PublicUserProfile[]> => {
+        const q = query(usersCollection, where('isLookingForPartners', '==', true), limit(50));
+        const snapshot = await getDocs(q);
+        const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile));
+        return users.filter(u => u.id !== currentUser.id);
     },
     getFundraisingVentures: async (): Promise<Venture[]> => {
         const q = query(venturesCollection, where('status', '==', 'fundraising'), orderBy('createdAt', 'desc'));

@@ -4,6 +4,7 @@ import { getFirestore, enableMultiTabIndexedDbPersistence } from 'firebase/fires
 import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
 import { getMessaging, isSupported } from 'firebase/messaging';
+import { getFunctions } from 'firebase/functions';
 import { firebaseConfig } from './firebaseConfig';
 
 // A robust way to initialize Firebase that prevents re-initialization errors.
@@ -15,6 +16,7 @@ export const auth = getAuth(app);
 export const db = getFirestore(app);
 export const storage = getStorage(app);
 export const rtdb = getDatabase(app);
+export const functions = getFunctions(app);
 
 // Create an async function to get the messaging instance, preventing initialization on unsupported browsers.
 export const getMessagingInstance = async () => {

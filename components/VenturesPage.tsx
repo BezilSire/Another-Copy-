@@ -14,30 +14,22 @@ export const VenturesPage: React.FC<VenturesPageProps> = (props) => {
 
     return (
         <div className="space-y-6">
-            <div className="bg-slate-800 p-6 rounded-lg shadow-lg border-2 border-dashed border-slate-700 hover:border-green-500 transition-all duration-300">
-                <div className="flex flex-col md:flex-row items-center gap-6">
-                    <div className="flex-shrink-0">
-                        <SparkleIcon className="h-16 w-16 text-green-400" />
-                    </div>
-                    <div className="flex-1 text-center md:text-left">
-                        <h2 className="text-2xl font-bold text-white">AI Venture Pitch Assistant</h2>
-                        <p className="text-gray-300 mt-2">
-                            Have a business idea? Let our AI assistant help you build a detailed plan, analyze your market, and generate a professional pitch deck to attract collaborators and investors.
-                        </p>
-                    </div>
-                    <div className="flex-shrink-0 w-full md:w-auto">
-                        <button 
-                            onClick={onNavigateToPitchAssistant}
-                            className="w-full inline-flex items-center justify-center px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold text-lg"
-                        >
-                            Start Building
-                        </button>
-                    </div>
-                </div>
-            </div>
-
              <div className="animate-fade-in">
-                <h3 className="text-2xl font-bold text-white mb-4">Venture Marketplace</h3>
+                <div className="bg-gradient-to-r from-green-600 to-blue-500 p-6 rounded-lg shadow-lg flex flex-col sm:flex-row justify-between items-center gap-4 mb-8">
+                    <div>
+                        <h3 className="text-2xl font-bold text-white flex items-center"><SparkleIcon className="h-6 w-6 mr-2"/> AI Venture Pitch Assistant</h3>
+                        <p className="text-gray-200 mt-1">Have a business idea? Let our AI help you build a detailed plan and pitch deck in minutes.</p>
+                    </div>
+                    <button 
+                        onClick={onNavigateToPitchAssistant}
+                        className="w-full sm:w-auto flex-shrink-0 inline-flex items-center justify-center px-4 py-2 bg-white text-green-600 rounded-md hover:bg-gray-200 font-semibold"
+                    >
+                        Start Building
+                    </button>
+                </div>
+
+                <h3 className="text-2xl font-bold text-white">Venture Marketplace</h3>
+                <p className="text-gray-400 mb-6 max-w-2xl">Explore community-led ventures seeking funding or create your own with the help of our AI Pitch Assistant.</p>
                 <VentureMarketplacePage {...props} />
             </div>
         </div>

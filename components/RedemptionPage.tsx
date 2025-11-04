@@ -68,7 +68,6 @@ export const RedemptionPage: React.FC<RedemptionPageProps> = ({ user, onUpdateUs
                 throw new Error("Redemption cycle not loaded.");
             }
             await api.redeemCcapForCash(user, payoutData.ecocashName, payoutData.ecocashNumber, usdtValue, ccapToRedeem, cycle.ccap_to_usd_rate);
-            await onUpdateUser({ lastCycleChoice: 'redeemed' });
             addToast('Redemption request submitted!', 'success');
             setModal(null);
         } catch (error) {
@@ -82,7 +81,6 @@ export const RedemptionPage: React.FC<RedemptionPageProps> = ({ user, onUpdateUs
         setIsProcessing(true);
         try {
             await api.stakeCcapForNextCycle(user);
-            await onUpdateUser({ stakedCcap: (user.stakedCcap || 0) + (ccapToRedeem * 1.1), currentCycleCcap: 0, lastCycleChoice: 'staked' });
             addToast('CCAP staked successfully! You get a 10% bonus for the next cycle.', 'success');
             setModal(null);
         } catch (error) {
@@ -97,9 +95,6 @@ export const RedemptionPage: React.FC<RedemptionPageProps> = ({ user, onUpdateUs
         setIsProcessing(true);
         try {
             await api.convertCcapToVeq(user, selectedVenture, ccapToRedeem, cycle.ccap_to_usd_rate);
-            // The onUpdateUser will be slow, so we can optimistically update or just wait.
-            // For now, let's just show success and let the main user object refresh.
-            await onUpdateUser({}); // Trigger a refetch
             addToast(`Successfully invested in ${selectedVenture.name}!`, 'success');
             setModal(null);
         } catch (error) {

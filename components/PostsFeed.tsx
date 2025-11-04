@@ -215,7 +215,7 @@ export const PostItem: React.FC<{
     const typeInfo = typeStyles[post.types] || typeStyles['general'];
 
     return (
-        <div className={`bg-slate-800 p-5 rounded-lg shadow-lg border-l-4 ${typeInfo.borderColor}`}>
+        <div className={`bg-slate-800 p-6 rounded-lg shadow-lg border-l-4 ${typeInfo.borderColor}`}>
             {post.isPinned && (
                 <div className="flex items-center space-x-1 text-xs text-yellow-400 mb-2 font-semibold">
                     <PinIcon className="h-4 w-4"/>
@@ -261,7 +261,7 @@ export const PostItem: React.FC<{
                 </div>
             )}
 
-            <div className={`text-white mt-4 text-base wysiwyg-content ${needsTruncation && !isExpanded ? 'line-clamp-6' : ''}`}>
+            <div className={`text-white mt-4 text-sm wysiwyg-content ${needsTruncation && !isExpanded ? 'line-clamp-6' : ''}`}>
                 <MarkdownRenderer content={post.content} />
             </div>
 
@@ -271,30 +271,30 @@ export const PostItem: React.FC<{
                 </button>
             )}
 
-            <div className="mt-4 flex justify-between items-center text-gray-400 border-t border-b border-slate-700/50">
-                <ActionButton icon={<ThumbsUpIcon className="h-5 w-5"/>} label={post.upvotes.length > 0 ? post.upvotes.length.toString() : 'Like'} onClick={() => onUpvote(post.id)} isActive={hasUpvoted} activeColor="text-green-400" />
-                <ActionButton icon={<MessageCircleIcon className="h-5 w-5"/>} label={post.commentCount ? post.commentCount.toString() : 'Comment'} onClick={() => setShowComments(!showComments)} isActive={showComments} activeColor="text-blue-400" />
-                <ActionButton icon={<RepeatIcon className="h-5 w-5"/>} label={post.repostCount ? post.repostCount.toString() : 'Repost'} onClick={() => onRepost(post)} />
-                <ActionButton icon={<ShareIcon className="h-5 w-5"/>} label="Share" onClick={() => onShare(post)} />
+            <div className="mt-4 flex justify-around items-center text-gray-400 border-t border-b border-slate-700/50">
+                <ActionButton icon={<ThumbsUpIcon className="h-5 w-5"/>} count={post.upvotes.length} onClick={() => onUpvote(post.id)} isActive={hasUpvoted} activeColor="text-green-400" title={`Like (${post.upvotes.length})`} />
+                <ActionButton icon={<MessageCircleIcon className="h-5 w-5"/>} count={post.commentCount} onClick={() => setShowComments(!showComments)} isActive={showComments} activeColor="text-blue-400" title={`Comment (${post.commentCount || 0})`} />
+                <ActionButton icon={<RepeatIcon className="h-5 w-5"/>} count={post.repostCount} onClick={() => onRepost(post)} title={`Repost (${post.repostCount || 0})`} />
+                <ActionButton icon={<ShareIcon className="h-5 w-5"/>} onClick={() => onShare(post)} title="Share" />
             </div>
 
             {showComments && <CommentSection postId={post.id} currentUser={currentUser} onViewProfile={onViewProfile} />}
 
             <div className="mt-2 flex items-center justify-end space-x-4 text-xs">
-                {isOwnPost && <button onClick={() => onEdit(post)} className="text-gray-400 hover:text-green-400 flex items-center gap-1"><PencilIcon className="h-3 w-3"/> Edit</button>}
-                {(isOwnPost || isAdminView) && <button onClick={() => onDelete(post)} className="text-gray-400 hover:text-red-400 flex items-center gap-1"><TrashIcon className="h-3 w-3"/> Delete</button>}
-                {!isOwnPost && !isDistressPost && <button onClick={() => onReport(post)} className="text-gray-400 hover:text-yellow-400 flex items-center gap-1"><FlagIcon className="h-3 w-3"/> Report</button>}
-                 {isAdminView && <button onClick={() => onTogglePin(post)} className={`flex items-center gap-1 ${post.isPinned ? 'text-yellow-400' : 'text-gray-400 hover:text-yellow-400'}`}><PinIcon className="h-3 w-3"/> {post.isPinned ? 'Unpin' : 'Pin'}</button>}
+                {isOwnPost && <button onClick={() => onEdit(post)} className="text-gray-400 hover:text-green-400" title="Edit"><PencilIcon className="h-4 w-4"/></button>}
+                {(isOwnPost || isAdminView) && <button onClick={() => onDelete(post)} className="text-gray-400 hover:text-red-400" title="Delete"><TrashIcon className="h-4 w-4"/></button>}
+                {!isOwnPost && !isDistressPost && <button onClick={() => onReport(post)} className="text-gray-400 hover:text-yellow-400" title="Report"><FlagIcon className="h-4 w-4"/></button>}
+                 {isAdminView && <button onClick={() => onTogglePin(post)} className={`flex items-center gap-1 ${post.isPinned ? 'text-yellow-400' : 'text-gray-400 hover:text-yellow-400'}`} title={post.isPinned ? 'Unpin' : 'Pin'}><PinIcon className="h-4 w-4"/></button>}
             </div>
         </div>
     );
 };
 
-const ActionButton: React.FC<{ icon: React.ReactNode; label: string; onClick: () => void; isActive?: boolean; activeColor?: string }> = 
-({ icon, label, onClick, isActive, activeColor = 'text-green-400' }) => (
-    <button onClick={onClick} className={`flex-1 flex items-center justify-center space-x-2 py-2 rounded-lg transition-colors duration-200 ${isActive ? `${activeColor} bg-slate-700/50` : 'hover:bg-slate-700/50'}`}>
+const ActionButton: React.FC<{ icon: React.ReactNode; count?: number; onClick: () => void; isActive?: boolean; activeColor?: string; title?: string; }> = 
+({ icon, count, onClick, isActive, activeColor = 'text-green-400', title }) => (
+    <button onClick={onClick} title={title} className={`flex-1 flex items-center justify-center space-x-2 py-2 rounded-lg transition-colors duration-200 ${isActive ? `${activeColor} bg-slate-700/50` : 'hover:bg-slate-700/50'}`}>
         {icon}
-        <span className="text-sm font-semibold">{label}</span>
+        {count !== undefined && count > 0 && <span className="text-sm font-semibold">{count}</span>}
     </button>
 );
 

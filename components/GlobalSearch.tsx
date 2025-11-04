@@ -6,6 +6,7 @@ import { LoaderIcon } from './icons/LoaderIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { useAuth } from '../contexts/AuthContext';
 import { useDebounce } from '../hooks/useDebounce';
+import { useToast } from '../contexts/ToastContext';
 
 interface GlobalSearchProps {
   onViewProfile: (userId: string) => void;
@@ -18,6 +19,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onViewProfile }) => 
     const [isFocused, setIsFocused] = useState(false);
     const searchRef = useRef<HTMLDivElement>(null);
     const { currentUser } = useAuth();
+    const { addToast } = useToast();
     const debouncedQuery = useDebounce(query, 300);
 
     useEffect(() => {
@@ -25,12 +27,12 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onViewProfile }) => 
             setIsLoading(true);
             api.searchUsers(debouncedQuery, currentUser)
                 .then(setResults)
-                .catch(err => console.error("Search failed:", err))
+                .catch(err => addToast(err.message, "error"))
                 .finally(() => setIsLoading(false));
         } else {
             setResults([]);
         }
-    }, [debouncedQuery, currentUser]);
+    }, [debouncedQuery, currentUser, addToast]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
@@ -60,7 +62,7 @@ export const GlobalSearch: React.FC<GlobalSearchProps> = ({ onViewProfile }) => 
                 </div>
                 <input
                     type="search"
-                    placeholder="Search for members by name or skill..."
+                    placeholder="Search for members by name..."
                     value={query}
                     onChange={(e) => setQuery(e.target.value)}
                     onFocus={() => setIsFocused(true)}

@@ -54,7 +54,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
   const [agents, setAgents] = useState<Agent[]>([]);
   const [pendingMembers, setPendingMembers] = useState<Member[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
-  const [conversations, setConversations] = useState<Conversation[]>([]);
   const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
   const [ventures, setVentures] = useState<Venture[]>([]);
   const [cvp, setCvp] = useState<CommunityValuePool | null>(null);
@@ -64,7 +63,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
   const [loadingErrors, setLoadingErrors] = useState<string[]>([]);
   const { addToast } = useToast();
   
-  const totalStreams = 10; // Increased by 1 for broadcasts
+  const totalStreams = 9; // Total data streams to load
   const isInitialLoading = loadedStreamCount < totalStreams;
 
   const [currentPage, setCurrentPage] = useState(1);
@@ -100,17 +99,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
     const unsubAgents = api.listenForAllAgents(user, (data) => { setAgents(data); handleStreamLoaded(); }, (e) => handleError('agents', e));
     const unsubPending = api.listenForPendingMembers(user, (data) => { setPendingMembers(data); handleStreamLoaded(); }, (e) => handleError('pending members', e));
     const unsubReports = api.listenForReports(user, (data) => { setReports(data); handleStreamLoaded(); }, (e) => handleError('reports', e));
-    const unsubConversations = api.listenForConversations(user.id, (data) => { setConversations(data); handleStreamLoaded(); }, (e) => handleError('conversations', e));
     const unsubPayouts = api.listenForPayoutRequests(user, (data) => { setPayouts(data); handleStreamLoaded(); }, (e) => handleError('payouts', e));
     const unsubVentures = api.listenForVentures(user, (data) => { setVentures(data); handleStreamLoaded(); }, (e) => handleError('ventures', e));
     const unsubCvp = api.listenForCVP(user, (data) => { setCvp(data); handleStreamLoaded(); }, (e) => handleError('cvp', e));
-    // Also fetch broadcasts here
     api.getBroadcasts().then(data => { setBroadcasts(data); handleStreamLoaded(); }).catch(e => handleError('broadcasts', e));
 
 
     return () => {
         unsubUsers(); unsubMembers(); unsubAgents(); unsubPending(); unsubReports();
-        unsubConversations(); unsubPayouts(); unsubVentures(); unsubCvp();
+        unsubPayouts(); unsubVentures(); unsubCvp();
     };
   }, [user, addToast]);
   
@@ -293,7 +290,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{u.email}</td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400 capitalize">{u.role}</td>
                                         <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{u.lastSeen ? formatTimeAgo(u.lastSeen.toDate().toISOString()) : 'N/A'}</td>
-                                        <td className="whitespace-nowrap px-3 py-4 text-sm"><select value={u.role} onChange={(e) => handleRoleChangeRequest(u, e.target.value as User['role'])} className="bg-slate-700 text-white rounded-md p-1 border border-slate-600 focus:ring-green-500 focus:border-green-500"><option value="member">Member</option><option value="agent">Agent</option><option value="creator">Creator</option><option value="vendor">Vendor</option><option value="admin">Admin</option></select></td>
+                                        <td className="whitespace-nowrap px-3 py-4 text-sm"><select value={u.role} onChange={(e) => handleRoleChangeRequest(u, e.target.value as User['role'])} className="bg-slate-700 text-white rounded-md p-1 border border-slate-600 focus:ring-green-500 focus:border-green-500"><option value="member">Member</option><option value="agent">Agent</option><option value="admin">Admin</option></select></td>
                                     </tr>
                                 ))}
                             </tbody>

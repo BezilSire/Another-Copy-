@@ -14,13 +14,18 @@ export const ProfileCompletionMeter: React.FC<ProfileCompletionMeterProps> = ({ 
     if (role === 'agent' || role === 'admin') {
       fieldsToCheck = ['phone', 'address', 'bio', 'id_card_number'];
     } else if (role === 'member') {
-      fieldsToCheck = ['phone', 'address', 'bio', 'profession', 'skills', 'interests', 'passions', 'gender', 'age'];
+      fieldsToCheck = ['phone', 'address', 'bio', 'profession', 'skills', 'interests', 'passions', 'gender', 'age', 'circle', 'id_card_number'];
     }
 
     if (fieldsToCheck.length === 0) return 0;
 
     const filledCount = fieldsToCheck.reduce<number>((count, field) => {
       const value = profileData[field];
+      // For arrays (like skills), check if the array is not empty.
+      if (Array.isArray(value)) {
+        return count + (value.length > 0 ? 1 : 0);
+      }
+      // For strings, check if they are not empty after trimming.
       return count + (value && String(value).trim() !== '' ? 1 : 0);
     }, 0);
 

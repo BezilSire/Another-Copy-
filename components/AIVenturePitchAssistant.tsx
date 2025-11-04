@@ -48,7 +48,8 @@ export const AIVenturePitchAssistant: React.FC<AIVenturePitchAssistantProps> = (
     const { addToast } = useToast();
     
     useEffect(() => {
-        api.getCollaborators(500).then(({ users }) => {
+        // FIX: Replaced call to non-existent 'api.getCollaborators' with 'api.getVentureMembers'.
+        api.getVentureMembers(500).then(({ users }) => {
           setAllVentureMembers(users.filter(u => u.id !== user.id));
         });
     }, [user.id]);
@@ -191,7 +192,7 @@ export const AIVenturePitchAssistant: React.FC<AIVenturePitchAssistantProps> = (
                             <label className="block text-sm font-medium text-gray-300">What are you looking for?</label>
                             <div className="mt-2 grid grid-cols-2 sm:grid-cols-4 gap-2">
                                 {LOOKING_FOR_LIST.map(item => (
-                                    <label key={item} className="flex items-center space-x-2 text-sm text-gray-300"><input type="checkbox" value={item} checked={lookingFor.includes(item)} onChange={e => setLookingFor(p => e.target.checked ? [...p, e.target.value] : p.filter(i => i !== e.target.value))} className="text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500"/><span>{item}</span></label>
+                                    <label key={item} className="flex items-center space-x-2 text-sm text-gray-300"><input type="checkbox" value={item} checked={lookingFor.includes(item)} onChange={e => setLookingFor(p => e.target.checked ? [...p, e.target.value] : p.filter(i => i !== e.target.value))} className="text-green-600 bg-slate-700 border border-slate-600 rounded focus:ring-green-500"/><span>{item}</span></label>
                                 ))}
                             </div>
                         </div>

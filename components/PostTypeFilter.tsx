@@ -6,6 +6,8 @@ import { LightbulbIcon } from './icons/LightbulbIcon';
 import { UsersIcon } from './icons/UsersIcon';
 import { BriefcaseIcon } from './icons/BriefcaseIcon';
 import { SirenIcon } from './icons/SirenIcon';
+import { SparkleIcon } from './icons/SparkleIcon';
+import { HeartIcon } from './icons/HeartIcon';
 
 
 interface PostTypeFilterProps {
@@ -17,6 +19,7 @@ interface PostTypeFilterProps {
 export const PostTypeFilter: React.FC<PostTypeFilterProps> = ({ currentFilter, onFilterChange, isAdminView = false }) => {
     const filters = useMemo(() => {
         const allFilters: { label: string; value: FilterType; icon: React.ReactNode; }[] = [
+            { label: 'For You', value: 'foryou', icon: <SparkleIcon className="h-5 w-5" /> },
             { label: 'All', value: 'all', icon: <LayoutDashboardIcon className="h-5 w-5" /> },
             { label: 'General', value: 'general', icon: <MessageSquareIcon className="h-5 w-5" /> },
             { label: 'Proposals', value: 'proposal', icon: <LightbulbIcon className="h-5 w-5" /> },

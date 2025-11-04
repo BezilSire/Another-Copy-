@@ -1,8 +1,8 @@
 import { Timestamp } from 'firebase/firestore';
 
-export type UserRole = 'member' | 'agent' | 'admin' | 'creator' | 'vendor';
+export type UserRole = 'member' | 'agent' | 'admin';
 export type UserStatus = 'active' | 'pending' | 'suspended' | 'ousted';
-export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress';
+export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress' | 'foryou';
 
 // Base User
 export interface User {
@@ -24,8 +24,8 @@ export interface User {
   address?: string;
   bio?: string;
   profession?: string;
-  skills?: string[] | string;
-  interests?: string[] | string;
+  skills?: string[];
+  interests?: string[];
   passions?: string[] | string;
   awards?: string;
   gender?: string;
@@ -47,7 +47,8 @@ export interface User {
   stakedCcap?: number;
   currentCycleCcap?: number;
   lastCycleChoice?: 'redeemed' | 'staked' | 'invested';
-  fcmTokens?: string[];
+  name_lowercase?: string; // For case-insensitive search
+  skills_lowercase?: string[]; // For case-insensitive search
 }
 
 // Specific User Roles
@@ -67,17 +68,6 @@ export interface MemberUser extends User {
 
 export interface Admin extends User {
   role: 'admin';
-}
-
-export interface Creator extends User {
-    role: 'creator';
-    commissionBalance?: number;
-}
-
-export interface VendorUser extends User {
-    role: 'vendor';
-    businessName?: string;
-    balance?: number;
 }
 
 // From 'members' collection
@@ -102,15 +92,16 @@ export interface Member {
   national_id?: string;
   bio?: string;
   profession?: string;
-  skills?: string[] | string;
+  skills?: string[];
   awards?: string;
-  interests?: string[] | string;
+  interests?: string[];
   passions?: string[] | string;
   gender?: string;
   age?: string;
   isLookingForPartners?: boolean;
   lookingFor?: string[];
   businessIdea?: string;
+  skills_lowercase?: string[]; // For case-insensitive search
 }
 
 // For registering a new member
@@ -125,11 +116,7 @@ export interface NewMember {
 
 export interface NewPublicMemberData {
     full_name: string;
-    phone: string;
     email: string;
-    circle: string;
-    address: string;
-    national_id: string;
     referralCode?: string;
 }
 
@@ -149,6 +136,7 @@ export interface Post {
   authorName: string;
   authorCircle: string;
   authorRole: UserRole;
+  authorInterests?: string[];
   content: string;
   date: string; // ISO string
   upvotes: string[];
@@ -249,8 +237,8 @@ export interface PublicUserProfile extends Partial<User> {
     status: UserStatus;
     bio?: string;
     profession?: string;
-    skills?: string[] | string;
-    interests?: string[] | string;
+    skills?: string[];
+    interests?: string[];
     businessIdea?: string;
     isLookingForPartners?: boolean;
     lookingFor?: string[];
@@ -359,12 +347,4 @@ export interface Distribution {
     date: Timestamp;
     totalAmount: number;
     notes: string;
-}
-
-export interface CreatorContent {
-    id: string;
-    creatorId: string;
-    title: string;
-    content: string;
-    createdAt: Timestamp;
 }

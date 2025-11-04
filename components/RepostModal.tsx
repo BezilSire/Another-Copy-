@@ -1,9 +1,9 @@
-
 import React, { useState } from 'react';
 import { Post, User } from '../types';
 import { XCircleIcon } from './icons/XCircleIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { formatTimeAgo } from '../utils';
+import { MarkdownRenderer } from './MarkdownRenderer';
 
 interface RepostModalProps {
   isOpen: boolean;
@@ -71,7 +71,9 @@ export const RepostModal: React.FC<RepostModalProps> = ({ isOpen, onClose, post,
                   <p className="text-xs text-gray-500">{post.authorCircle} &bull; {formatTimeAgo(post.date)}</p>
                 </div>
               </div>
-              <p className="text-gray-300 text-sm whitespace-pre-wrap">{post.content}</p>
+              <div className="text-gray-300 text-sm wysiwyg-content line-clamp-4">
+                <MarkdownRenderer content={post.content} />
+              </div>
             </div>
           </div>
           <div className="bg-slate-800 px-4 py-3 flex justify-end items-center">

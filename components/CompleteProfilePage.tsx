@@ -19,17 +19,18 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
     address: user.address || '',
     bio: user.bio || '',
     // Member-specific fields
-    profession: '',
-    skills: '',
-    interests: '',
-    passions: '',
-    gender: '',
-    age: '',
+    profession: user.profession || '',
+    skills: Array.isArray(user.skills) ? user.skills.join(', ') : '',
+    interests: Array.isArray(user.interests) ? user.interests.join(', ') : '',
+    passions: Array.isArray(user.passions) ? user.passions.join(', ') : '',
+    gender: user.gender || '',
+    age: user.age || '',
+    circle: user.circle || '',
     // Venture fields
-    isLookingForPartners: false,
-    lookingFor: [] as string[],
-    businessIdea: '',
-    // Agent-specific
+    isLookingForPartners: user.isLookingForPartners || false,
+    lookingFor: user.lookingFor || [] as string[],
+    businessIdea: user.businessIdea || '',
+    // Agent/Member-specific
     id_card_number: user.id_card_number || '',
   });
   const [isSaving, setIsSaving] = useState(false);
@@ -60,7 +61,7 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
     setIsSaving(true);
 
     const requiredFields = user.role === 'member'
-      ? ['phone', 'address', 'bio', 'profession']
+      ? ['phone', 'address', 'bio', 'profession', 'circle', 'id_card_number']
       : ['phone', 'address', 'bio', 'id_card_number'];
 
     const isMissingFields = requiredFields.some(field => !(formData as any)[field]?.trim());
@@ -72,9 +73,16 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
     }
 
     try {
+      const skillsAsArray = formData.skills.split(',').map(s => s.trim()).filter(Boolean);
+      const interestsAsArray = formData.interests.split(',').map(s => s.trim()).filter(Boolean);
+      const passionsAsArray = formData.passions.split(',').map(s => s.trim()).filter(Boolean);
+
       const dataToSubmit = {
         ...formData,
-        skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean),
+        skills: skillsAsArray,
+        skills_lowercase: skillsAsArray.map(s => s.toLowerCase()),
+        interests: interestsAsArray,
+        passions: passionsAsArray,
       };
       await onProfileComplete(dataToSubmit as Partial<User>);
       // On success, the App component will automatically navigate away.
@@ -106,6 +114,14 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
                             <div>
                                 <label htmlFor="profession" className="block text-sm font-medium text-gray-300">Profession <span className="text-red-400">*</span></label>
                                 <input type="text" name="profession" id="profession" value={formData.profession} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
+                            </div>
+                            <div>
+                                <label htmlFor="circle" className="block text-sm font-medium text-gray-300">Circle (Your City/Area) <span className="text-red-400">*</span></label>
+                                <input type="text" name="circle" id="circle" value={formData.circle} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
+                            </div>
+                             <div>
+                                <label htmlFor="id_card_number" className="block text-sm font-medium text-gray-300">National ID / Passport <span className="text-red-400">*</span></label>
+                                <input type="text" name="id_card_number" id="id_card_number" value={formData.id_card_number} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
                             </div>
                         </div>
                         <div>

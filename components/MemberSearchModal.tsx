@@ -40,6 +40,7 @@ export const MemberSearchModal: React.FC<MemberSearchModalProps> = ({ isOpen, on
 
   const handleSelect = async (user: PublicUserProfile) => {
     try {
+        // FIX: The api.startChat function expects the currentUser and user objects, not their individual properties.
         const newConversation = await api.startChat(currentUser, user);
         onSelectUser(newConversation);
     } catch (error) {

@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { MemberUser, User, PayoutRequest, RedemptionCycle } from '../types';
 import { api } from '../services/apiService';
@@ -13,6 +15,7 @@ import { formatTimeAgo } from '../utils';
 import { ClockIcon } from './icons/ClockIcon';
 import { BriefcaseIcon } from './icons/BriefcaseIcon';
 import { ClaimBonusModal } from './ClaimBonusModal';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
 interface EarnPageProps {
   user: MemberUser;
@@ -47,7 +50,24 @@ const PayoutStatusBadge: React.FC<{ status: PayoutRequest['status'] }> = ({ stat
 
 const COMMODITIES = ["Bread (Loaf)", "Milk (1L)", "Cooking Oil (2L)", "Maize Meal (10kg)", "Sugar (2kg)", "Eggs (Dozen)", "Other"];
 
-const RedemptionStatus: React.FC<{ cycle: RedemptionCycle | null, onNavigate: () => void }> = ({ cycle, onNavigate }) => {
+const RedemptionStatus: React.FC<{ cycle: RedemptionCycle | null, onNavigate: () => void, user: MemberUser }> = ({ cycle, onNavigate, user }) => {
+    if (user.status !== 'active') {
+        return (
+            <div className="bg-yellow-900/50 p-6 rounded-lg border-2 border-yellow-700">
+                <div className="flex items-start space-x-3">
+                    <AlertTriangleIcon className="h-6 w-6 text-yellow-400 flex-shrink-0 mt-1" />
+                    <div className="flex-1">
+                        <h2 className="text-xl font-bold text-white">Redemption Hub Locked</h2>
+                        <p className="text-yellow-200 mt-1">Account verification is required to redeem CCAP.</p>
+                        <p className="text-sm text-gray-400 mt-2">
+                            Once an admin verifies your account, you will be able to convert your earned Civic Capital (CCAP) into real-world value during the bi-monthly redemption window.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+    
     if (!cycle) {
         return (
             <div className="bg-slate-900/50 p-6 rounded-lg border-2 border-slate-700">
@@ -117,7 +137,10 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
     useEffect(() => {
         api.getCurrentRedemptionCycle().then(setCycle);
         const unsubPayouts = api.listenForUserPayouts(user.id, setPayouts, console.error);
-        const unsubReferrals = api.listenForReferredUsers(user.id, setReferredUsers, (error) => {
+        // FIX: Replaced one-time fetch with a listener to get real-time updates for referred users.
+        const unsubReferrals = api.listenForReferredUsers(user.id, (users) => {
+            setReferredUsers(users as User[]);
+        }, (error) => {
             console.error("Failed to load referred users:", error);
             addToast("Could not load referral list. This may be due to a database configuration issue.", "error");
         });
@@ -230,7 +253,7 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
                     <StatCard title="Civic Capital (CCAP)" value={(user.ccap ?? 0).toLocaleString()} icon={<DatabaseIcon className="h-6 w-6 text-blue-400"/>} description="Earned by making valuable contributions. During the bi-monthly Redemption Cycle, you can convert your CCAP to cash, stake it for a 10% bonus, or invest it in community ventures to earn Venture Equity (VEQ)."/>
                 </div>
                 
-                <RedemptionStatus cycle={cycle} onNavigate={onNavigateToRedemption} />
+                <RedemptionStatus cycle={cycle} onNavigate={onNavigateToRedemption} user={user} />
 
                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
                     <h2 className="text-xl font-semibold text-white flex items-center mb-2">

@@ -1,56 +1,20 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
 import { ForgotPasswordForm } from './ForgotPasswordForm';
-import { Member, User } from '../types';
+import { NewPublicMemberData } from '../types';
 import { useAuth } from '../contexts/AuthContext';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
-import { MemberLookup } from './MemberLookup';
-import { MemberSignupForm } from './MemberSignupForm';
-import { MemberActivationForm } from './MemberActivationForm';
-import { api } from '../services/apiService';
-import { useToast } from '../contexts/ToastContext';
-import { CreatorSignupPage } from './CreatorSignupPage';
+import { PublicRegistrationPage } from './PublicRegistrationPage';
 
-type AuthView = 'login' | 'agentSignup' | 'forgotPassword' | 'lookup' | 'memberSignup' | 'memberActivate' | 'passwordResetSent' | 'creatorSignup';
+type AuthView = 'login' | 'agentSignup' | 'publicSignup' | 'forgotPassword' | 'passwordResetSent';
 
 export const AuthPage: React.FC = () => {
-  const { login, agentSignup, memberSignup, memberActivate, sendPasswordReset, isProcessingAuth } = useAuth();
-  const { addToast } = useToast();
+  const { login, agentSignup, publicMemberSignup, sendPasswordReset, isProcessingAuth } = useAuth();
   
   const [view, setView] = useState<AuthView>('login');
   const [isPolicyVisible, setIsPolicyVisible] = useState(false);
-  const [lookupData, setLookupData] = useState<{ email: string; member: Member | null } | null>(null);
-  const [lookupMessage, setLookupMessage] = useState<string | null>(null);
   const [resetEmail, setResetEmail] = useState('');
-  const [creatorReferrer, setCreatorReferrer] = useState<User | null>(null);
-  const [isCheckingRef, setIsCheckingRef] = useState(true);
-
-  useEffect(() => {
-    const checkReferral = async () => {
-        const params = new URLSearchParams(window.location.search);
-        const refCode = params.get('ref');
-        if (refCode) {
-            try {
-                const user = await api.getUserByReferralCode(refCode);
-                if (user && user.role === 'creator') {
-                    setCreatorReferrer(user);
-                    setView('creatorSignup');
-                }
-            } catch (error) {
-                console.error("Failed to fetch creator by referral", error);
-            }
-        }
-        setIsCheckingRef(false);
-    };
-    checkReferral();
-  }, []);
-
-  useEffect(() => {
-    if ((view === 'memberSignup' || view === 'memberActivate') && !lookupData) {
-      setView('lookup');
-    }
-  }, [view, lookupData]);
 
   const handlePasswordReset = async (email: string) => {
     await sendPasswordReset(email);
@@ -58,69 +22,19 @@ export const AuthPage: React.FC = () => {
     setView('passwordResetSent');
   };
 
-  const handleMemberLookup = async (email: string) => {
-    try {
-        setLookupMessage(null);
-        const member = await api.getMemberByEmail(email);
-        setLookupData({ email, member });
-        if (member) {
-            if (member.uid) {
-                setLookupMessage(`An account for ${email} already exists. Please log in.`);
-                setView('lookup');
-            } else {
-                setView('memberActivate');
-            }
-        } else {
-            setView('memberSignup');
-        }
-    } catch (error) {
-        console.error("Member lookup failed:", error);
-        const firebaseError = error as { code?: string; message?: string };
-        let message = 'An error occurred during lookup. Please try again.';
-
-        if (firebaseError.code === 'failed-precondition') {
-            message = 'Lookup failed. A database index is required. Please contact an administrator to resolve this.';
-        } else if (firebaseError.code === 'permission-denied') {
-            message = 'Lookup failed due to a permissions issue. Please contact an administrator to resolve this.';
-        }
-        
-        addToast(message, 'error');
-    }
-  };
-
   const resetFlow = () => {
-    // Also clear referral from URL to go back to standard login
-    window.history.pushState({}, document.title, window.location.pathname);
     setView('login');
-    setCreatorReferrer(null);
-    setLookupData(null);
-    setLookupMessage(null);
     setResetEmail('');
   };
   
-  const handleBackToLookup = () => {
-      setLookupData(prev => prev ? { email: prev.email, member: null } : null);
-      setView('lookup');
-  }
-  
-  if (isCheckingRef) {
-      return <div className="text-center p-10 text-gray-400">Loading...</div>;
-  }
-
   const renderContent = () => {
     switch(view) {
-        case 'creatorSignup':
-            return creatorReferrer ? <CreatorSignupPage creator={creatorReferrer} onRegister={memberSignup} onBackToLogin={resetFlow} /> : null;
         case 'login':
-            return <LoginPage onLogin={login} isProcessing={isProcessingAuth} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => { setLookupMessage(null); setView('lookup'); }} onSwitchToForgotPassword={() => setView('forgotPassword')} />;
+            return <LoginPage onLogin={login} isProcessing={isProcessingAuth} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => setView('publicSignup')} onSwitchToForgotPassword={() => setView('forgotPassword')} />;
         case 'agentSignup':
             return <SignupPage onSignup={agentSignup} isProcessing={isProcessingAuth} onSwitchToLogin={resetFlow} />;
-        case 'lookup':
-            return <MemberLookup onLookup={handleMemberLookup} onBack={resetFlow} message={lookupMessage} />;
-        case 'memberSignup':
-            return lookupData ? <MemberSignupForm email={lookupData.email} onRegister={memberSignup} isProcessing={isProcessingAuth} onBack={handleBackToLookup} /> : null;
-        case 'memberActivate':
-            return lookupData?.member ? <MemberActivationForm member={lookupData.member} onActivate={memberActivate} isProcessing={isProcessingAuth} onBack={handleBackToLookup} /> : null;
+        case 'publicSignup':
+            return <PublicRegistrationPage onRegister={publicMemberSignup} isProcessing={isProcessingAuth} onBackToLogin={resetFlow} />;
         case 'forgotPassword':
             return <ForgotPasswordForm onReset={handlePasswordReset} isProcessing={isProcessingAuth} onBack={resetFlow} />;
         case 'passwordResetSent':
@@ -159,7 +73,7 @@ export const AuthPage: React.FC = () => {
                 </div>
             );
         default:
-            return <LoginPage onLogin={login} isProcessing={isProcessingAuth} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => { setLookupMessage(null); setView('lookup'); }} onSwitchToForgotPassword={() => setView('forgotPassword')} />;
+            return <LoginPage onLogin={login} isProcessing={isProcessingAuth} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => setView('publicSignup')} onSwitchToForgotPassword={() => setView('forgotPassword')} />;
     }
   }
 

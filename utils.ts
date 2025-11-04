@@ -1,3 +1,18 @@
+export const INTERESTS_LIST = [
+    'Entrepreneurship', 'Marketing', 'Technology', 'Psychology', 'Growth Hacking', 
+    'Finance', 'Economics', 'Art & Design', 'Community Building', 'Sustainability', 
+    'Education', 'Health & Wellness', 'Agriculture', 'Software Development', 'Policy & Governance'
+];
+
+export const SKILLS_LIST = [
+    'Project Management', 'Digital Marketing', 'Content Creation', 'Graphic Design', 'Web Development',
+    'Mobile Development', 'Data Analysis', 'Financial Modeling', 'Public Speaking', 'Sales & Negotiation',
+    'Legal Advisory', 'Business Strategy', 'UI/UX Design', 'Copywriting', 'SEO/SEM', 'Videography',
+    'Community Management', 'Farming Techniques', 'Teaching & Mentorship', 'Healthcare Services', 'Mechanical Repair',
+    'Electrical Engineering', 'Event Planning', 'Customer Support', 'Supply Chain Management'
+];
+
+
 export const generateAgentCode = (): string => {
   const prefix = 'UGC';
   const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';

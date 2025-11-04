@@ -84,8 +84,8 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
     
     useEffect(() => {
         const unsub = api.listenForReferredUsers(currentUser.id, setReferredUsers, (error) => {
-            console.error("Failed to load referred users:", error);
-            addToast("Could not load referral list. This may be due to a database configuration issue.", "error");
+             console.error("Failed to load referred users:", error);
+             addToast("Could not load referral list.", "error");
         });
         return () => unsub();
     }, [currentUser.id, addToast]);
@@ -107,6 +107,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
         setIsSaving(true);
         try {
             const skillsAsArray = editData.skills.split(',').map(s => s.trim()).filter(Boolean);
+            const skillsLowercase = skillsAsArray.map(s => s.toLowerCase());
             const interestsAsArray = editData.interests.split(',').map(s => s.trim()).filter(Boolean);
             const passionsAsArray = editData.passions.split(',').map(s => s.trim()).filter(Boolean);
 
@@ -115,11 +116,16 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
                 profession: editData.profession, skills: skillsAsArray, awards: editData.awards, interests: interestsAsArray,
                 passions: passionsAsArray, gender: editData.gender, age: editData.age, isLookingForPartners: editData.isLookingForPartners,
                 lookingFor: editData.lookingFor, businessIdea: editData.businessIdea,
+                skills_lowercase: skillsLowercase,
             };
             const userUpdateData: Partial<User> = {
-                name: editData.name, phone: editData.phone, address: editData.address, bio: editData.bio,
+                name: editData.name,
+                name_lowercase: editData.name.toLowerCase(),
+                phone: editData.phone, address: editData.address, bio: editData.bio,
                 isLookingForPartners: editData.isLookingForPartners, lookingFor: editData.lookingFor, businessIdea: editData.businessIdea,
-                skills: skillsAsArray, interests: interestsAsArray, profession: editData.profession, awards: editData.awards,
+                skills: skillsAsArray, 
+                skills_lowercase: skillsLowercase,
+                interests: interestsAsArray, profession: editData.profession, awards: editData.awards,
                 passions: passionsAsArray, gender: editData.gender, age: editData.age,
             };
             await onUpdateUser(userUpdateData);

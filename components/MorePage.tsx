@@ -9,6 +9,7 @@ import { LogOutIcon } from './icons/LogOutIcon';
 import { ChevronRightIcon } from './icons/ChevronRightIcon';
 import { SparkleIcon } from './icons/SparkleIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
+import { DollarSignIcon } from './icons/DollarSignIcon';
 
 type NavView = 'profile' | 'notifications' | 'sustenance' | 'myinvestments' | 'knowledge' | 'launchpad' | 'earn';
 

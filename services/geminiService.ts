@@ -144,7 +144,7 @@ export const generatePitchDeck = async (detailedPlan: string, lookingFor: string
 export const generateWelcomeMessage = async (name: string, circle: string): Promise<string> => {
   const response = await ai.models.generateContent({
     model: 'gemini-2.5-flash',
-    contents: `Generate a short, friendly, and inspiring welcome message for a new member named "${name}" joining the Global Commons Network from the "${circle}" circle. Keep it under 280 characters. Be warm and encouraging.`,
+    contents: `Generate a short, friendly, and inspiring welcome message for a new member named "${name}" joining the Global Commons Network. Keep it under 280 characters. Be warm and encouraging.`,
     config: {
       temperature: 0.8,
     },

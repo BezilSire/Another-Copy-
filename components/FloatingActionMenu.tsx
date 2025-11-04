@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { PlusIcon } from './icons/PlusIcon';
 import { SirenIcon } from './icons/SirenIcon';
@@ -161,9 +162,9 @@ export const FloatingActionMenu: React.FC<FloatingActionMenuProps> = ({ onNewPos
               }}
               onMouseDown={(e) => e.stopPropagation()}
               onTouchStart={(e) => e.stopPropagation()}
-              disabled={distressCallsAvailable <= 0}
+              disabled={distressCallsAvailable <= 0 || user.status !== 'active'}
               className={`${subButtonStyle} bg-red-600 hover:bg-red-700 disabled:bg-slate-500 disabled:cursor-not-allowed`}
-              title={`Send Distress Call (${distressCallsAvailable} remaining)`}
+              title={user.status !== 'active' ? "Account must be verified to use distress calls" : `Send Distress Call (${distressCallsAvailable} remaining)`}
           >
               <SirenIcon className="h-7 w-7"/>
           </button>

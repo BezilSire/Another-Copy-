@@ -51,7 +51,14 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({ isOpen, onCl
     if (!groupName.trim() || selectedMembers.length === 0) return;
 
     try {
-        await api.createGroupChat(groupName, selectedMembers, currentUser);
+        const memberIds = [currentUser.id, ...selectedMembers.map(m => m.id)];
+        const memberNames = selectedMembers.reduce((acc, member) => {
+            acc[member.id] = member.name;
+            return acc;
+        }, {} as {[key: string]: string});
+        memberNames[currentUser.id] = currentUser.name;
+
+        await api.createGroupChat(groupName, memberIds, memberNames);
         onClose();
     } catch (error) {
         console.error("Failed to create group", error);

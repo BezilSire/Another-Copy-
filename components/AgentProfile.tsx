@@ -75,7 +75,8 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
         return;
       }
       await onUpdateUser({ 
-        name: formData.name, 
+        name: formData.name,
+        name_lowercase: formData.name.toLowerCase(),
         circle: formData.circle,
         phone: formData.phone,
         id_card_number: formData.id_card_number,

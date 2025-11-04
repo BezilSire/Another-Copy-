@@ -1,17 +1,15 @@
-import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback } from 'react';
-import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
+import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, useRef } from 'react';
+import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { doc, onSnapshot } from 'firebase/firestore';
 import { useToast } from './ToastContext';
 import { api } from '../services/apiService';
 import { auth, db } from '../services/firebase';
-import { User, Agent, NewPublicMemberData, MemberUser, Member } from '../types';
+import { User, Agent, NewPublicMemberData } from '../types';
 import { generateReferralCode } from '../utils';
 
-// FIX: Define specific credential types as User/Agent don't have passwords.
 type LoginCredentials = { email: string; password: string };
 type AgentSignupCredentials = Pick<Agent, 'name' | 'email' | 'circle'> & { password: string };
 
-// Define the shape of the context value
 interface AuthContextType {
   currentUser: User | null;
   firebaseUser: FirebaseUser | null;
@@ -20,16 +18,13 @@ interface AuthContextType {
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => Promise<void>;
   agentSignup: (credentials: AgentSignupCredentials) => Promise<void>;
-  memberSignup: (memberData: NewPublicMemberData, password: string) => Promise<void>;
-  memberActivate: (member: Member, password: string) => Promise<void>;
+  publicMemberSignup: (data: NewPublicMemberData, password: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   updateUser: (updatedUser: Partial<User> & { isCompletingProfile?: boolean }) => Promise<void>;
 }
 
-// Create the context
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Create the Provider component
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
@@ -37,11 +32,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isProcessingAuth, setIsProcessingAuth] = useState(false);
   const { addToast } = useToast();
 
+  const isProcessingAuthRef = useRef(isProcessingAuth);
+  useEffect(() => {
+    isProcessingAuthRef.current = isProcessingAuth;
+  }, [isProcessingAuth]);
+
+  const currentUserRef = useRef(currentUser);
+  useEffect(() => {
+    currentUserRef.current = currentUser;
+  }, [currentUser]);
+
   useEffect(() => {
     let userDocListener: (() => void) | undefined;
 
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      // Clean up previous user document listener if it exists
       if (userDocListener) {
         userDocListener();
         userDocListener = undefined;
@@ -55,66 +59,58 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (userDoc.exists()) {
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
 
-            // FIX: Ensure referral code exists for all users, backfilling if necessary.
             if (!userData.referralCode) {
               const newReferralCode = generateReferralCode();
-              // Update firestore in the background (fire-and-forget)
               api.updateUser(userDoc.id, { referralCode: newReferralCode }).catch(err => {
                 console.error("Failed to backfill referral code:", err);
               });
-              // Update local state immediately for a seamless UX
               userData.referralCode = newReferralCode;
             }
 
             if (userData.status === 'ousted') {
-              // Only show toast and log out if the user was *already* logged in and then ousted.
-              if(currentUser?.id === userData.id) {
+              if (currentUserRef.current?.id === userData.id) {
                 addToast('Your account has been suspended.', 'error');
-                api.logout(); // This will trigger onAuthStateChanged again to clear state.
+                api.logout();
               }
             } else {
               setCurrentUser(userData);
             }
           } else {
-            // This case handles a user who has an auth entry but no firestore doc.
-            // This can happen if signup fails midway. isProcessingAuth helps prevent
-            // logging them out during the signup process itself.
-            if (!isProcessingAuth) {
-              console.warn("User document not found for authenticated user. This could be an orphaned account. Logging out.");
+            // It might take a moment for the user doc to be created.
+            // Only log out if we are not in the middle of a signup process.
+            if (!isProcessingAuthRef.current) {
+              console.warn("User document not found for authenticated user. Logging out.");
               api.logout();
             }
           }
+          setIsLoadingAuth(false);
         }, (error) => {
           console.error("Error listening to user document:", error);
           addToast("Connection to your profile was lost. Please log in again.", "error");
           api.logout();
+          setIsLoadingAuth(false);
         });
         
         api.setupPresence(user.uid);
       } else {
-        // User is logged out or null
         setCurrentUser(null);
+        setIsLoadingAuth(false);
       }
-      
-      // Set loading to false once the initial check is complete.
-      setIsLoadingAuth(false);
     });
 
     return () => {
-      unsubscribeAuth(); // Unsubscribe from auth state changes
+      unsubscribeAuth();
       if (userDocListener) {
-        userDocListener(); // Unsubscribe from user doc changes
+        userDocListener();
       }
     };
-  }, [addToast, isProcessingAuth]); // isProcessingAuth is crucial to prevent race conditions during signup.
+  }, [addToast]);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     setIsProcessingAuth(true);
     try {
       await api.login(credentials.email, credentials.password);
-      // On success, the onAuthStateChanged listener will handle fetching the user document.
-      // This makes the login process resilient to network issues.
-      addToast('Logged in successfully!', 'success');
+      // Success is handled by onAuthStateChanged
     } catch (error) {
       const firebaseError = error as { code?: string; message?: string };
       const errorCode = firebaseError.code || '';
@@ -126,7 +122,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       } else {
         addToast(`Login failed: ${firebaseError.message || 'An unknown error occurred.'}`, 'error');
       }
-      throw error; // Re-throw to signal failure to the caller component
+      throw error;
     } finally {
       setIsProcessingAuth(false);
     }
@@ -143,10 +139,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const agentSignup = useCallback(async (credentials: AgentSignupCredentials) => {
     setIsProcessingAuth(true);
     try {
-      await api.signup(credentials.name, credentials.email, credentials.password, credentials.circle);
+      const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
+      await api.agentSignup(userCredential.user, credentials.name, credentials.circle);
       addToast(`Account created successfully! Welcome.`, 'success');
     } catch (error) {
-      const firebaseError = error as { code?: string; message?: string };
+      const firebaseError = error as { code?: string; message?: string; customData?: any };
       let message = `Signup failed: ${firebaseError.message || 'Please try again.'}`;
       
       switch (firebaseError.code) {
@@ -159,9 +156,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           case 'auth/weak-password':
               message = 'Password is too weak. It must be at least 6 characters.';
               break;
-          case 'permission-denied':
-              message = 'Account created, but failed to save profile due to a permissions issue. Please contact support.';
-              break;
       }
       addToast(message, 'error');
       throw error;
@@ -169,64 +163,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setIsProcessingAuth(false);
     }
   }, [addToast]);
-
-  const memberSignup = useCallback(async (memberData: NewPublicMemberData, password: string) => {
+  
+  const publicMemberSignup = useCallback(async (memberData: NewPublicMemberData, password: string) => {
     setIsProcessingAuth(true);
     try {
-        await api.memberSignup(memberData, password);
-        addToast(`Registration submitted! An admin will review your application.`, 'success');
-    } catch (error) {
-        const firebaseError = error as { code?: string; message?: string };
-        let message = `Signup failed: ${firebaseError.message || 'Please try again.'}`;
-
-        switch (firebaseError.code) {
-            case 'auth/email-already-in-use':
-                message = 'An account with this email address already exists.';
-                break;
-            case 'auth/invalid-email':
-                message = 'Please enter a valid email address.';
-                break;
-            case 'auth/weak-password':
-                message = 'Password is too weak. It must be at least 6 characters.';
-                break;
-            case 'permission-denied':
-                message = 'Account created, but failed to save profile due to a permissions issue. Please contact support.';
-                break;
-        }
-        addToast(message, 'error');
-        throw error;
-    } finally {
-      setIsProcessingAuth(false);
-    }
-  }, [addToast]);
-
-  const memberActivate = useCallback(async (member: Member, password: string) => {
-    setIsProcessingAuth(true);
-    try {
-        await api.activateMemberAccount(member, password);
-        addToast(`Account activated! Welcome to the commons.`, 'success');
-    } catch (error) {
-        const firebaseError = error as { code?: string; message?: string };
-        let message = `Activation failed: ${firebaseError.message || 'Please try again.'}`;
-
-        switch (firebaseError.code) {
-            case 'auth/email-already-in-use':
-                message = 'An account for this email already exists. Please contact support.';
-                break;
-            case 'auth/weak-password':
-                message = 'Password is too weak. It must be at least 6 characters.';
-                break;
-            case 'permission-denied':
-                message = 'Account created, but failed to link to your member profile due to a permissions issue. Please contact support.';
-                break;
+      const userCredential = await createUserWithEmailAndPassword(auth, memberData.email, password);
+      await sendEmailVerification(userCredential.user);
+      await api.publicMemberSignup(userCredential.user, memberData.full_name, memberData.referralCode);
+    } catch (error: any) {
+        let message = `Signup failed: ${error.message || 'Please try again.'}`;
+        if (error.code) {
+            switch (error.code) {
+                case 'auth/email-already-in-use':
+                    message = 'An account with this email address already exists. Please log in.';
+                    break;
+                case 'auth/invalid-email':
+                    message = 'Please enter a valid email address.';
+                    break;
+                case 'auth/weak-password':
+                    message = 'Password is too weak. It must be at least 6 characters.';
+                    break;
+            }
         }
         addToast(message, 'error');
         throw error;
     } finally {
         setIsProcessingAuth(false);
     }
-  }, [addToast]);
-  
+}, [addToast]);
+
   const sendPasswordReset = useCallback(async (email: string) => {
     try {
         await api.sendPasswordReset(email);
@@ -240,8 +205,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const updateUser = useCallback(async (updatedData: Partial<User> & { isCompletingProfile?: boolean }) => {
     if (!currentUser) return;
     try {
-      // The onSnapshot listener will automatically update the context state.
-      // We just need to call the API to write the changes.
       await api.updateUser(currentUser.id, updatedData); 
       if (!updatedData.isCompletingProfile) {
         addToast('Profile updated successfully!', 'success');
@@ -253,7 +216,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [currentUser, addToast]);
 
-
   const value = {
     currentUser,
     firebaseUser,
@@ -262,8 +224,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     login,
     logout,
     agentSignup,
-    memberSignup,
-    memberActivate,
+    publicMemberSignup,
     sendPasswordReset,
     updateUser,
   };
@@ -271,7 +232,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
-// Create the custom hook for consuming the context
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (context === undefined) {

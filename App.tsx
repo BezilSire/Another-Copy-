@@ -2,10 +2,9 @@ import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MemberDashboard } from './components/MemberDashboard';
-import { CreatorDashboard } from './components/CreatorDashboard';
 import { AuthPage } from './components/AuthPage';
 import { Header } from './components/Header';
-import { User, Agent, Broadcast, MemberUser, Admin, Conversation, Creator } from './types';
+import { User, Agent, Broadcast, MemberUser, Admin, Conversation } from './types';
 import { useToast } from './contexts/ToastContext';
 import { ToastContainer } from './components/Toast';
 import { api } from './services/apiService';
@@ -18,8 +17,6 @@ import { useProfileCompletionReminder } from './hooks/useProfileCompletionRemind
 import { CompleteProfilePage } from './components/CompleteProfilePage';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { VerifyEmailPage } from './components/VerifyEmailPage';
-import { UbtVerificationPage } from './components/UbtVerificationPage';
-import { CommonsInduction } from './components/CommonsInduction';
 import { ChatsPage } from './components/ChatsPage';
 import { PublicProfile } from './components/PublicProfile';
 import { MemberSearchModal } from './components/MemberSearchModal';
@@ -177,10 +174,6 @@ const App: React.FC = () => {
         />
       );
     }
-
-    if (currentUser.role === 'member' && !currentUser.hasCompletedInduction) {
-      return <CommonsInduction onComplete={async () => await updateUser({ hasCompletedInduction: true })} />;
-    }
     
     if (firebaseUser && !firebaseUser.emailVerified && currentUser.isProfileComplete) {
         return <VerifyEmailPage user={currentUser} onLogout={requestLogout} />;
@@ -202,14 +195,6 @@ const App: React.FC = () => {
             />
         </div>
       );
-    }
-
-    if (currentUser.role === 'creator') {
-        return (
-            <div className="p-4 sm:p-6 lg:p-8">
-                <CreatorDashboard user={currentUser as Creator} onUpdateUser={updateUser} />
-            </div>
-        );
     }
 
     if (currentUser.role === 'agent') {

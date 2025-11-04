@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { MemberUser, Conversation, User, NotificationItem, CreatorContent, FilterType } from '../types';
+import { MemberUser, Conversation, User, NotificationItem, FilterType } from '../types';
 import { MemberBottomNav } from './MemberBottomNav';
 import { PostsFeed } from './PostsFeed';
 import { NewPostModal } from './NewPostModal';
@@ -15,15 +15,15 @@ import { VenturesPage } from './VenturesPage';
 import { AIVenturePitchAssistant } from './AIVenturePitchAssistant';
 import { MyInvestmentsPage } from './MyInvestmentsPage';
 import { SustenancePage } from './SustenancePage';
-import { RedemptionPage } from './RedemptionPage';
 import { NotificationsPage } from './NotificationsPage';
 import { EarnPage } from './EarnPage';
 import { ProjectLaunchpad } from './ProjectLaunchpad';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { formatTimeAgo } from '../utils';
 import { PostTypeFilter } from './PostTypeFilter';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
-type MemberView = 'home' | 'ventures' | 'community' | 'more' | 'profile' | 'knowledge' | 'pitch' | 'myinvestments' | 'sustenance' | 'earn' | 'redemption' | 'notifications' | 'launchpad';
+type MemberView = 'home' | 'ventures' | 'community' | 'more' | 'profile' | 'knowledge' | 'pitch' | 'myinvestments' | 'sustenance' | 'earn' | 'notifications' | 'launchpad';
 
 interface MemberDashboardProps {
   user: MemberUser;
@@ -33,58 +33,23 @@ interface MemberDashboardProps {
   onViewProfile: (userId: string | null) => void;
 }
 
+const VerificationReminderBanner: React.FC = () => (
+    <div className="bg-yellow-900/50 border border-yellow-700 text-yellow-200 px-4 py-3 rounded-lg flex items-start space-x-3 mb-6" role="alert">
+        <AlertTriangleIcon className="h-5 w-5 text-yellow-400 flex-shrink-0 mt-0.5" />
+        <div>
+            <strong className="font-bold">Account Pending Verification</strong>
+            <p className="text-sm">You can post and earn CCAP, but redemption and features like distress calls are disabled until an admin verifies your account.</p>
+        </div>
+    </div>
+);
+
 export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdateUser, unreadCount, onLogout, onViewProfile }) => {
   const [view, setView] = useState<MemberView>('home');
   const [isNewPostModalOpen, setIsNewPostModalOpen] = useState(false);
   const [isDistressModalOpen, setIsDistressModalOpen] = useState(false);
   const [isDistressLoading, setIsDistressLoading] = useState(false);
   const { addToast } = useToast();
-  const [typeFilter, setTypeFilter] = useState<FilterType>('all');
-
-  const [creatorContent, setCreatorContent] = useState<CreatorContent[]>([]);
-  const [isLoadingCreatorContent, setIsLoadingCreatorContent] = useState(true);
-
-  useEffect(() => {
-    if (user.referrerId) {
-      const unsubscribe = api.listenForContentFromReferrer(user.referrerId, (data) => {
-        setCreatorContent(data);
-        setIsLoadingCreatorContent(false);
-      }, (error) => {
-        console.error("Failed to load creator content:", error);
-        setIsLoadingCreatorContent(false);
-      });
-      return () => unsubscribe();
-    } else {
-      setIsLoadingCreatorContent(false);
-    }
-  }, [user.referrerId]);
-
-  const CreatorContentFeed = () => {
-    if (isLoadingCreatorContent || creatorContent.length === 0) {
-        return null; 
-    }
-
-    return (
-        <div className="space-y-4 mb-6">
-            <h2 className="text-2xl font-bold text-white">From Your Mentor</h2>
-            {creatorContent.map(item => (
-                <div key={item.id} className="bg-slate-800 p-5 rounded-lg shadow-lg border-l-4 border-purple-500/50">
-                    <div className="flex justify-between items-start">
-                        <div>
-                        <h3 className="text-xl font-bold text-white">{item.title}</h3>
-                        <p className="text-xs text-gray-400">
-                            Posted {item.createdAt ? formatTimeAgo(item.createdAt.toDate().toISOString()) : 'just now'}
-                        </p>
-                        </div>
-                    </div>
-                    <div className="text-white mt-4 text-base wysiwyg-content line-clamp-6">
-                        <MarkdownRenderer content={item.content} />
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
-  };
+  const [typeFilter, setTypeFilter] = useState<FilterType>('foryou');
 
   const handlePostCreated = (ccapAwarded: number) => {
     if (ccapAwarded > 0) {
@@ -113,7 +78,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
 
   const handleNotificationNavigate = (item: NotificationItem) => {
     if (item.type === 'NEW_CHAT' || item.type === 'NEW_MESSAGE') {
-      // Chat functionality is handled in App.tsx
       console.log('Navigate to chat not implemented here.');
     } else if (item.link) {
       onViewProfile(item.link);
@@ -125,7 +89,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       case 'home':
         return (
             <>
-              <CreatorContentFeed />
               <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} />
               <PostsFeed user={user} onViewProfile={onViewProfile as (userId: string) => void} typeFilter={typeFilter} />
             </>
@@ -147,9 +110,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       case 'sustenance':
         return <SustenancePage user={user} />;
       case 'earn':
-        return <EarnPage user={user} onUpdateUser={onUpdateUser} onNavigateToRedemption={() => setView('redemption')} onNavigateToInvestments={() => setView('myinvestments')} />;
-      case 'redemption':
-        return <RedemptionPage user={user} onUpdateUser={onUpdateUser} onBack={() => setView('earn')} />;
+        return <EarnPage user={user} onUpdateUser={onUpdateUser} onNavigateToRedemption={() => setView('home')} onNavigateToInvestments={() => setView('myinvestments')} />;
        case 'notifications':
         return <NotificationsPage user={user} onNavigate={handleNotificationNavigate} onViewProfile={onViewProfile as (userId: string) => void} />;
       case 'launchpad':
@@ -157,7 +118,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       default:
         return (
             <>
-              <CreatorContentFeed />
               <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} />
               <PostsFeed user={user} onViewProfile={onViewProfile as (userId: string) => void} typeFilter={typeFilter} />
             </>
@@ -167,13 +127,14 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
 
   return (
     <>
+      {user.status !== 'active' && <VerificationReminderBanner />}
       <div className="pb-24"> 
         {renderContent()}
       </div>
       <MemberBottomNav activeView={view as any} setActiveView={setView as any} unreadNotificationCount={unreadCount} />
       <FloatingActionMenu
         onNewPostClick={() => setIsNewPostModalOpen(true)}
-        onDistressClick={() => setIsDistressModalOpen(true)}
+        onDistressClick={() => setIsDistressModalOpen(false)}
         user={user}
       />
       {isNewPostModalOpen && (
