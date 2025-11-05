@@ -21,7 +21,8 @@ import { ProjectLaunchpad } from './ProjectLaunchpad';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { formatTimeAgo } from '../utils';
 import { PostTypeFilter } from './PostTypeFilter';
-import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
+import { VerificationHub } from './VerificationHub';
+import { VerificationRedirectModal } from './VerificationRedirectModal';
 
 type MemberView = 'home' | 'ventures' | 'community' | 'more' | 'profile' | 'knowledge' | 'pitch' | 'myinvestments' | 'sustenance' | 'earn' | 'notifications' | 'launchpad';
 
@@ -33,16 +34,6 @@ interface MemberDashboardProps {
   onViewProfile: (userId: string | null) => void;
 }
 
-const VerificationReminderBanner: React.FC = () => (
-    <div className="bg-yellow-900/50 border border-yellow-700 text-yellow-200 px-4 py-3 rounded-lg flex items-start space-x-3 mb-6" role="alert">
-        <AlertTriangleIcon className="h-5 w-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-        <div>
-            <strong className="font-bold">Account Pending Verification</strong>
-            <p className="text-sm">You can post and earn CCAP, but redemption and features like distress calls are disabled until an admin verifies your account.</p>
-        </div>
-    </div>
-);
-
 export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdateUser, unreadCount, onLogout, onViewProfile }) => {
   const [view, setView] = useState<MemberView>('home');
   const [isNewPostModalOpen, setIsNewPostModalOpen] = useState(false);
@@ -50,6 +41,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
   const [isDistressLoading, setIsDistressLoading] = useState(false);
   const { addToast } = useToast();
   const [typeFilter, setTypeFilter] = useState<FilterType>('foryou');
+  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
 
   const handlePostCreated = (ccapAwarded: number) => {
     if (ccapAwarded > 0) {
@@ -102,7 +94,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       case 'more':
         return <MorePage user={user} onNavigate={handleNav} onLogout={onLogout} notificationCount={unreadCount} />;
       case 'profile':
-        return <MemberProfile currentUser={user} onUpdateUser={onUpdateUser} onViewProfile={onViewProfile as (userId: string) => void} />;
+        return <MemberProfile currentUser={user} onUpdateUser={onUpdateUser} onViewProfile={onViewProfile as (userId: string) => void} onGetVerifiedClick={() => setIsVerificationModalOpen(true)} />;
       case 'knowledge':
         return <KnowledgeBasePage currentUser={user} onUpdateUser={onUpdateUser} />;
       case 'myinvestments':
@@ -127,7 +119,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
 
   return (
     <>
-      {user.status !== 'active' && <VerificationReminderBanner />}
+      {user.status !== 'active' && view === 'home' && (
+        <VerificationHub 
+          onGetVerifiedClick={() => setIsVerificationModalOpen(true)}
+          onLearnMoreClick={() => setView('knowledge')}
+        />
+      )}
       <div className="pb-24"> 
         {renderContent()}
       </div>
@@ -153,6 +150,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
           isLoading={isDistressLoading}
         />
       )}
+      <VerificationRedirectModal 
+        isOpen={isVerificationModalOpen}
+        onClose={() => setIsVerificationModalOpen(false)}
+        buyUrl="https://ubuntium.org/buy-ubt"
+      />
     </>
   );
 };

@@ -16,6 +16,7 @@ import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
 import { TrendingUpIcon } from './icons/TrendingUpIcon';
 import { formatTimeAgo } from '../utils';
 import { UserCircleIcon } from './icons/UserCircleIcon';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
 const LOOKING_FOR_LIST = ['Co-founder', 'Business Partner', 'Investor', 'Mentor', 'Advisor', 'Employee', 'Freelancer'];
 
@@ -41,9 +42,10 @@ interface MemberProfileProps {
   currentUser: MemberUser;
   onUpdateUser: (updatedUser: Partial<User>) => Promise<void>;
   onViewProfile: (userId: string) => void;
+  onGetVerifiedClick: () => void;
 }
 
-export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpdateUser, onViewProfile }) => {
+export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpdateUser, onViewProfile, onGetVerifiedClick }) => {
     const [referredUsers, setReferredUsers] = useState<PublicUserProfile[]>([]);
     const [isSaving, setIsSaving] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -189,7 +191,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
             {editData.isLookingForPartners && (
                 <div className="space-y-4 mt-4 pl-6 border-l border-slate-700 animate-fade-in">
                     <div><label htmlFor="businessIdea" className="block text-sm font-medium text-gray-300">My business idea</label><textarea name="businessIdea" id="businessIdea" rows={3} value={editData.businessIdea} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" /></div>
-                    <div><label className="block text-sm font-medium text-gray-300">What I'm looking for</label><div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">{LOOKING_FOR_LIST.map(item => (<label key={item} className="flex items-center space-x-2 text-sm text-gray-300"><input type="checkbox" value={item} name="lookingFor" checked={editData.lookingFor.includes(item)} onChange={handleEditCheckboxChange} className="text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500"/><span>{item}</span></label>))}</div></div>
+                    <div><label className="block text-sm font-medium text-gray-300">What I'm looking for</label><div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">{LOOKING_FOR_LIST.map(item => (<label key={item} className="flex items-center space-x-2 text-sm text-gray-300"><input type="checkbox" value={item} name="lookingFor" checked={editData.lookingFor.includes(item)} onChange={handleEditCheckboxChange} className="text-green-600 bg-slate-700 border border-slate-600 rounded focus:ring-green-500"/><span>{item}</span></label>))}</div></div>
                 </div>
             )}
             <div className="flex justify-end space-x-3 pt-4"><button onClick={() => setIsEditing(false)} className="px-4 py-2 bg-slate-600 text-white text-sm rounded-md hover:bg-slate-500">Cancel</button><button onClick={handleSave} disabled={isSaving} className="px-4 py-2 bg-green-600 text-white text-sm rounded-md hover:bg-green-700 disabled:bg-slate-500">{isSaving ? "Saving..." : "Save Changes"}</button></div>
@@ -260,6 +262,21 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
             </button>
          )}
       </div>
+
+       {currentUser.status !== 'active' && (
+        <div className="mt-6 p-4 bg-yellow-900/50 border border-yellow-700 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-4">
+           <div>
+                <h4 className="font-bold text-yellow-200 flex items-center gap-2"><AlertTriangleIcon className="h-5 w-5"/>Complete Your Verification</h4>
+                <p className="text-sm text-yellow-300 mt-1">Unlock full member benefits by securing your $UBT stake in the commons.</p>
+            </div>
+            <button 
+                onClick={onGetVerifiedClick}
+                className="flex-shrink-0 w-full sm:w-auto inline-flex justify-center items-center px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold"
+            >
+                Get Verified Now
+            </button>
+        </div>
+     )}
       
       <div className="mt-4 border-b border-slate-700">
           <nav className="-mb-px flex space-x-8" aria-label="Tabs">
