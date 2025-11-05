@@ -22,6 +22,7 @@ import { PublicProfile } from './components/PublicProfile';
 import { MemberSearchModal } from './components/MemberSearchModal';
 import { CreateGroupModal } from './components/CreateGroupModal';
 import { arrayUnion } from 'firebase/firestore';
+import { AndroidApkBanner } from './components/AndroidApkBanner';
 
 
 type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge';
@@ -261,6 +262,7 @@ const App: React.FC = () => {
       
       <ToastContainer />
       <AppInstallBanner />
+      <AndroidApkBanner />
        <ConfirmationDialog
         isOpen={isLogoutConfirmOpen}
         onClose={() => setIsLogoutConfirmOpen(false)}
