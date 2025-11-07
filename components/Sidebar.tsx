@@ -9,8 +9,9 @@ import { ChevronDoubleLeftIcon } from './icons/ChevronDoubleLeftIcon';
 import { ChevronDoubleRightIcon } from './icons/ChevronDoubleRightIcon';
 import { BellIcon } from './icons/BellIcon';
 import { BookOpenIcon } from './icons/BookOpenIcon';
+import { WalletIcon } from './icons/WalletIcon';
 
-type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge';
+type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge' | 'wallet';
 
 interface SidebarProps {
   agent: Agent;
@@ -76,6 +77,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ agent, activeView, setActiveVi
             label="Members"
             isActive={activeView === 'members'}
             onClick={() => setActiveView('members')}
+            isCollapsed={isCollapsed}
+          />
+           <NavItem
+            icon={<WalletIcon />}
+            label="Wallet"
+            isActive={activeView === 'wallet'}
+            onClick={() => setActiveView('wallet')}
             isCollapsed={isCollapsed}
           />
            <NavItem

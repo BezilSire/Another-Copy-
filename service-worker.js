@@ -1,32 +1,24 @@
-// Original PWA caching logic follows
-// Define cache names for static assets and dynamic API responses.
-const STATIC_CACHE_NAME = 'ubuntium-static-cache-v2';
-const DYNAMIC_CACHE_NAME = 'ubuntium-dynamic-cache-v2';
+
+// A list of host suffixes that the service worker should completely ignore.
+// This is a safeguard to ensure that Firebase's real-time features are never intercepted.
+const IGNORED_HOST_SUFFIXES = [
+  'googleapis.com', // Covers Firestore, Identity Toolkit, etc.
+  'gstatic.com',    // Firebase JS SDK is served from here
+];
+
+const STATIC_CACHE_NAME = 'gcn-static-cache-v4'; // Incremented version to force update
+const DYNAMIC_CACHE_NAME = 'gcn-dynamic-cache-v4';
 
 // List all critical static assets that form the application shell.
 const APP_SHELL_ASSETS = [
   '/',
   '/index.html',
   '/offline.html',
-  '/index.tsx',
-  '/App.tsx',
-  '/types.ts',
-  // Key components needed for the app to load
-  '/components/Header.tsx',
-  '/components/AuthPage.tsx',
-  '/components/LoginPage.tsx',
-  '/contexts/AuthContext.tsx',
-  '/contexts/ToastContext.tsx',
-  // Main CSS and font files
-  'https://rsms.me/inter/inter.css',
-  // Key icons that are part of the main UI
-  '/components/icons/LogoIcon.tsx',
-  '/components/icons/UserCircleIcon.tsx',
-  // The manifest for PWA functionality
-  '/manifest.json'
+  '/logo.svg',
+  '/manifest.json',
+  'https://rsms.me/inter/inter.css'
 ];
 
-// On 'install', pre-cache the application shell.
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(STATIC_CACHE_NAME).then(cache => {
@@ -36,7 +28,6 @@ self.addEventListener('install', event => {
   );
 });
 
-// On 'activate', clean up old caches.
 self.addEventListener('activate', event => {
   event.waitUntil(
     caches.keys().then(cacheNames => {
@@ -53,56 +44,53 @@ self.addEventListener('activate', event => {
   return self.clients.claim();
 });
 
-// On 'fetch', apply caching strategies.
 self.addEventListener('fetch', event => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Strategy 1: Network-first for Firestore API calls.
-  if (url.hostname === 'firestore.googleapis.com') {
-    event.respondWith(
-      fetch(request)
-        .then(response => {
-          // If the request is successful, clone it and cache it.
-          const clonedResponse = response.clone();
-          caches.open(DYNAMIC_CACHE_NAME).then(cache => {
-            cache.put(request.url, clonedResponse);
-          });
-          return response;
-        })
-        .catch(() => {
-          // If the network fails, try to serve from the cache.
-          return caches.match(request);
-        })
-    );
-  } 
-  // Strategy 2: Cache-first for all other requests (app shell, static assets).
-  else {
-    event.respondWith(
-      caches.match(request).then(cachedResponse => {
-        // If a cached response is found, return it.
-        if (cachedResponse) {
-          return cachedResponse;
-        }
-
-        // If not in cache, fetch from the network.
-        return fetch(request)
-          .then(networkResponse => {
-            // Cache the new response for future use.
-            const clonedResponse = networkResponse.clone();
-            caches.open(DYNAMIC_CACHE_NAME).then(cache => {
-              cache.put(request.url, clonedResponse);
-            });
-            return networkResponse;
-          })
-          .catch(() => {
-            // If the network request fails and the asset is not in any cache,
-            // and it's a navigation request, show the offline fallback page.
-            if (request.mode === 'navigate') {
-              return caches.match('/offline.html');
-            }
-          });
-      })
-    );
+  // Safeguard: If the request is for any Google/Firebase API, let the browser handle it.
+  if (IGNORED_HOST_SUFFIXES.some(suffix => url.hostname.endsWith(suffix))) {
+    return; // Do not intercept.
   }
+  
+  // For app shell assets, use a cache-first strategy for instant loading.
+  if (APP_SHELL_ASSETS.some(assetPath => url.pathname === assetPath || url.href === assetPath)) {
+      event.respondWith(caches.match(request));
+      return;
+  }
+
+  // **THE FIX**: For all other requests (dynamic data, images, etc.), use a "Network First, then Cache" strategy.
+  // This ensures the user always sees the most up-to-date information if they are online.
+  event.respondWith(
+    fetch(request)
+      .then(networkResponse => {
+        // If the fetch is successful, update the dynamic cache.
+        if (networkResponse && networkResponse.status === 200) {
+          const responseToCache = networkResponse.clone();
+          caches.open(DYNAMIC_CACHE_NAME).then(cache => {
+            cache.put(request, responseToCache);
+          });
+        }
+        return networkResponse;
+      })
+      .catch(() => {
+        // If the network request fails (i.e., the user is offline),
+        // try to serve the response from the cache.
+        return caches.match(request).then(cachedResponse => {
+          if (cachedResponse) {
+            return cachedResponse;
+          }
+          // If the request is for a page and it's not in the cache, show the offline page.
+          if (request.mode === 'navigate') {
+            return caches.match('/offline.html');
+          }
+          // For other failed requests (like API calls not in cache), just fail.
+          return new Response(JSON.stringify({ error: 'offline' }), {
+            headers: { 'Content-Type': 'application/json' },
+            status: 503,
+            statusText: 'Service Unavailable'
+          });
+        });
+      })
+  );
 });

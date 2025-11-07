@@ -23,8 +23,9 @@ import { formatTimeAgo } from '../utils';
 import { PostTypeFilter } from './PostTypeFilter';
 import { VerificationHub } from './VerificationHub';
 import { VerificationRedirectModal } from './VerificationRedirectModal';
+import { WalletPage } from './WalletPage';
 
-type MemberView = 'home' | 'ventures' | 'community' | 'more' | 'profile' | 'knowledge' | 'pitch' | 'myinvestments' | 'sustenance' | 'earn' | 'notifications' | 'launchpad';
+type MemberView = 'home' | 'ventures' | 'community' | 'more' | 'profile' | 'knowledge' | 'pitch' | 'myinvestments' | 'sustenance' | 'earn' | 'notifications' | 'launchpad' | 'wallet';
 
 interface MemberDashboardProps {
   user: MemberUser;
@@ -85,6 +86,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
               <PostsFeed user={user} onViewProfile={onViewProfile as (userId: string) => void} typeFilter={typeFilter} />
             </>
           );
+      case 'wallet':
+        return <WalletPage user={user} />;
       case 'ventures':
         return <VenturesPage currentUser={user} onViewProfile={onViewProfile as (userId: string) => void} onNavigateToPitchAssistant={() => setView('pitch')} />;
       case 'pitch':
@@ -131,7 +134,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       <MemberBottomNav activeView={view as any} setActiveView={setView as any} unreadNotificationCount={unreadCount} />
       <FloatingActionMenu
         onNewPostClick={() => setIsNewPostModalOpen(true)}
-        onDistressClick={() => setIsDistressModalOpen(false)}
+        onDistressClick={() => setIsDistressModalOpen(true)}
         user={user}
       />
       {isNewPostModalOpen && (

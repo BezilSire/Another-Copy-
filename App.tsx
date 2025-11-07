@@ -23,9 +23,10 @@ import { MemberSearchModal } from './components/MemberSearchModal';
 import { CreateGroupModal } from './components/CreateGroupModal';
 import { arrayUnion } from 'firebase/firestore';
 import { AndroidApkBanner } from './components/AndroidApkBanner';
+import { WalletPage } from './components/WalletPage';
 
 
-type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge';
+type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge' | 'wallet';
 
 const App: React.FC = () => {
   const { currentUser, isLoadingAuth, logout, updateUser, firebaseUser } = useAuth();

@@ -49,6 +49,8 @@ export interface User {
   lastCycleChoice?: 'redeemed' | 'staked' | 'invested';
   name_lowercase?: string; // For case-insensitive search
   skills_lowercase?: string[]; // For case-insensitive search
+  ubtBalance?: number; // UBT Wallet Balance
+  initialUbtStake?: number; // The initial UBT stake for verification
 }
 
 // Specific User Roles
@@ -281,7 +283,7 @@ export interface PayoutRequest {
     id: string;
     userId: string;
     userName: string;
-    type: 'referral' | 'commission' | 'ccap_redemption' | 'veq_redemption' | 'admin_referral_bonus';
+    type: 'referral' | 'commission' | 'ccap_redemption' | 'veq_redemption' | 'admin_referral_bonus' | 'ubt_redemption';
     amount: number;
     status: 'pending' | 'completed' | 'rejected';
     requestedAt: Timestamp;
@@ -347,4 +349,23 @@ export interface Distribution {
     date: Timestamp;
     totalAmount: number;
     notes: string;
+}
+
+export interface GlobalEconomy {
+    ubt_to_usd_rate: number;
+    ubtRedemptionWindowOpen?: boolean;
+    ubtRedemptionWindowStartedAt?: Timestamp;
+    ubtRedemptionWindowClosesAt?: Timestamp;
+}
+
+export interface Transaction {
+    id: string;
+    type: 'credit' | 'debit' | 'p2p_sent' | 'p2p_received';
+    amount: number;
+    reason: string;
+    timestamp: Timestamp;
+    actorId: string;
+    actorName: string;
+    relatedUserId?: string;
+    relatedUserName?: string;
 }

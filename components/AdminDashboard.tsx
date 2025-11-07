@@ -32,9 +32,11 @@ import { VenturesAdminPage } from './VenturesAdminPage';
 import { DatabaseIcon } from './icons/DatabaseIcon';
 import { EconomyAdminPage } from './EconomyAdminPage';
 import { Dashboard } from './Dashboard';
+import { WalletIcon } from './icons/WalletIcon';
+import { WalletAdminPage } from './WalletAdminPage';
 
 
-type AdminView = 'dashboard' | 'users' | 'feed' | 'reports' | 'profile' | 'notifications' | 'proposals' | 'payouts' | 'sustenance' | 'ventures' | 'economy' | 'chats';
+type AdminView = 'dashboard' | 'users' | 'feed' | 'reports' | 'profile' | 'notifications' | 'proposals' | 'payouts' | 'sustenance' | 'ventures' | 'economy' | 'chats' | 'wallet';
 type UserSubView = 'agents' | 'members' | 'roles';
 
 interface AdminDashboardProps {
@@ -186,9 +188,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
         setDialogState({ isOpen: false, member: null, action: 'clear' });
     };
 
-    const handleApproveMember = async (member: Member) => {
-        try { await api.approveMember(user, member); addToast(`${member.full_name} has been approved.`, 'success'); setVerificationModalState({ isOpen: false, member: null }); } 
-        catch (e) { addToast(`Approval failed: ${e instanceof Error ? e.message : "An error occurred."}`, 'error'); throw e; }
+    const handleApproveMember = async (member: Member, ubtAmount: number) => {
+        try { 
+            await api.approveMemberAndCreditUbt(user, member, ubtAmount);
+            addToast(`${member.full_name} has been approved and credited ${ubtAmount} $UBT.`, 'success'); 
+            setVerificationModalState({ isOpen: false, member: null }); 
+        } 
+        catch (e) { 
+            addToast(`Approval failed: ${e instanceof Error ? e.message : "An error occurred."}`, 'error'); 
+            throw e; 
+        }
     }
 
     const handleRejectMember = async (member: Member) => {
@@ -306,6 +315,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
         switch (view) {
             case 'dashboard': return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={handleSendBroadcast} />;
             case 'users': return renderUsersView();
+            case 'wallet': return <WalletAdminPage adminUser={user} allUsers={allUsers} />;
             case 'feed': return ( <> <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView /><PostsFeed user={user} feedType="all" isAdminView onViewProfile={onViewProfile} typeFilter={typeFilter} /></> );
             case 'reports': return <div className="bg-slate-800 p-6 rounded-lg shadow-lg"><ReportsView reports={reports} onViewProfile={onViewProfile} onResolve={(reportId, postId, authorId) => api.resolvePostReport(user, reportId, postId, authorId)} onDismiss={(reportId) => api.dismissReport(user, reportId)}/></div>;
             case 'proposals': return <ProposalsAdminPage user={user} />;
@@ -350,6 +360,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
                 <nav className="-mb-px flex space-x-6 sm:space-x-8 overflow-x-auto" aria-label="Tabs">
                     <TabButton label="Dashboard" icon={<LayoutDashboardIcon/>} isActive={view === 'dashboard'} onClick={() => setView('dashboard')} />
                     <TabButton label="Users" icon={<UsersIcon/>} isActive={view === 'users'} onClick={() => setView('users')} />
+                    <TabButton label="Wallet" icon={<WalletIcon/>} isActive={view === 'wallet'} onClick={() => setView('wallet')} />
                     <TabButton label="Feed" icon={<MessageSquareIcon/>} isActive={view === 'feed'} onClick={() => setView('feed')} />
                     <TabButton label="Chats" icon={<MessageSquareIcon/>} isActive={view === 'chats'} onClick={() => setView('chats')} />
                     <TabButton label="Proposals" icon={<ScaleIcon/>} isActive={view === 'proposals'} onClick={() => setView('proposals')} />

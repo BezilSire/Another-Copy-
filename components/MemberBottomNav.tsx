@@ -3,12 +3,14 @@ import { HomeIcon } from './icons/HomeIcon';
 import { UsersIcon } from './icons/UsersIcon';
 import { BriefcaseIcon } from './icons/BriefcaseIcon';
 import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon';
+import { WalletIcon } from './icons/WalletIcon';
 
 type MemberView = 
   | 'home' 
   | 'ventures'
   | 'community'
-  | 'more';
+  | 'more'
+  | 'wallet';
 
 
 interface MemberBottomNavProps {
@@ -48,6 +50,12 @@ export const MemberBottomNav: React.FC<MemberBottomNavProps> = ({ activeView, se
                     label="Feed"
                     isActive={activeView === 'home'}
                     onClick={() => setActiveView('home')}
+                />
+                <NavItem
+                    icon={<WalletIcon />}
+                    label="Wallet"
+                    isActive={activeView === 'wallet'}
+                    onClick={() => setActiveView('wallet')}
                 />
                 <NavItem
                     icon={<BriefcaseIcon />}

@@ -1,3 +1,5 @@
+
+
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -50,7 +52,7 @@ import {
     User, Agent, Member, NewMember, MemberUser, Broadcast, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, NewPublicMemberData, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
-    Distribution
+    Distribution, Transaction, GlobalEconomy
 } from '../types';
 
 
@@ -68,6 +70,8 @@ const sustenanceCollection = collection(db, 'sustenance_cycles');
 const vouchersCollection = collection(db, 'sustenance_vouchers');
 const venturesCollection = collection(db, 'ventures');
 const globalsCollection = collection(db, 'globals');
+
+// callable function
 
 
 // Helper function for robust post deletion
@@ -133,7 +137,6 @@ export const api = {
             }
         }
         
-        // FIX: Pass an empty string for the circle argument to match the function signature.
         const welcomeMessage = await generateWelcomeMessage(full_name, '');
         const batch = writeBatch(db);
 
@@ -334,7 +337,6 @@ export const api = {
         return members;
     },
     registerMember: async (agent: Agent, memberData: NewMember): Promise<Member> => {
-        // FIX: Pass memberData.circle to generateWelcomeMessage to match the function signature.
         const welcomeMessage = await generateWelcomeMessage(memberData.full_name, memberData.circle);
         const newMember: Omit<Member, 'id'> = {
             ...memberData, agent_id: agent.id, agent_name: agent.name, date_registered: new Date().toISOString(),
@@ -367,11 +369,40 @@ export const api = {
         }, onError);
     },
     updateMemberProfile: (memberId: string, data: Partial<Member>) => updateDoc(doc(membersCollection, memberId), data),
-    approveMember: async (admin: User, member: Member) => {
-        const batch = writeBatch(db);
-        batch.update(doc(membersCollection, member.id), { payment_status: 'complete' });
-        if (member.uid) batch.update(doc(usersCollection, member.uid), { status: 'active' });
-        await batch.commit();
+    approveMemberAndCreditUbt: async (admin: User, member: Member, ubtAmount: number) => {
+        if (!member.uid) {
+            throw new Error("Cannot approve a member who has not created an account yet.");
+        }
+        if (ubtAmount < 0) {
+            throw new Error("Credit amount cannot be negative.");
+        }
+
+        return runTransaction(db, async (t) => {
+            const memberRef = doc(membersCollection, member.id);
+            const userRef = doc(usersCollection, member.uid!);
+
+            // 1. Mark member as complete
+            t.update(memberRef, { payment_status: 'complete' });
+
+            // 2. Activate user and set initial balance
+            t.update(userRef, { 
+                status: 'active',
+                ubtBalance: increment(ubtAmount), // Use increment to handle any existing balance safely
+                initialUbtStake: ubtAmount
+            });
+
+            // 3. Create transaction record for the user
+            const txRef = doc(collection(db, 'users', member.uid!, 'transactions'));
+            const txData: Omit<Transaction, 'id'|'timestamp'> & {timestamp: any} = {
+                type: 'credit',
+                amount: ubtAmount,
+                reason: 'Initial UBT Stake Verification',
+                timestamp: serverTimestamp(),
+                actorId: admin.id,
+                actorName: admin.name,
+            };
+            t.set(txRef, txData);
+        });
     },
     rejectMember: (admin: User, member: Member) => updateDoc(doc(membersCollection, member.id), { payment_status: 'rejected' }),
     updatePaymentStatus: (admin: User, memberId: string, status: Member['payment_status']) => updateDoc(doc(membersCollection, memberId), { payment_status: status }),
@@ -876,4 +907,107 @@ export const api = {
         const newTotal = (cvpDoc.data()?.total_usd_value || 0) + amount;
         t.set(cvpRef, { total_usd_value: newTotal }, { merge: true });
     }),
+    
+    // Wallet & Economy
+    listenForUserTransactions: (userId: string, callback: (txs: Transaction[]) => void, onError: (error: Error) => void) => {
+        const q = query(collection(db, 'users', userId, 'transactions'), orderBy('timestamp', 'desc'), limit(50));
+        return onSnapshot(q, (snapshot) => {
+            const transactions = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+            callback(transactions);
+        }, onError);
+    },
+    listenForGlobalEconomy: (callback: (economy: GlobalEconomy | null) => void, onError: (error: Error) => void) => {
+        const docRef = doc(globalsCollection, 'economy');
+        return onSnapshot(docRef, (snapshot) => {
+            callback(snapshot.exists() ? snapshot.data() as GlobalEconomy : null);
+        }, onError);
+    },
+    setGlobalEconomy: (adminUser: User, data: Partial<GlobalEconomy>) => {
+        const docRef = doc(globalsCollection, 'economy');
+        return setDoc(docRef, data, { merge: true });
+    },
+    updateUbtRedemptionWindow: (adminUser: User, open: boolean) => {
+        const docRef = doc(globalsCollection, 'economy');
+        if (open) {
+            const now = Timestamp.now();
+            const closesAt = new Date(now.toDate());
+            closesAt.setDate(closesAt.getDate() + 5);
+            return setDoc(docRef, {
+                ubtRedemptionWindowOpen: true,
+                ubtRedemptionWindowStartedAt: now,
+                ubtRedemptionWindowClosesAt: Timestamp.fromDate(closesAt)
+            }, { merge: true });
+        } else {
+            return setDoc(docRef, { 
+                ubtRedemptionWindowOpen: false,
+                ubtRedemptionWindowClosesAt: null,
+            }, { merge: true });
+        }
+    },
+    updateUserUbt: (adminUser: User, userId: string, amount: number, reason: string) => {
+        return runTransaction(db, async (t) => {
+            const userRef = doc(usersCollection, userId);
+            
+            t.update(userRef, { ubtBalance: increment(amount) });
+    
+            const txRef = doc(collection(db, 'users', userId, 'transactions'));
+            const txData: Omit<Transaction, 'id'|'timestamp'> & {timestamp: any} = {
+                type: amount > 0 ? 'credit' : 'debit',
+                amount: Math.abs(amount),
+                reason,
+                timestamp: serverTimestamp(),
+                actorId: adminUser.id,
+                actorName: adminUser.name,
+            };
+            t.set(txRef, txData);
+        });
+    },
+    requestUbtRedemption: (user: User, ubtAmount: number, usdValue: number, ecocashName: string, ecocashNumber: string) => {
+        return runTransaction(db, async (t) => {
+            const userRef = doc(usersCollection, user.id);
+            const userDoc = await t.get(userRef);
+            if (!userDoc.exists()) throw new Error("User not found.");
+
+            const currentBalance = userDoc.data()?.ubtBalance || 0;
+            const initialStake = userDoc.data()?.initialUbtStake || 0;
+            const redeemableUbt = Math.max(0, currentBalance - initialStake);
+
+            if (ubtAmount > redeemableUbt) {
+                throw new Error("Amount exceeds redeemable balance.");
+            }
+
+            // Create payout request
+            const payoutRef = doc(collection(db, 'payouts'));
+            const payoutReq: Omit<PayoutRequest, 'id'|'requestedAt'> & {requestedAt: any} = {
+                userId: user.id,
+                userName: user.name,
+                type: 'ubt_redemption',
+                amount: usdValue, // Storing USD value in amount field
+                status: 'pending',
+                requestedAt: serverTimestamp(),
+                ecocashName,
+                ecocashNumber,
+                meta: {
+                    ubtAmount: ubtAmount,
+                    ubtToUsdRate: ubtAmount > 0 ? usdValue / ubtAmount : 0,
+                }
+            };
+            t.set(payoutRef, payoutReq);
+
+            // Deduct balance immediately
+            t.update(userRef, { ubtBalance: increment(-ubtAmount) });
+            
+            // Create transaction log
+            const txRef = doc(collection(db, 'users', user.id, 'transactions'));
+            const txData: Omit<Transaction, 'id'|'timestamp'> & {timestamp: any} = {
+                type: 'debit',
+                amount: ubtAmount,
+                reason: 'UBT redemption request',
+                timestamp: serverTimestamp(),
+                actorId: user.id,
+                actorName: user.name
+            };
+            t.set(txRef, txData);
+        });
+    },
 };
