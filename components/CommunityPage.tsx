@@ -36,7 +36,20 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ currentUser, onVie
           // FIX: Replaced call to non-existent 'api.findCollaborators' with 'api.getVentureMembers' to find collaborators.
           // Otherwise, fetch collaborators
           const { users: collaborators } = await api.getVentureMembers(100);
-          results = collaborators.filter(u => u.id !== currentUser.id);
+          
+          // FIX: Type 'User[]' is not assignable to 'PublicUserProfile[]' because of incompatible 'skills' and 'interests' types.
+          // This maps `User` objects to `PublicUserProfile` objects by ensuring 'skills' and 'interests' are always arrays.
+          results = collaborators
+            .filter(u => u.id !== currentUser.id)
+            .map(u => ({
+                ...u,
+                skills: Array.isArray(u.skills) 
+                    ? u.skills 
+                    : (typeof u.skills === 'string' ? u.skills.split(',').map(s => s.trim()).filter(Boolean) : []),
+                interests: Array.isArray(u.interests)
+                    ? u.interests
+                    : (typeof u.interests === 'string' ? u.interests.split(',').map(s => s.trim()).filter(Boolean) : []),
+            })) as PublicUserProfile[];
         }
         
         if (isMounted) {

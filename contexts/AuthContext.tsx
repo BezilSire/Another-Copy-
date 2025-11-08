@@ -205,14 +205,22 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const updateUser = useCallback(async (updatedData: Partial<User> & { isCompletingProfile?: boolean }) => {
     if (!currentUser) return;
     try {
-      await api.updateUser(currentUser.id, updatedData); 
-      if (!updatedData.isCompletingProfile) {
-        addToast('Profile updated successfully!', 'success');
-      }
-    } catch (error) {
-      console.error("Failed to update user:", error);
-      addToast('Profile update failed.', 'error');
-      throw error;
+        // Destructure the transient `isCompletingProfile` flag to prevent it from being sent to Firestore.
+        const { isCompletingProfile, ...userData } = updatedData;
+        await api.updateUser(currentUser.id, userData);
+        if (!isCompletingProfile) {
+            addToast('Profile updated successfully!', 'success');
+        }
+    } catch (error: any) {
+        console.error("Failed to update user:", error);
+        let errorMessage = 'Profile update failed.';
+        if (error.code === 'permission-denied') {
+            errorMessage = 'Save failed due to a permissions issue. Please contact support.';
+        } else if (error.message) {
+            errorMessage = `An unexpected error occurred: ${error.message}`;
+        }
+        addToast(errorMessage, 'error');
+        throw error; // Re-throw so component knows save failed
     }
   }, [currentUser, addToast]);
 

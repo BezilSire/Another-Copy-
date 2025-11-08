@@ -239,8 +239,6 @@ export interface PublicUserProfile extends Partial<User> {
     status: UserStatus;
     bio?: string;
     profession?: string;
-    skills?: string[];
-    interests?: string[];
     businessIdea?: string;
     isLookingForPartners?: boolean;
     lookingFor?: string[];

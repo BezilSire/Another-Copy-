@@ -50,7 +50,7 @@ import {
     User, Agent, Member, NewMember, MemberUser, Broadcast, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, NewPublicMemberData, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
-    Distribution, Transaction, GlobalEconomy
+    Distribution, Transaction, GlobalEconomy, Admin
 } from '../types';
 
 
@@ -222,6 +222,27 @@ export const api = {
         return { id: doc.id, ...doc.data() } as User;
     },
     updateUser: (uid: string, data: Partial<User>) => updateDoc(doc(db, 'users', uid), data),
+    updateMemberAndUserProfile: async (userId: string, memberId: string, userUpdateData: Partial<User>, memberUpdateData: Partial<Member>) => {
+        const batch = writeBatch(db);
+
+        const userRef = doc(usersCollection, userId);
+        batch.update(userRef, userUpdateData);
+    
+        const memberRef = doc(membersCollection, memberId);
+        batch.update(memberRef, memberUpdateData);
+
+        try {
+            await batch.commit();
+        } catch (error: any) {
+            console.error("Atomic profile update failed:", error);
+            const newError = new Error(
+                "Failed to save profile. This is likely a security rule issue. " +
+                "Ensure you have permission to update all fields. Note: Changing your name is not permitted."
+            );
+            (newError as any).code = error.code;
+            throw newError;
+        }
+    },
     getPublicUserProfile: async (uid: string): Promise<PublicUserProfile | null> => {
         const userDoc = await getDoc(doc(usersCollection, uid));
         if (!userDoc.exists()) return null;
@@ -707,6 +728,10 @@ export const api = {
         userId: user.id, userName: user.name, type: 'referral', amount, ecocashName, ecocashNumber,
         status: 'pending', requestedAt: serverTimestamp(),
     }),
+    // FIX: Added missing claimBonusPayout function
+    claimBonusPayout: (payoutId: string, ecocashName: string, ecocashNumber: string) => updateDoc(doc(payoutsCollection, payoutId), {
+        ecocashName, ecocashNumber
+    }),
     requestCommissionPayout: (user: User, ecocashName: string, ecocashNumber: string, amount: number) => {
         return runTransaction(db, async (t) => {
             const userRef = doc(usersCollection, user.id);
@@ -719,10 +744,6 @@ export const api = {
             t.update(userRef, { commissionBalance: 0 });
         });
     },
-    // FIX: Added missing claimBonusPayout function
-    claimBonusPayout: (payoutId: string, ecocashName: string, ecocashNumber: string) => updateDoc(doc(payoutsCollection, payoutId), {
-        ecocashName, ecocashNumber
-    }),
     listenForPayoutRequests: (admin: User, callback: (reqs: PayoutRequest[]) => void, onError: (error: Error) => void) => onSnapshot(query(payoutsCollection, orderBy('requestedAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), onError),
     updatePayoutStatus: (adminUser: User, payout: PayoutRequest, status: 'completed' | 'rejected') => {
         return runTransaction(db, async (t) => {
@@ -895,7 +916,7 @@ export const api = {
     
     // Globals / CVP
     getCommunityValuePool: async (): Promise<CommunityValuePool> => {
-        const docSnap = await getDoc(doc(globalsCollection, 'cvp'));
+        const docSnap = await getDoc(globalsCollection, 'cvp');
         if (!docSnap.exists()) {
             return { id: 'singleton', total_usd_value: 0, total_circulating_ccap: 0, ccap_to_usd_rate: 0.01 };
         }
@@ -945,22 +966,37 @@ export const api = {
             }, { merge: true });
         }
     },
-    updateUserUbt: (adminUser: User, userId: string, amount: number, reason: string) => {
-        return runTransaction(db, async (t) => {
-            const userRef = doc(usersCollection, userId);
-            
-            t.update(userRef, { ubtBalance: increment(amount) });
-    
-            const txRef = doc(collection(db, 'users', userId, 'transactions'));
-            const txData: Omit<Transaction, 'id'|'timestamp'> & {timestamp: any} = {
+    updateUserUbt: (adminUser: Admin, userId: string, amount: number, reason: string) => {
+        return runTransaction(db, async (transaction) => {
+            const userRef = doc(db, 'users', userId);
+            const transactionLogRef = doc(collection(db, 'users', userId, 'transactions'));
+
+            const userDoc = await transaction.get(userRef);
+
+            if (!userDoc.exists()) {
+                throw new Error(`User profile for ID ${userId} not found.`);
+            }
+
+            const currentBalance = parseFloat(userDoc.data().ubtBalance as any) || 0;
+            const newBalance = currentBalance + amount;
+
+            if (newBalance < 0) {
+                throw new Error(`Insufficient balance. Cannot debit ${Math.abs(amount).toFixed(2)} from ${currentBalance.toFixed(2)}.`);
+            }
+
+            transaction.update(userRef, { ubtBalance: newBalance });
+
+            const logEntry: Omit<Transaction, 'id' | 'timestamp'> & { timestamp: any } = {
                 type: amount > 0 ? 'credit' : 'debit',
                 amount: Math.abs(amount),
-                reason,
+                reason: reason,
                 timestamp: serverTimestamp(),
                 actorId: adminUser.id,
                 actorName: adminUser.name,
+                balanceBefore: currentBalance,
+                balanceAfter: newBalance,
             };
-            t.set(txRef, txData);
+            transaction.set(transactionLogRef, logEntry);
         });
     },
     requestUbtRedemption: (user: User, ubtAmount: number, usdValue: number, ecocashName: string, ecocashNumber: string) => {

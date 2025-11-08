@@ -66,28 +66,26 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    // Simple validation
+    if (!formData.email.trim() || !formData.circle.trim()) {
+        addToast('Email and circle cannot be empty.', 'error');
+        return;
+    }
     setIsSaving(true);
     try {
-      // Simple validation
-      if (!formData.name.trim() || !formData.email.trim() || !formData.circle.trim()) {
-        addToast('Name, email, and circle cannot be empty.', 'error');
-        setIsSaving(false);
-        return;
-      }
-      await onUpdateUser({ 
-        name: formData.name,
-        name_lowercase: formData.name.toLowerCase(),
-        circle: formData.circle,
-        phone: formData.phone,
-        id_card_number: formData.id_card_number,
-        address: formData.address,
-        bio: formData.bio,
-      });
-      // The parent component handles success toast
+        await onUpdateUser({
+            circle: formData.circle,
+            phone: formData.phone,
+            id_card_number: formData.id_card_number,
+            address: formData.address,
+            bio: formData.bio,
+        });
+        // Success toast is handled by onUpdateUser's implementation in AuthContext
     } catch (error) {
-      addToast('Failed to update profile. Please try again.', 'error');
+        // Error is handled by the AuthContext, but we catch here to prevent unhandled promise rejections.
+        console.error("Update failed from AgentProfile:", error);
     } finally {
-      setIsSaving(false);
+        setIsSaving(false);
     }
   };
 
@@ -115,9 +113,7 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
     }
   };
   
-  const hasChanges = formData.name !== agent.name || 
-                     formData.email !== agent.email || 
-                     formData.circle !== agent.circle ||
+  const hasChanges = formData.circle !== agent.circle ||
                      formData.phone !== (agent.phone || '') ||
                      formData.id_card_number !== (agent.id_card_number || '') ||
                      formData.address !== (agent.address || '') ||
@@ -163,10 +159,10 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
               name="name"
               id="name"
               value={formData.name}
-              onChange={handleChange}
-              required
-              className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md shadow-sm text-white focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm"
+              readOnly
+              className="mt-1 block w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-md shadow-sm text-gray-400 sm:text-sm"
             />
+             <p className="mt-1 text-xs text-gray-500">Name is set at registration and cannot be changed.</p>
           </div>
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-300">Email Address</label>

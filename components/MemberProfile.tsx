@@ -62,8 +62,8 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
         profession: currentUser.profession || '',
         skills: Array.isArray(currentUser.skills) ? currentUser.skills.join(', ') : (currentUser.skills || ''),
         awards: currentUser.awards || '',
-        interests: currentUser.interests || '',
-        passions: currentUser.passions || '',
+        interests: Array.isArray(currentUser.interests) ? currentUser.interests.join(', ') : (currentUser.interests || ''),
+        passions: Array.isArray(currentUser.passions) ? currentUser.passions.join(', ') : (currentUser.passions || ''),
         gender: currentUser.gender || '',
         age: currentUser.age || '',
         isLookingForPartners: currentUser.isLookingForPartners || false,
@@ -77,7 +77,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
             name: currentUser.name || '', phone: currentUser.phone || '', address: currentUser.address || '',
             bio: currentUser.bio || '', profession: currentUser.profession || '', 
             skills: Array.isArray(currentUser.skills) ? currentUser.skills.join(', ') : (currentUser.skills || ''),
-            awards: currentUser.awards || '', interests: currentUser.interests || '', passions: currentUser.passions || '',
+            awards: currentUser.awards || '', interests: Array.isArray(currentUser.interests) ? currentUser.interests.join(', ') : (currentUser.interests || ''), passions: Array.isArray(currentUser.passions) ? currentUser.passions.join(', ') : (currentUser.passions || ''),
             gender: currentUser.gender || '', age: currentUser.age || '',
             isLookingForPartners: currentUser.isLookingForPartners || false, lookingFor: currentUser.lookingFor || [],
             businessIdea: currentUser.businessIdea || '',
@@ -105,36 +105,63 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
     };
 
     const handleSave = async () => {
-        if (!currentUser.member_id) { addToast("Could not save profile. Member ID is missing.", "error"); return; }
+        if (!currentUser.member_id) {
+            addToast("Could not save profile. Member ID is missing.", "error");
+            return;
+        }
         setIsSaving(true);
         try {
-            const skillsAsArray = editData.skills.split(',').map(s => s.trim()).filter(Boolean);
+            const skillsAsArray = (editData.skills || '').split(',').map(s => s.trim()).filter(Boolean);
             const skillsLowercase = skillsAsArray.map(s => s.toLowerCase());
-            const interestsAsArray = editData.interests.split(',').map(s => s.trim()).filter(Boolean);
-            const passionsAsArray = editData.passions.split(',').map(s => s.trim()).filter(Boolean);
-
-            const memberUpdateData: Partial<Member> = {
-                full_name: editData.name, phone: editData.phone, address: editData.address, bio: editData.bio,
-                profession: editData.profession, skills: skillsAsArray, awards: editData.awards, interests: interestsAsArray,
-                passions: passionsAsArray, gender: editData.gender, age: editData.age, isLookingForPartners: editData.isLookingForPartners,
-                lookingFor: editData.lookingFor, businessIdea: editData.businessIdea,
-                skills_lowercase: skillsLowercase,
-            };
+            const interestsAsArray = (editData.interests || '').split(',').map(s => s.trim()).filter(Boolean);
+            const passionsAsArray = (editData.passions || '').split(',').map(s => s.trim()).filter(Boolean);
+    
             const userUpdateData: Partial<User> = {
-                name: editData.name,
-                name_lowercase: editData.name.toLowerCase(),
-                phone: editData.phone, address: editData.address, bio: editData.bio,
-                isLookingForPartners: editData.isLookingForPartners, lookingFor: editData.lookingFor, businessIdea: editData.businessIdea,
-                skills: skillsAsArray, 
+                phone: editData.phone,
+                address: editData.address,
+                bio: editData.bio,
+                isLookingForPartners: editData.isLookingForPartners,
+                lookingFor: editData.lookingFor,
+                businessIdea: editData.businessIdea,
+                skills: skillsAsArray,
                 skills_lowercase: skillsLowercase,
-                interests: interestsAsArray, profession: editData.profession, awards: editData.awards,
-                passions: passionsAsArray, gender: editData.gender, age: editData.age,
+                interests: interestsAsArray,
+                profession: editData.profession,
+                awards: editData.awards,
+                passions: passionsAsArray,
+                gender: editData.gender,
+                age: editData.age,
             };
-            await onUpdateUser(userUpdateData);
-            await api.updateMemberProfile(currentUser.member_id, memberUpdateData);
+    
+            const memberUpdateData: Partial<Member> = {
+                phone: editData.phone,
+                address: editData.address,
+                bio: editData.bio,
+                profession: editData.profession,
+                skills: skillsAsArray,
+                skills_lowercase: skillsLowercase,
+                interests: interestsAsArray,
+                passions: passionsAsArray,
+                gender: editData.gender,
+                age: editData.age,
+                isLookingForPartners: editData.isLookingForPartners,
+                lookingFor: editData.lookingFor,
+                businessIdea: editData.businessIdea,
+                awards: editData.awards,
+            };
+    
+            await api.updateMemberAndUserProfile(currentUser.id, currentUser.member_id, userUpdateData, memberUpdateData);
+    
+            addToast('Profile updated successfully!', 'success');
             setIsEditing(false);
-        } catch (error) { addToast("An error occurred while saving.", "error"); }
-        finally { setIsSaving(false); }
+        } catch (error: any) {
+            console.error("Failed to save profile:", error);
+            // The API service now provides a more specific error message.
+            const errorMessage = error.message || 'An error occurred while saving.';
+            addToast(errorMessage, "error");
+        } finally {
+            setIsSaving(false);
+        }
     };
     
      const handleCopy = () => {
@@ -172,7 +199,11 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
         <div className="mt-6 space-y-4">
              <h3 className="text-lg font-semibold text-gray-200 border-b border-slate-700 pb-2">Personal Information</h3>
              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div><label htmlFor="name" className="block text-sm font-medium text-gray-300">Full Name</label><input type="text" name="name" id="name" value={editData.name} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white sm:text-sm" /></div>
+                <div>
+                    <label htmlFor="name" className="block text-sm font-medium text-gray-300">Full Name</label>
+                    <input type="text" name="name" id="name" value={editData.name} readOnly className="mt-1 block w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-md text-gray-400 sm:text-sm" />
+                    <p className="mt-1 text-xs text-gray-500">Name cannot be changed. Please contact support.</p>
+                </div>
                 <div><label htmlFor="phone" className="block text-sm font-medium text-gray-300">Phone</label><input type="tel" name="phone" id="phone" value={editData.phone} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white sm:text-sm" /></div>
              </div>
               <div><label htmlFor="address" className="block text-sm font-medium text-gray-300">Address</label><input type="text" name="address" id="address" value={editData.address} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white sm:text-sm" /></div>

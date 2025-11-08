@@ -38,7 +38,8 @@ export const UpdateBalanceModal: React.FC<UpdateBalanceModalProps> = ({ isOpen, 
       setUpdateData({ amount: '', reason: '' });
       onClose();
     } catch (error) {
-      addToast("Failed to update balance.", "error");
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during the transaction.";
+      addToast(`Update failed: ${errorMessage}`, "error");
     } finally {
       setIsUpdating(false);
     }

@@ -44,23 +44,22 @@ export const AdminProfile: React.FC<AdminProfileProps> = ({ user, onUpdateUser }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!formData.name.trim() || !formData.email.trim()) {
+      addToast('Name and email cannot be empty.', 'error');
+      return;
+    }
     setIsSaving(true);
     try {
-      if (!formData.name.trim() || !formData.email.trim()) {
-        addToast('Name and email cannot be empty.', 'error');
-        setIsSaving(false);
-        return;
-      }
-      await onUpdateUser({ 
-        name: formData.name,
-        name_lowercase: formData.name.toLowerCase(),
-        phone: formData.phone,
-        id_card_number: formData.id_card_number,
-        address: formData.address,
-        bio: formData.bio,
-      });
+        await onUpdateUser({ 
+            phone: formData.phone,
+            id_card_number: formData.id_card_number,
+            address: formData.address,
+            bio: formData.bio,
+        });
+        // Success toast is handled by onUpdateUser's implementation in AuthContext
     } catch (error) {
-      addToast('Failed to update profile. Please try again.', 'error');
+        // Error is handled by the AuthContext, but we catch here to prevent unhandled promise rejections.
+        console.error("Update failed from AdminProfile:", error);
     } finally {
       setIsSaving(false);
     }
@@ -81,9 +80,7 @@ export const AdminProfile: React.FC<AdminProfileProps> = ({ user, onUpdateUser }
     }
   }
   
-  const hasChanges = formData.name !== user.name || 
-                     formData.email !== user.email || 
-                     formData.phone !== (user.phone || '') ||
+  const hasChanges = formData.phone !== (user.phone || '') ||
                      formData.id_card_number !== (user.id_card_number || '') ||
                      formData.address !== (user.address || '') ||
                      formData.bio !== (user.bio || '');
@@ -112,7 +109,8 @@ export const AdminProfile: React.FC<AdminProfileProps> = ({ user, onUpdateUser }
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-gray-300">Full Name</label>
-            <input type="text" name="name" id="name" value={formData.name} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
+            <input type="text" name="name" id="name" value={formData.name} readOnly className="mt-1 block w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-md text-gray-400" />
+            <p className="mt-1 text-xs text-gray-500">Name is set at registration and cannot be changed.</p>
           </div>
           <div>
             <label htmlFor="email" className="block text-sm font-medium text-gray-300">Email Address</label>

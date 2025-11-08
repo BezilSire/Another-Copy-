@@ -140,20 +140,9 @@ const App: React.FC = () => {
   const handleProfileComplete = async (updatedData: Partial<User>) => {
     if (!currentUser) return;
 
-    // For non-members, do a simple, explicit update to prevent security rule violations.
+    // For non-members, just do a simple update.
     if (currentUser.role !== 'member') {
-        const updatePayload: Partial<User> = {
-            phone: updatedData.phone,
-            address: updatedData.address,
-            bio: updatedData.bio,
-            id_card_number: updatedData.id_card_number,
-            isProfileComplete: true,
-        };
-        if (currentUser.role === 'agent') {
-            updatePayload.circle = updatedData.circle;
-        }
-        // The 'isCompletingProfile' flag is handled by the AuthContext to prevent a toast message on first completion.
-        await updateUser({ ...updatePayload, isCompletingProfile: true });
+        await updateUser({ ...updatedData, isProfileComplete: true, isCompletingProfile: true });
         addToast('Profile complete! Welcome to the commons.', 'success');
         return;
     }
@@ -179,27 +168,19 @@ const App: React.FC = () => {
     
     const skillsLowercase = skillsAsArray.map(s => s.toLowerCase());
 
-    // Explicitly build the update objects to ensure no protected fields are sent.
     const userUpdateData: Partial<User> = {
-        phone: updatedData.phone,
-        address: updatedData.address,
-        bio: updatedData.bio,
-        profession: updatedData.profession,
+        ...updatedData,
+        name: currentUser.name, // Name shouldn't be changed here, keep original
+        name_lowercase: currentUser.name.toLowerCase(),
         skills: skillsAsArray,
         interests: interestsAsArray,
         passions: passionsAsArray,
         skills_lowercase: skillsLowercase,
-        gender: updatedData.gender,
-        age: updatedData.age,
-        circle: updatedData.circle,
-        id_card_number: updatedData.id_card_number,
-        isLookingForPartners: updatedData.isLookingForPartners,
-        lookingFor: updatedData.lookingFor,
-        businessIdea: updatedData.businessIdea,
         isProfileComplete: true,
     };
 
     const memberUpdateData: Partial<Member> = {
+        full_name: currentUser.name,
         phone: updatedData.phone,
         address: updatedData.address,
         bio: updatedData.bio,
@@ -220,10 +201,9 @@ const App: React.FC = () => {
     try {
         await api.updateMemberAndUserProfile(memberUser.id, memberUser.member_id, userUpdateData, memberUpdateData);
         addToast('Profile complete! Welcome to the commons.', 'success');
-    } catch (error: any) {
+    } catch (error) {
         console.error("Profile completion failed:", error);
-        const errorMessage = error.message || 'Failed to update profile. Please try again.';
-        addToast(errorMessage, 'error');
+        addToast('Failed to save profile. Please try again.', 'error');
     }
   };
 
