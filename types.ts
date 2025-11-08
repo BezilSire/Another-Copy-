@@ -283,13 +283,24 @@ export interface PayoutRequest {
     id: string;
     userId: string;
     userName: string;
-    type: 'referral' | 'commission' | 'ccap_redemption' | 'veq_redemption' | 'admin_referral_bonus' | 'ubt_redemption';
+    type: 'referral' | 'commission' | 'ccap_redemption' | 'veq_redemption' | 'ubt_redemption' | 'onchain_withdrawal';
     amount: number;
     status: 'pending' | 'completed' | 'rejected';
     requestedAt: Timestamp;
     ecocashName: string;
     ecocashNumber: string;
-    meta?: any;
+    meta?: {
+        solanaAddress?: string;
+        ventureId?: string;
+        ventureName?: string;
+        ubtAmount?: number;
+        ubtToUsdRate?: number;
+    };
+    processedBy?: {
+        adminId: string;
+        adminName: string;
+    };
+    completedAt?: Timestamp;
 }
 
 export interface SustenanceCycle {

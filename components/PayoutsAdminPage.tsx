@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { PayoutRequest } from '../types';
+import { PayoutRequest, Admin } from '../types';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { formatTimeAgo } from '../utils';
+import { ClipboardIcon } from './icons/ClipboardIcon';
+import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
 
 const PayoutStatusBadge: React.FC<{ status: PayoutRequest['status'] }> = ({ status }) => {
     const baseClasses = 'inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize';
@@ -17,21 +19,31 @@ const PayoutStatusBadge: React.FC<{ status: PayoutRequest['status'] }> = ({ stat
 
 interface PayoutsAdminPageProps {
     payouts: PayoutRequest[];
+    adminUser: Admin;
 }
 
-export const PayoutsAdminPage: React.FC<PayoutsAdminPageProps> = ({ payouts }) => {
+export const PayoutsAdminPage: React.FC<PayoutsAdminPageProps> = ({ payouts, adminUser }) => {
     const [filter, setFilter] = useState<'pending' | 'all'>('pending');
     const { addToast } = useToast();
+    const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
+
+    const handleCopy = (address: string) => {
+        navigator.clipboard.writeText(address).then(() => {
+            setCopiedAddress(address);
+            addToast("Address copied to clipboard!", "info");
+            setTimeout(() => setCopiedAddress(null), 2000);
+        });
+    };
     
-    const handleUpdateStatus = async (payoutId: string, status: 'completed' | 'rejected') => {
+    const handleUpdateStatus = async (payout: PayoutRequest, status: 'completed' | 'rejected') => {
         const confirmAction = window.confirm(`Are you sure you want to mark this request as ${status}?`);
         if (!confirmAction) return;
         
         try {
-            await api.updatePayoutStatus(payoutId, status);
+            await api.updatePayoutStatus(adminUser, payout, status);
             addToast(`Request marked as ${status}.`, 'success');
-        } catch {
-            addToast('Failed to update request status.', 'error');
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : 'Failed to update request status.', 'error');
         }
     };
 
@@ -52,10 +64,11 @@ export const PayoutsAdminPage: React.FC<PayoutsAdminPageProps> = ({ payouts }) =
                         <tr>
                             <th className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-gray-300 sm:pl-0">Status</th>
                             <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">User</th>
-                            <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Ecocash Details</th>
+                            <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Payout Details</th>
                             <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Amount / Asset</th>
                             <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Type</th>
                             <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Requested</th>
+                            <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Processed</th>
                             <th className="px-3 py-3.5 text-left text-sm font-semibold text-gray-300">Actions</th>
                         </tr>
                     </thead>
@@ -64,21 +77,47 @@ export const PayoutsAdminPage: React.FC<PayoutsAdminPageProps> = ({ payouts }) =
                             <tr key={req.id}>
                                 <td className="whitespace-nowrap py-4 pl-4 pr-3 text-sm sm:pl-0"><PayoutStatusBadge status={req.status} /></td>
                                 <td className="whitespace-nowrap px-3 py-4 text-sm font-medium text-white">{req.userName}</td>
-                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">
-                                    <div>{req.ecocashName}</div>
-                                    <div className="font-mono">{req.ecocashNumber}</div>
+                                <td className="px-3 py-4 text-sm text-gray-400 max-w-xs">
+                                    {req.type === 'onchain_withdrawal' && req.meta?.solanaAddress ? (
+                                        <div>
+                                            <div className="font-semibold text-gray-300">Solana Address</div>
+                                            <div className="flex items-center gap-2 mt-1">
+                                                <a href={`https://explorer.solana.com/address/${req.meta.solanaAddress}`} target="_blank" rel="noopener noreferrer" className="font-mono text-xs text-blue-400 hover:underline truncate" title={req.meta.solanaAddress}>
+                                                    {req.meta.solanaAddress}
+                                                </a>
+                                                <button onClick={() => handleCopy(req.meta.solanaAddress!)} className="text-gray-400 hover:text-white flex-shrink-0">
+                                                    {copiedAddress === req.meta.solanaAddress ? <ClipboardCheckIcon className="h-4 w-4 text-green-400" /> : <ClipboardIcon className="h-4 w-4" />}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div>
+                                            <div>{req.ecocashName}</div>
+                                            <div className="font-mono">{req.ecocashNumber}</div>
+                                        </div>
+                                    )}
                                 </td>
                                 <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400 font-mono">
-                                    {req.type === 'veq_redemption' ? `${req.amount.toLocaleString()} Shares` : `$${req.amount.toFixed(2)}`}
+                                    {req.type === 'veq_redemption' ? `${req.amount.toLocaleString()} Shares`
+                                    : req.type === 'onchain_withdrawal' ? `${req.amount.toFixed(2)} $UBT`
+                                    : `$${req.amount.toFixed(2)}`}
                                     {req.meta?.ventureName && <div className="text-xs">({req.meta.ventureName})</div>}
                                 </td>
                                  <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400 capitalize">{(req.type || 'referral').replace(/_/g, ' ')}</td>
                                 <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{req.requestedAt ? formatTimeAgo(req.requestedAt.toDate().toISOString()) : '...'}</td>
                                 <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">
+                                    {req.completedAt ? (
+                                        <div>
+                                            <div>{formatTimeAgo(req.completedAt.toDate().toISOString())}</div>
+                                            <div className="text-xs text-gray-500">by {req.processedBy?.adminName || 'Admin'}</div>
+                                        </div>
+                                    ) : '...'}
+                                </td>
+                                <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">
                                     {req.status === 'pending' && (
                                         <div className="flex items-center space-x-3">
-                                            <button onClick={() => handleUpdateStatus(req.id, 'completed')} className="text-green-400 hover:text-green-300 font-semibold">Complete</button>
-                                            <button onClick={() => handleUpdateStatus(req.id, 'rejected')} className="text-red-400 hover:text-red-300 font-semibold">Reject</button>
+                                            <button onClick={() => handleUpdateStatus(req, 'completed')} className="text-green-400 hover:text-green-300 font-semibold">Complete</button>
+                                            <button onClick={() => handleUpdateStatus(req, 'rejected')} className="text-red-400 hover:text-red-300 font-semibold">Reject</button>
                                         </div>
                                     )}
                                 </td>

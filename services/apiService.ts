@@ -1,5 +1,3 @@
-
-
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -71,9 +69,6 @@ const vouchersCollection = collection(db, 'sustenance_vouchers');
 const venturesCollection = collection(db, 'ventures');
 const globalsCollection = collection(db, 'globals');
 
-// callable function
-
-
 // Helper function for robust post deletion
 const _deletePostAndSubcollections = async (postId: string) => {
     const postRef = doc(postsCollection, postId);
@@ -124,16 +119,12 @@ export const api = {
     },
     publicMemberSignup: async (user: FirebaseUser, full_name: string, referralCode?: string): Promise<void> => {
         let referrerId: string | undefined = undefined;
-        let referredByAdmin = false;
 
         if (referralCode) {
             const q = query(usersCollection, where('referralCode', '==', referralCode), limit(1));
             const snapshot = await getDocs(q);
             if (!snapshot.empty) {
                 referrerId = snapshot.docs[0].id;
-                if (snapshot.docs[0].data().role === 'admin') {
-                    referredByAdmin = true;
-                }
             }
         }
         
@@ -181,23 +172,10 @@ export const api = {
             address: '',
             circle: '',
             id_card_number: '',
+            ubtBalance: 0,
+            initialUbtStake: 0,
         };
         batch.set(userRef, newUserDoc);
-
-        // 3. (Optional) Create a payout request if referred by an admin
-        if (referredByAdmin) {
-            const payoutRef = doc(collection(db, 'payouts'));
-            batch.set(payoutRef, {
-                userId: user.uid,
-                userName: full_name,
-                type: 'admin_referral_bonus',
-                amount: 5,
-                status: 'pending',
-                requestedAt: serverTimestamp(),
-                ecocashName: '',
-                ecocashNumber: '',
-            });
-        }
 
         await batch.commit();
     },
@@ -369,12 +347,9 @@ export const api = {
         }, onError);
     },
     updateMemberProfile: (memberId: string, data: Partial<Member>) => updateDoc(doc(membersCollection, memberId), data),
-    approveMemberAndCreditUbt: async (admin: User, member: Member, ubtAmount: number) => {
+    approveMemberAndCreditUbt: async (admin: User, member: Member) => {
         if (!member.uid) {
             throw new Error("Cannot approve a member who has not created an account yet.");
-        }
-        if (ubtAmount < 0) {
-            throw new Error("Credit amount cannot be negative.");
         }
 
         return runTransaction(db, async (t) => {
@@ -384,24 +359,8 @@ export const api = {
             // 1. Mark member as complete
             t.update(memberRef, { payment_status: 'complete' });
 
-            // 2. Activate user and set initial balance
-            t.update(userRef, { 
-                status: 'active',
-                ubtBalance: increment(ubtAmount), // Use increment to handle any existing balance safely
-                initialUbtStake: ubtAmount
-            });
-
-            // 3. Create transaction record for the user
-            const txRef = doc(collection(db, 'users', member.uid!, 'transactions'));
-            const txData: Omit<Transaction, 'id'|'timestamp'> & {timestamp: any} = {
-                type: 'credit',
-                amount: ubtAmount,
-                reason: 'Initial UBT Stake Verification',
-                timestamp: serverTimestamp(),
-                actorId: admin.id,
-                actorName: admin.name,
-            };
-            t.set(txRef, txData);
+            // 2. Activate user
+            t.update(userRef, { status: 'active' });
         });
     },
     rejectMember: (admin: User, member: Member) => updateDoc(doc(membersCollection, member.id), { payment_status: 'rejected' }),
@@ -748,9 +707,6 @@ export const api = {
         userId: user.id, userName: user.name, type: 'referral', amount, ecocashName, ecocashNumber,
         status: 'pending', requestedAt: serverTimestamp(),
     }),
-    claimBonusPayout: (payoutId: string, ecocashName: string, ecocashNumber: string) => updateDoc(doc(payoutsCollection, payoutId), {
-        ecocashName, ecocashNumber
-    }),
     requestCommissionPayout: (user: User, ecocashName: string, ecocashNumber: string, amount: number) => {
         return runTransaction(db, async (t) => {
             const userRef = doc(usersCollection, user.id);
@@ -763,8 +719,53 @@ export const api = {
             t.update(userRef, { commissionBalance: 0 });
         });
     },
+    // FIX: Added missing claimBonusPayout function
+    claimBonusPayout: (payoutId: string, ecocashName: string, ecocashNumber: string) => updateDoc(doc(payoutsCollection, payoutId), {
+        ecocashName, ecocashNumber
+    }),
     listenForPayoutRequests: (admin: User, callback: (reqs: PayoutRequest[]) => void, onError: (error: Error) => void) => onSnapshot(query(payoutsCollection, orderBy('requestedAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), onError),
-    updatePayoutStatus: (payoutId: string, status: 'completed' | 'rejected') => updateDoc(doc(payoutsCollection, payoutId), { status }),
+    updatePayoutStatus: (adminUser: User, payout: PayoutRequest, status: 'completed' | 'rejected') => {
+        return runTransaction(db, async (t) => {
+            const payoutRef = doc(payoutsCollection, payout.id);
+            const userRef = doc(usersCollection, payout.userId);
+    
+            const updateData = {
+                status,
+                processedBy: {
+                    adminId: adminUser.id,
+                    adminName: adminUser.name,
+                },
+                completedAt: serverTimestamp(),
+            };
+            t.update(payoutRef, updateData);
+    
+            if (status === 'rejected') {
+                let amountToRefund: number | undefined;
+                
+                if (payout.type === 'onchain_withdrawal') {
+                    amountToRefund = payout.amount; // amount is in UBT
+                } else if (payout.type === 'ubt_redemption') {
+                    amountToRefund = payout.meta?.ubtAmount; // meta.ubtAmount is in UBT
+                }
+                
+                if (typeof amountToRefund === 'number' && amountToRefund > 0) {
+                    t.update(userRef, { ubtBalance: increment(amountToRefund) });
+    
+                    // Create reversal transaction log
+                    const txRef = doc(collection(db, 'users', payout.userId, 'transactions'));
+                    const txData: Omit<Transaction, 'id'|'timestamp'> & {timestamp: any} = {
+                        type: 'credit',
+                        amount: amountToRefund,
+                        reason: `Reversal for rejected ${payout.type.replace(/_/g, ' ')}`,
+                        timestamp: serverTimestamp(),
+                        actorId: adminUser.id,
+                        actorName: adminUser.name,
+                    };
+                    t.set(txRef, txData);
+                }
+            }
+        });
+    },
     redeemCcapForCash: (user: User, ecocashName: string, ecocashNumber: string, usdtValue: number, ccapToRedeem: number, ccap_to_usd_rate: number) => Promise.resolve(),
     stakeCcapForNextCycle: (user: MemberUser) => Promise.resolve(),
     convertCcapToVeq: (user: MemberUser, venture: Venture, ccapAmount: number, ccapRate: number) => Promise.resolve(),
@@ -1003,6 +1004,52 @@ export const api = {
                 type: 'debit',
                 amount: ubtAmount,
                 reason: 'UBT redemption request',
+                timestamp: serverTimestamp(),
+                actorId: user.id,
+                actorName: user.name
+            };
+            t.set(txRef, txData);
+        });
+    },
+    requestOnchainWithdrawal: (user: User, ubtAmount: number, solanaAddress: string) => {
+        return runTransaction(db, async (t) => {
+            const userRef = doc(usersCollection, user.id);
+            const userDoc = await t.get(userRef);
+            if (!userDoc.exists()) {
+                throw new Error("User profile not found.");
+            }
+    
+            const currentBalance = userDoc.data()?.ubtBalance || 0;
+            if (ubtAmount > currentBalance) {
+                throw new Error("Amount exceeds available balance.");
+            }
+    
+            // 1. Create payout request
+            const payoutRef = doc(collection(db, 'payouts'));
+            const payoutReq: Omit<PayoutRequest, 'id' | 'requestedAt'> & { requestedAt: any } = {
+                userId: user.id,
+                userName: user.name,
+                type: 'onchain_withdrawal',
+                amount: ubtAmount, // amount is in UBT
+                status: 'pending',
+                requestedAt: serverTimestamp(),
+                ecocashName: 'N/A', // Not applicable for onchain
+                ecocashNumber: 'N/A', // Not applicable for onchain
+                meta: {
+                    solanaAddress: solanaAddress,
+                }
+            };
+            t.set(payoutRef, payoutReq);
+    
+            // 2. Deduct balance from user's wallet
+            t.update(userRef, { ubtBalance: increment(-ubtAmount) });
+    
+            // 3. Create transaction log
+            const txRef = doc(collection(db, 'users', user.id, 'transactions'));
+            const txData: Omit<Transaction, 'id'|'timestamp'> & {timestamp: any} = {
+                type: 'debit',
+                amount: ubtAmount,
+                reason: 'On-chain withdrawal request',
                 timestamp: serverTimestamp(),
                 actorId: user.id,
                 actorName: user.name

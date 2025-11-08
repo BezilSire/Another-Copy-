@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect } from 'react';
 import { MemberUser, User, PayoutRequest, RedemptionCycle } from '../types';
 import { api } from '../services/apiService';
@@ -14,7 +12,6 @@ import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
 import { formatTimeAgo } from '../utils';
 import { ClockIcon } from './icons/ClockIcon';
 import { BriefcaseIcon } from './icons/BriefcaseIcon';
-import { ClaimBonusModal } from './ClaimBonusModal';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
 interface EarnPageProps {
@@ -126,7 +123,6 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
     const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
     const [referredUsers, setReferredUsers] = useState<User[]>([]);
     const [cycle, setCycle] = useState<RedemptionCycle | null>(null);
-    const [claimingBonus, setClaimingBonus] = useState<PayoutRequest | null>(null);
 
     const [timeLeft, setTimeLeft] = useState('');
     const canCheckIn = !user.lastDailyCheckin || (new Date().getTime() - user.lastDailyCheckin.toDate().getTime()) > 24 * 60 * 60 * 1000;
@@ -137,7 +133,6 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
     useEffect(() => {
         api.getCurrentRedemptionCycle().then(setCycle);
         const unsubPayouts = api.listenForUserPayouts(user.id, setPayouts, console.error);
-        // FIX: Replaced one-time fetch with a listener to get real-time updates for referred users.
         const unsubReferrals = api.listenForReferredUsers(user.id, (users) => {
             setReferredUsers(users as User[]);
         }, (error) => {
@@ -240,13 +235,6 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
     
     return (
         <>
-            {claimingBonus && (
-                <ClaimBonusModal 
-                    isOpen={!!claimingBonus}
-                    onClose={() => setClaimingBonus(null)}
-                    payoutRequest={claimingBonus}
-                />
-            )}
             <div className="space-y-8 animate-fade-in">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <StatCard title="Social Capital (SCAP)" value={(user.scap ?? 0).toLocaleString()} icon={<SparkleIcon className="h-6 w-6 text-yellow-400"/>} description="Earned from daily activity. Your SCAP increases your chances in the bi-monthly Sustenance Dividend lottery."/>
@@ -374,24 +362,16 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
                     {payouts.length > 0 ? (
                         <div className="space-y-2">
                             {payouts.map(p => {
-                                const isBonusToClaim = p.type === 'admin_referral_bonus' && p.status === 'pending' && !p.ecocashName;
                                 return (
                                     <div key={p.id} className="flex justify-between items-center bg-slate-700/50 p-3 rounded-md">
                                         <div>
                                             <p className="font-semibold text-gray-200">
                                                 {p.type === 'ccap_redemption' && `CCAP Redemption: $${p.amount.toFixed(2)}`}
                                                 {p.type === 'referral' && `Referral Payout: $${p.amount.toFixed(2)}`}
-                                                {p.type === 'admin_referral_bonus' && `Signup Bonus: $${p.amount.toFixed(2)}`}
                                             </p>
                                             <p className="text-xs text-gray-400">{p.requestedAt ? formatTimeAgo(p.requestedAt.toDate().toISOString()) : 'Processing...'}</p>
                                         </div>
-                                        {isBonusToClaim ? (
-                                            <button onClick={() => setClaimingBonus(p)} className="px-3 py-1 bg-green-600 text-white text-sm font-semibold rounded-md hover:bg-green-700">
-                                                Claim Bonus
-                                            </button>
-                                        ) : (
-                                            <PayoutStatusBadge status={p.status} />
-                                        )}
+                                        <PayoutStatusBadge status={p.status} />
                                     </div>
                                 );
                             })}

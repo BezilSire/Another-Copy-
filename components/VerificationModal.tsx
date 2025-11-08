@@ -7,27 +7,21 @@ interface VerificationModalProps {
   isOpen: boolean;
   onClose: () => void;
   member: Member;
-  onApprove: (member: Member, ubtAmount: number) => Promise<void>;
+  onApprove: (member: Member) => Promise<void>;
   onReject: (member: Member) => Promise<void>;
 }
 
 export const VerificationModal: React.FC<VerificationModalProps> = ({ isOpen, onClose, member, onApprove, onReject }) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [ubtAmount, setUbtAmount] = useState('100');
 
   if (!isOpen) {
     return null;
   }
 
   const handleApprove = async () => {
-    const amount = parseFloat(ubtAmount);
-    if (isNaN(amount) || amount < 0) {
-        alert("Please enter a valid, non-negative amount.");
-        return;
-    }
     setIsProcessing(true);
     try {
-      await onApprove(member, amount);
+      await onApprove(member);
     } catch (e) {
       // If there's an error, re-enable the buttons
       setIsProcessing(false);
@@ -69,8 +63,11 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ isOpen, on
                 </div>
             )}
             <div className="mt-4">
-                {/* Member Details */}
-                <div className="space-y-4">
+                <div className="p-4 bg-green-900/50 border border-green-700 rounded-md text-center">
+                    <p className="font-semibold text-green-200">Action: Approve Member</p>
+                    <p className="text-sm text-gray-300 mt-1">Approving this member will change their status to 'Active', allowing them to redeem their sign-up bonus and access all member features.</p>
+                </div>
+                <div className="mt-4 space-y-4">
                     <h4 className="text-md font-semibold text-gray-200 border-b border-slate-700 pb-2">Submitted Details</h4>
                     <DetailItem label="Full Name" value={member.full_name} />
                     <DetailItem label="Email" value={member.email} />
@@ -79,18 +76,6 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ isOpen, on
                     <DetailItem label="Address" value={member.address ?? 'Not provided'} />
                     <DetailItem label="National ID" value={member.national_id ?? 'Not provided'} />
                     <DetailItem label="Date Submitted" value={new Date(member.date_registered).toLocaleString()} />
-                </div>
-                 <div className="mt-4 pt-4 border-t border-slate-700">
-                    <label htmlFor="ubtAmount" className="block text-sm font-medium text-gray-300">Initial $UBT to Credit</label>
-                    <input
-                        type="number"
-                        id="ubtAmount"
-                        value={ubtAmount}
-                        onChange={(e) => setUbtAmount(e.target.value)}
-                        className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"
-                        required
-                    />
-                    <p className="text-xs text-gray-500 mt-1">This amount will be credited to the member's wallet upon approval.</p>
                 </div>
             </div>
           </div>
@@ -101,7 +86,7 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ isOpen, on
               className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-green-500 sm:ml-3 sm:w-auto sm:text-sm disabled:bg-slate-500"
               onClick={handleApprove}
             >
-              {isProcessing ? 'Processing...' : 'Approve & Credit'}
+              {isProcessing ? 'Processing...' : 'Approve Member'}
             </button>
             <button
               type="button"

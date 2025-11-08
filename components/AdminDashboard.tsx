@@ -188,10 +188,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
         setDialogState({ isOpen: false, member: null, action: 'clear' });
     };
 
-    const handleApproveMember = async (member: Member, ubtAmount: number) => {
+    const handleApproveMember = async (member: Member) => {
         try { 
-            await api.approveMemberAndCreditUbt(user, member, ubtAmount);
-            addToast(`${member.full_name} has been approved and credited ${ubtAmount} $UBT.`, 'success'); 
+            await api.approveMemberAndCreditUbt(user, member);
+            addToast(`${member.full_name} has been approved and their account is now active.`, 'success'); 
             setVerificationModalState({ isOpen: false, member: null }); 
         } 
         catch (e) { 
@@ -319,7 +319,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
             case 'feed': return ( <> <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView /><PostsFeed user={user} feedType="all" isAdminView onViewProfile={onViewProfile} typeFilter={typeFilter} /></> );
             case 'reports': return <div className="bg-slate-800 p-6 rounded-lg shadow-lg"><ReportsView reports={reports} onViewProfile={onViewProfile} onResolve={(reportId, postId, authorId) => api.resolvePostReport(user, reportId, postId, authorId)} onDismiss={(reportId) => api.dismissReport(user, reportId)}/></div>;
             case 'proposals': return <ProposalsAdminPage user={user} />;
-            case 'payouts': return <PayoutsAdminPage payouts={payouts} />;
+            case 'payouts': return <PayoutsAdminPage adminUser={user} payouts={payouts} />;
             case 'sustenance': return <SustenanceAdminPage user={user} />;
             case 'ventures': return <VenturesAdminPage user={user} ventures={ventures} />;
             case 'economy': return <EconomyAdminPage user={user} cvp={cvp} users={allUsers} />;
