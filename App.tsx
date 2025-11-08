@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -24,6 +25,7 @@ import { CreateGroupModal } from './components/CreateGroupModal';
 import { arrayUnion } from 'firebase/firestore';
 import { AndroidApkBanner } from './components/AndroidApkBanner';
 import { WalletPage } from './components/WalletPage';
+import { UbtVerificationPage } from './components/UbtVerificationPage';
 
 
 type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge' | 'wallet';
@@ -143,6 +145,7 @@ const App: React.FC = () => {
     // For non-members, do a simple, explicit update to prevent security rule violations.
     if (currentUser.role !== 'member') {
         const updatePayload: Partial<User> = {
+            name_lowercase: currentUser.name.toLowerCase(), // Ensure lowercase name is set
             phone: updatedData.phone,
             address: updatedData.address,
             bio: updatedData.bio,
@@ -181,6 +184,7 @@ const App: React.FC = () => {
 
     // Explicitly build the update objects to ensure no protected fields are sent.
     const userUpdateData: Partial<User> = {
+        name_lowercase: currentUser.name.toLowerCase(), // Ensure lowercase name is set for search
         phone: updatedData.phone,
         address: updatedData.address,
         bio: updatedData.bio,
@@ -264,6 +268,10 @@ const App: React.FC = () => {
     
     if (firebaseUser && !firebaseUser.emailVerified && currentUser.isProfileComplete) {
         return <VerifyEmailPage user={currentUser} onLogout={requestLogout} />;
+    }
+    
+    if (currentUser.isProfileComplete && currentUser.status === 'pending' && currentUser.role === 'member') {
+        return <div className="p-4 sm:p-6 lg:p-8"><UbtVerificationPage user={currentUser} onLogout={requestLogout} /></div>;
     }
 
     if (!currentUser.isProfileComplete) {

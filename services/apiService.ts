@@ -1,3 +1,4 @@
+
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -294,25 +295,55 @@ export const api = {
         }
         const lowerCaseQuery = searchQuery.toLowerCase();
 
-        // This is a workaround for potential indexing/permission issues on complex queries.
-        // It fetches a batch of recent users and filters on the client.
-        // It's less scalable for millions of users but highly reliable for thousands.
-        const q = query(usersCollection, orderBy('createdAt', 'desc'), limit(200));
+        // This query performs a case-insensitive prefix search on the user's name.
+        // It requires a single-field index on 'name_lowercase'. 
+        // If the index is missing, Firestore will provide a link in the console to create it.
+        const q = query(
+            usersCollection,
+            where('name_lowercase', '>=', lowerCaseQuery),
+            where('name_lowercase', '<=', lowerCaseQuery + '\uf8ff'),
+            limit(15) // Limit results to a reasonable number
+        );
 
         try {
             const snapshot = await getDocs(q);
-            const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile));
-            
-            // Filter on the client-side
-            const filteredUsers = users.filter(u => 
-                u.id !== currentUser.id &&
-                u.name_lowercase?.includes(lowerCaseQuery)
-            );
-            
-            return filteredUsers;
+            // Map the results to the public-safe profile type
+            const users = snapshot.docs
+                .map(doc => {
+                    const d = doc.data();
+                    return {
+                        id: doc.id,
+                        name: d.name,
+                        email: d.email,
+                        role: d.role,
+                        circle: d.circle,
+                        status: d.status,
+                        bio: d.bio,
+                        profession: d.profession,
+                        skills: Array.isArray(d.skills) ? d.skills : (typeof d.skills === 'string' ? d.skills.split(',').map(s => s.trim()).filter(Boolean) : []),
+                        interests: Array.isArray(d.interests) ? d.interests : (typeof d.interests === 'string' ? d.interests.split(',').map(s => s.trim()).filter(Boolean) : []),
+                        businessIdea: d.businessIdea,
+                        isLookingForPartners: d.isLookingForPartners,
+                        lookingFor: d.lookingFor,
+                        credibility_score: d.credibility_score,
+                        scap: d.scap,
+                        ccap: d.ccap,
+                        createdAt: d.createdAt,
+                        pitchDeckTitle: d.pitchDeckTitle,
+                        pitchDeckSlides: d.pitchDeckSlides
+                    } as PublicUserProfile;
+                });
+
+            // Filter out the current user from the results
+            return users.filter(u => u.id !== currentUser.id);
         } catch (error) {
-            console.error("Error fetching users for search:", error);
-            throw new Error("Search failed due to a data fetching error. A database index might be required.");
+            console.error("Error searching users:", error);
+            if ((error as any).code === 'failed-precondition') {
+                // This is a common and expected error if the index isn't created yet.
+                // The console will have a direct link to create it.
+                throw new Error("User search is not configured. A database index is required. Please check the browser console for a link to create it.");
+            }
+            throw new Error("Could not perform search at this time due to a database error.");
         }
     },
 
@@ -370,18 +401,38 @@ export const api = {
     updateMemberProfile: (memberId: string, data: Partial<Member>) => updateDoc(doc(membersCollection, memberId), data),
     approveMemberAndCreditUbt: async (admin: User, member: Member) => {
         if (!member.uid) {
-            throw new Error("Cannot approve a member who has not created an account yet.");
+            throw new Error("This member has not created an account yet and cannot be approved.");
         }
-
+    
         return runTransaction(db, async (t) => {
             const memberRef = doc(membersCollection, member.id);
             const userRef = doc(usersCollection, member.uid!);
-
+            const transactionLogRef = doc(collection(db, 'users', member.uid!, 'transactions'));
+    
             // 1. Mark member as complete
             t.update(memberRef, { payment_status: 'complete' });
-
-            // 2. Activate user
-            t.update(userRef, { status: 'active' });
+    
+            const INITIAL_STAKE_AMOUNT = 100; // Corresponds to the $10 registration fee
+    
+            // 2. Activate user and credit initial UBT stake
+            t.update(userRef, { 
+                status: 'active',
+                ubtBalance: increment(INITIAL_STAKE_AMOUNT),
+                initialUbtStake: INITIAL_STAKE_AMOUNT,
+            });
+    
+            // 3. Create a transaction log for the credit
+            const logEntry: Omit<Transaction, 'id' | 'timestamp'> & { timestamp: any } = {
+                type: 'credit',
+                amount: INITIAL_STAKE_AMOUNT,
+                reason: 'Initial UBT stake on verification',
+                timestamp: serverTimestamp(),
+                actorId: admin.id,
+                actorName: admin.name,
+                balanceBefore: 0,
+                balanceAfter: INITIAL_STAKE_AMOUNT,
+            };
+            t.set(transactionLogRef, logEntry);
         });
     },
     rejectMember: (admin: User, member: Member) => updateDoc(doc(membersCollection, member.id), { payment_status: 'rejected' }),
@@ -728,7 +779,6 @@ export const api = {
         userId: user.id, userName: user.name, type: 'referral', amount, ecocashName, ecocashNumber,
         status: 'pending', requestedAt: serverTimestamp(),
     }),
-    // FIX: Added missing claimBonusPayout function
     claimBonusPayout: (payoutId: string, ecocashName: string, ecocashNumber: string) => updateDoc(doc(payoutsCollection, payoutId), {
         ecocashName, ecocashNumber
     }),
@@ -835,12 +885,24 @@ export const api = {
     },
 
     // Ventures
-    getVentureMembers: async (count: number): Promise<{ users: User[] }> => {
+    getVentureMembers: async (count: number): Promise<{ users: PublicUserProfile[] }> => {
         // Fetch a batch of recent members and filter client-side to avoid index issues.
         const q = query(usersCollection, where('role', '==', 'member'), orderBy('createdAt', 'desc'), limit(count > 500 ? 500 : count));
         const snapshot = await getDocs(q);
-        const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
-        return { users: users.filter(u => u.isLookingForPartners === true) };
+        const allUsers = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
+        const collaborators = allUsers.filter(u => u.isLookingForPartners === true);
+
+        // Map to PublicUserProfile to strip sensitive data before returning from the API.
+        return { 
+            users: collaborators.map(d => ({
+                id: d.id, name: d.name, email: d.email, role: d.role, circle: d.circle, status: d.status, bio: d.bio, profession: d.profession,
+                skills: Array.isArray(d.skills) ? d.skills : (typeof d.skills === 'string' ? d.skills.split(',').map(s => s.trim()).filter(Boolean) : []),
+                interests: Array.isArray(d.interests) ? d.interests : (typeof d.interests === 'string' ? d.interests.split(',').map(s => s.trim()).filter(Boolean) : []),
+                businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
+                lookingFor: d.lookingFor, credibility_score: d.credibility_score, scap: d.scap, ccap: d.ccap, createdAt: d.createdAt,
+                pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides
+            }))
+        };
     },
     getFundraisingVentures: async (): Promise<Venture[]> => {
         const q = query(venturesCollection, where('status', '==', 'fundraising'), orderBy('createdAt', 'desc'));
@@ -916,7 +978,7 @@ export const api = {
     
     // Globals / CVP
     getCommunityValuePool: async (): Promise<CommunityValuePool> => {
-        const docSnap = await getDoc(globalsCollection, 'cvp');
+        const docSnap = await getDoc(doc(globalsCollection, 'cvp'));
         if (!docSnap.exists()) {
             return { id: 'singleton', total_usd_value: 0, total_circulating_ccap: 0, ccap_to_usd_rate: 0.01 };
         }

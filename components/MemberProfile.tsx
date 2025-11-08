@@ -116,30 +116,31 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
             const interestsAsArray = (editData.interests || '').split(',').map(s => s.trim()).filter(Boolean);
             const passionsAsArray = (editData.passions || '').split(',').map(s => s.trim()).filter(Boolean);
     
-            const userUpdateData: Partial<User> = {
+            // --- Explicitly define the payload to send ---
+            // This ensures no immutable fields like 'name' are ever sent, preventing security rule violations.
+            const userUpdateData = {
                 phone: editData.phone,
                 address: editData.address,
                 bio: editData.bio,
+                profession: editData.profession,
+                skills: skillsAsArray,
+                interests: interestsAsArray,
+                passions: passionsAsArray,
+                awards: editData.awards,
+                gender: editData.gender,
+                age: editData.age,
                 isLookingForPartners: editData.isLookingForPartners,
                 lookingFor: editData.lookingFor,
                 businessIdea: editData.businessIdea,
-                skills: skillsAsArray,
                 skills_lowercase: skillsLowercase,
-                interests: interestsAsArray,
-                profession: editData.profession,
-                awards: editData.awards,
-                passions: passionsAsArray,
-                gender: editData.gender,
-                age: editData.age,
             };
     
-            const memberUpdateData: Partial<Member> = {
+            const memberUpdateData = {
                 phone: editData.phone,
                 address: editData.address,
                 bio: editData.bio,
                 profession: editData.profession,
                 skills: skillsAsArray,
-                skills_lowercase: skillsLowercase,
                 interests: interestsAsArray,
                 passions: passionsAsArray,
                 gender: editData.gender,
@@ -148,6 +149,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
                 lookingFor: editData.lookingFor,
                 businessIdea: editData.businessIdea,
                 awards: editData.awards,
+                skills_lowercase: skillsLowercase,
             };
     
             await api.updateMemberAndUserProfile(currentUser.id, currentUser.member_id, userUpdateData, memberUpdateData);
@@ -156,7 +158,6 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
             setIsEditing(false);
         } catch (error: any) {
             console.error("Failed to save profile:", error);
-            // The API service now provides a more specific error message.
             const errorMessage = error.message || 'An error occurred while saving.';
             addToast(errorMessage, "error");
         } finally {
