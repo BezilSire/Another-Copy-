@@ -59,7 +59,7 @@ export const MemberDetails: React.FC<MemberDetailsProps> = ({ member, onBack }) 
         <dl className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-sm">
             <DetailItem label="Phone Number" value={member.phone} />
             <DetailItem label="Circle" value={member.circle} />
-            <DetailItem label="Date Registered" value={new Date(member.date_registered).toLocaleDateString()} />
+            <DetailItem label="Date Registered" value={member.date_registered.toDate().toLocaleDateString()} />
             <DetailItem label="Registration Fee" value={`$${member.registration_amount.toFixed(2)}`} />
             <DetailItem label="Membership Card ID" value={member.membership_card_id} isMono />
         </dl>

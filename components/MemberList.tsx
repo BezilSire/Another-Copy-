@@ -9,6 +9,7 @@ import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { MessageSquareIcon } from './icons/MessageSquareIcon';
 import { UserIcon } from './icons/UserIcon';
 import { Pagination } from './Pagination';
+import { Timestamp } from 'firebase/firestore';
 
 interface MemberListProps {
   members: Member[];
@@ -109,7 +110,7 @@ export const MemberList: React.FC<MemberListProps> = ({ members, isAdminView = f
         if (sortConfig.key === 'registration_amount') {
           comparison = (aValue as number) - (bValue as number);
         } else if (sortConfig.key === 'date_registered') {
-          comparison = new Date(aValue as string).getTime() - new Date(bValue as string).getTime();
+          comparison = (aValue as Timestamp).toMillis() - (bValue as Timestamp).toMillis();
         } else {
           comparison = String(aValue).localeCompare(String(bValue));
         }
@@ -187,7 +188,7 @@ export const MemberList: React.FC<MemberListProps> = ({ members, isAdminView = f
                      <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400"><PaymentStatusBadge status={member.payment_status} /></td>
                      {isAdminView && <td className="whitespace-nowrap px-3 py-4 text-sm"><UserStatusBadge status={member.status} /></td>}
                      {isAdminView && <td className="whitespace-nowrap px-3 py-4 text-sm text-center font-mono text-gray-300">{typeof member.distress_calls_available === 'number' ? member.distress_calls_available : 'N/A'}</td>}
-                     <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{new Date(member.date_registered).toLocaleDateString()}</td>
+                     <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{member.date_registered.toDate().toLocaleDateString()}</td>
                      {isAdminView && <td className="whitespace-nowrap px-3 py-4 text-sm text-gray-400">{member.agent_name}</td>}
                     <td className="relative whitespace-nowrap py-4 pl-3 pr-4 text-sm font-medium sm:pr-0">
                        <div className="flex items-center space-x-4">

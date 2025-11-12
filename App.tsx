@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -168,17 +169,24 @@ const App: React.FC = () => {
         return;
     }
 
-    const skillsAsArray = Array.isArray(updatedData.skills) 
-        ? updatedData.skills 
-        : (typeof updatedData.skills === 'string' ? updatedData.skills.split(',').map(s => s.trim()).filter(Boolean) : []);
+    // FIX: The type of updatedData.skills is `string[] | undefined`. The previous logic
+    // incorrectly checked for a `string` type, which created an impossible type intersection ('never'), causing a compile error.
+    // This simplified logic correctly handles an array or an undefined value passed from CompleteProfilePage.
+    const skillsAsArray = Array.isArray(updatedData.skills)
+        ? updatedData.skills
+        : (typeof (updatedData.skills as any) === 'string' ? (updatedData.skills as any).split(',').map((s: string) => s.trim()).filter(Boolean) : []);
     
+    // FIX: The type of updatedData.interests is `string[] | undefined`. The previous logic
+    // incorrectly checked for a `string` type, causing a 'never' type error.
     const interestsAsArray = Array.isArray(updatedData.interests)
         ? updatedData.interests
-        : (typeof updatedData.interests === 'string' ? updatedData.interests.split(',').map(s => s.trim()).filter(Boolean) : []);
+        : (typeof (updatedData.interests as any) === 'string' ? (updatedData.interests as any).split(',').map((s: string) => s.trim()).filter(Boolean) : []);
     
+    // FIX: The type of updatedData.passions is `string[] | undefined`. The previous logic
+    // incorrectly checked for a `string` type, causing a 'never' type error.
     const passionsAsArray = Array.isArray(updatedData.passions)
         ? updatedData.passions
-        : (typeof updatedData.passions === 'string' ? updatedData.passions.split(',').map(s => s.trim()).filter(Boolean) : []);
+        : (typeof (updatedData.passions as any) === 'string' ? (updatedData.passions as any).split(',').map((s: string) => s.trim()).filter(Boolean) : []);
     
     const skillsLowercase = skillsAsArray.map(s => s.toLowerCase());
 

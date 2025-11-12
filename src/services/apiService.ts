@@ -169,7 +169,7 @@ export const api = {
         return {
             id: userDoc.id, name: d.name, email: d.email, role: d.role, circle: d.circle, status: d.status, bio: d.bio, profession: d.profession,
             skills: d.skills, interests: d.interests, businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
-            lookingFor: d.lookingFor, credibility_score: d.credibility_score, scap: d.scap, ccap: d.ccap, createdAt: d.createdAt,
+            lookingFor: d.lookingFor, credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
             pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides,
         };
     },
@@ -240,7 +240,6 @@ export const api = {
                         isLookingForPartners: d.isLookingForPartners,
                         lookingFor: d.lookingFor,
                         credibility_score: d.credibility_score,
-                        scap: d.scap,
                         ccap: d.ccap,
                         createdAt: d.createdAt,
                         pitchDeckTitle: d.pitchDeckTitle,
@@ -366,16 +365,22 @@ export const api = {
     },
 
     // Posts
-    createPost: (user: User, content: string, type: Post['types'], ccapToAward: number) => {
-        // SECURITY FIX: Removed insecure client-side CCAP update.
-        // A user cannot be allowed to award themselves currency from the client.
-        // This must be handled by a secure backend process (e.g., Cloud Function).
+    createPost: async (user: User, content: string, type: Post['types'], ccapToAward: number) => {
+        const batch = writeBatch(db);
+        
         const postRef = doc(collection(db, 'posts'));
         const newPost: Omit<Post, 'id'> = {
             authorId: user.id, authorName: user.name, authorCircle: user.circle, authorRole: user.role,
             content, date: new Date().toISOString(), upvotes: [], types: type,
         };
-        return setDoc(postRef, newPost);
+        batch.set(postRef, newPost);
+
+        if (ccapToAward > 0) {
+            const userRef = doc(db, 'users', user.id);
+            batch.update(userRef, { ccap: increment(ccapToAward) });
+        }
+
+        return await batch.commit();
     },
     repostPost: async (originalPost: Post, user: User, comment: string) => {
         const batch = writeBatch(db);
@@ -760,11 +765,6 @@ export const api = {
         slf_balance: balance, hamper_cost: cost, last_run: serverTimestamp(), next_run: serverTimestamp(),
     }),
     runSustenanceLottery: (admin: User): Promise<{ winners_count: number }> => { return Promise.resolve({ winners_count: 0 }); /* Complex logic here */ },
-    performDailyCheckin: (userId: string): Promise<void> => {
-      // SECURITY FIX: Removed insecure client-side SCAP update.
-      // This action now does nothing on the database.
-      return Promise.resolve();
-    },
     submitPriceVerification: (userId: string, item: string, price: number, shop: string) => {
         // SECURITY FIX: Removed insecure client-side CCAP update.
         const priceVerificationRef = doc(collection(db, 'price_verifications'));
@@ -800,7 +800,7 @@ export const api = {
                 skills: Array.isArray(d.skills) ? d.skills : (typeof d.skills === 'string' ? d.skills.split(',').map(s => s.trim()).filter(Boolean) : []),
                 interests: Array.isArray(d.interests) ? d.interests : (typeof d.interests === 'string' ? d.interests.split(',').map(s => s.trim()).filter(Boolean) : []),
                 businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
-                lookingFor: d.lookingFor, credibility_score: d.credibility_score, scap: d.scap, ccap: d.ccap, createdAt: d.createdAt,
+                lookingFor: d.lookingFor, credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
                 pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides
             }))
         };

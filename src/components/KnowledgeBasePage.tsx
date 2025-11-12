@@ -178,7 +178,7 @@ export const KnowledgeBasePage: React.FC<KnowledgeBasePageProps> = ({ currentUse
                 <p className="text-lg text-green-400 mt-1">The Knowledge That Liberates the Common People</p>
                 {currentUser.hasReadKnowledgeBase && (
                     <div className="mt-4 text-sm bg-slate-700/50 text-green-300 p-3 rounded-md inline-block">
-                        You've earned 10 knowledge points for reviewing this material. Welcome back!
+                        Your review of this material has been noted.
                     </div>
                 )}
                 <button

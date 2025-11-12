@@ -75,7 +75,7 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ isOpen, on
                     <DetailItem label="Circle" value={member.circle} />
                     <DetailItem label="Address" value={member.address ?? 'Not provided'} />
                     <DetailItem label="National ID" value={member.national_id ?? 'Not provided'} />
-                    <DetailItem label="Date Submitted" value={new Date(member.date_registered).toLocaleString()} />
+                    <DetailItem label="Date Submitted" value={member.date_registered.toDate().toLocaleString()} />
                 </div>
             </div>
           </div>

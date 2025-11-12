@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { MemberUser, User, Venture } from '../types';
+import { MemberUser, User, Venture, PublicUserProfile } from '../types';
 import { elaborateBusinessIdea, analyzeTargetMarket, generatePitchDeck } from '../services/geminiService';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
@@ -37,8 +37,9 @@ export const AIVenturePitchAssistant: React.FC<AIVenturePitchAssistantProps> = (
 
 
     // Collaborator state
-    const [allVentureMembers, setAllVentureMembers] = useState<(User & { id: string })[]>([]);
-    const [suggestedCollaborators, setSuggestedCollaborators] = useState<(User & { id: string })[]>([]);
+    // FIX: Changed state types to PublicUserProfile to match API response.
+    const [allVentureMembers, setAllVentureMembers] = useState<PublicUserProfile[]>([]);
+    const [suggestedCollaborators, setSuggestedCollaborators] = useState<PublicUserProfile[]>([]);
 
     // UI State
     const [step, setStep] = useState(1);
@@ -85,7 +86,8 @@ export const AIVenturePitchAssistant: React.FC<AIVenturePitchAssistantProps> = (
                     member.skills?.some(s => s.toLowerCase() === skill.toLowerCase())
                 )
             );
-            setSuggestedCollaborators(collaborators as (User & {id: string})[]);
+            // FIX: Removed unnecessary type casting.
+            setSuggestedCollaborators(collaborators);
             setStep(3);
         } catch (error) {
              addToast(error instanceof Error ? error.message : "AI market analysis failed.", "error");

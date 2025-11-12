@@ -1,3 +1,4 @@
+
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -24,9 +25,9 @@ export interface User {
   address?: string;
   bio?: string;
   profession?: string;
-  skills?: string[] | string;
-  interests?: string[] | string;
-  passions?: string[] | string;
+  skills?: string[];
+  interests?: string[];
+  passions?: string[];
   awards?: string;
   gender?: string;
   age?: string;
@@ -83,7 +84,7 @@ export interface Member {
   payment_status: 'pending' | 'complete' | 'installment' | 'pending_verification' | 'rejected';
   agent_id: string;
   agent_name: string;
-  date_registered: string;
+  date_registered: Timestamp;
   welcome_message: string;
   membership_card_id: string;
   uid?: string; // Link to user ID in 'users' collection
@@ -94,10 +95,10 @@ export interface Member {
   national_id?: string;
   bio?: string;
   profession?: string;
-  skills?: string[] | string;
+  skills?: string[];
   awards?: string;
-  interests?: string[] | string;
-  passions?: string[] | string;
+  interests?: string[];
+  passions?: string[];
   gender?: string;
   age?: string;
   isLookingForPartners?: boolean;

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { User } from '../types';
 import { useToast } from '../contexts/ToastContext';
@@ -20,9 +21,9 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
     bio: user.bio || '',
     // Member-specific fields
     profession: user.profession || '',
-    skills: Array.isArray(user.skills) ? user.skills.join(', ') : '',
-    interests: Array.isArray(user.interests) ? user.interests.join(', ') : '',
-    passions: Array.isArray(user.passions) ? user.passions.join(', ') : '',
+    skills: (user.skills || []).join(', '),
+    interests: (user.interests || []).join(', '),
+    passions: (user.passions || []).join(', '),
     gender: user.gender || '',
     age: user.age || '',
     circle: user.circle || '',
@@ -80,7 +81,6 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
       const dataToSubmit = {
         ...formData,
         skills: skillsAsArray,
-        skills_lowercase: skillsAsArray.map(s => s.toLowerCase()),
         interests: interestsAsArray,
         passions: passionsAsArray,
       };
@@ -148,7 +148,7 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
                                     <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                                         {LOOKING_FOR_LIST.map(item => (
                                             <label key={item} className="flex items-center space-x-2 text-sm text-gray-300">
-                                                <input type="checkbox" value={item} checked={formData.lookingFor.includes(item)} onChange={handleCheckboxChange} className="text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500"/>
+                                                <input type="checkbox" value={item} checked={formData.lookingFor.includes(item)} onChange={handleCheckboxChange} className="text-green-600 bg-slate-700 border border-slate-600 rounded focus:ring-green-500"/>
                                                 <span>{item}</span>
                                             </label>
                                         ))}

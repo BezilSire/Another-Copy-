@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -24,6 +26,7 @@ import { CreateGroupModal } from './components/CreateGroupModal';
 import { arrayUnion } from 'firebase/firestore';
 import { AndroidApkBanner } from './components/AndroidApkBanner';
 import { WalletPage } from './components/WalletPage';
+import { UbtVerificationPage } from './components/UbtVerificationPage';
 
 
 type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge' | 'wallet';
@@ -139,71 +142,83 @@ const App: React.FC = () => {
   
   const handleProfileComplete = async (updatedData: Partial<User>) => {
     if (!currentUser) return;
-
-    // For non-members, just do a simple update.
+  
+    // For non-members (agents/admins), perform a simple update.
     if (currentUser.role !== 'member') {
-        await updateUser({ ...updatedData, isProfileComplete: true, isCompletingProfile: true });
-        addToast('Profile complete! Welcome to the commons.', 'success');
-        return;
-    }
-
-    // For members, perform an atomic update on both 'users' and 'members' collections.
-    const memberUser = currentUser as MemberUser;
-    if (!memberUser.member_id) {
-        addToast("Cannot complete profile: Member ID is missing.", "error");
-        return;
-    }
-
-    const skillsAsArray = Array.isArray(updatedData.skills) 
-        ? updatedData.skills 
-        : (typeof updatedData.skills === 'string' ? updatedData.skills.split(',').map(s => s.trim()).filter(Boolean) : []);
-    
-    const interestsAsArray = Array.isArray(updatedData.interests)
-        ? updatedData.interests
-        : (typeof updatedData.interests === 'string' ? updatedData.interests.split(',').map(s => s.trim()).filter(Boolean) : []);
-    
-    const passionsAsArray = Array.isArray(updatedData.passions)
-        ? updatedData.passions
-        : (typeof updatedData.passions === 'string' ? updatedData.passions.split(',').map(s => s.trim()).filter(Boolean) : []);
-    
-    const skillsLowercase = skillsAsArray.map(s => s.toLowerCase());
-
-    const userUpdateData: Partial<User> = {
-        ...updatedData,
-        name: currentUser.name, // Name shouldn't be changed here, keep original
+      const updatePayload: Partial<User> = {
         name_lowercase: currentUser.name.toLowerCase(),
-        skills: skillsAsArray,
-        interests: interestsAsArray,
-        passions: passionsAsArray,
-        skills_lowercase: skillsLowercase,
-        isProfileComplete: true,
-    };
-
-    const memberUpdateData: Partial<Member> = {
-        full_name: currentUser.name,
         phone: updatedData.phone,
         address: updatedData.address,
         bio: updatedData.bio,
-        profession: updatedData.profession,
-        skills: skillsAsArray,
-        interests: interestsAsArray,
-        passions: passionsAsArray,
-        gender: updatedData.gender,
-        age: updatedData.age,
-        circle: updatedData.circle,
-        national_id: updatedData.id_card_number,
-        isLookingForPartners: updatedData.isLookingForPartners,
-        lookingFor: updatedData.lookingFor,
-        businessIdea: updatedData.businessIdea,
-        skills_lowercase: skillsLowercase,
+        id_card_number: updatedData.id_card_number,
+        isProfileComplete: true,
+      };
+      if (currentUser.role === 'agent') {
+        updatePayload.circle = updatedData.circle;
+      }
+      await updateUser({ ...updatePayload, isCompletingProfile: true });
+      addToast('Profile complete! Welcome to the commons.', 'success');
+      return;
+    }
+  
+    // For members, perform an atomic update on both 'users' and 'members' collections.
+    const memberUser = currentUser as MemberUser;
+    if (!memberUser.member_id) {
+      addToast('Cannot complete profile: Member ID is missing.', 'error');
+      return;
+    }
+  
+    const skillsAsArray = updatedData.skills || [];
+    const interestsAsArray = updatedData.interests || [];
+    const passionsAsArray = updatedData.passions || [];
+    const skillsLowercase = skillsAsArray.map(s => s.toLowerCase());
+  
+    // Explicitly build the update objects to ensure no protected fields are sent.
+    const userUpdateData: Partial<User> = {
+      name_lowercase: currentUser.name.toLowerCase(),
+      phone: updatedData.phone,
+      address: updatedData.address,
+      bio: updatedData.bio,
+      profession: updatedData.profession,
+      skills: skillsAsArray,
+      interests: interestsAsArray,
+      passions: passionsAsArray,
+      skills_lowercase: skillsLowercase,
+      gender: updatedData.gender,
+      age: updatedData.age,
+      circle: updatedData.circle,
+      id_card_number: updatedData.id_card_number,
+      isLookingForPartners: updatedData.isLookingForPartners,
+      lookingFor: updatedData.lookingFor,
+      businessIdea: updatedData.businessIdea,
+      isProfileComplete: true,
     };
-    
+  
+    const memberUpdateData: Partial<Member> = {
+      phone: updatedData.phone,
+      address: updatedData.address,
+      bio: updatedData.bio,
+      profession: updatedData.profession,
+      skills: skillsAsArray,
+      interests: interestsAsArray,
+      passions: passionsAsArray,
+      gender: updatedData.gender,
+      age: updatedData.age,
+      circle: updatedData.circle,
+      national_id: updatedData.id_card_number,
+      isLookingForPartners: updatedData.isLookingForPartners,
+      lookingFor: updatedData.lookingFor,
+      businessIdea: updatedData.businessIdea,
+      skills_lowercase: skillsLowercase,
+    };
+  
     try {
-        await api.updateMemberAndUserProfile(memberUser.id, memberUser.member_id, userUpdateData, memberUpdateData);
-        addToast('Profile complete! Welcome to the commons.', 'success');
-    } catch (error) {
-        console.error("Profile completion failed:", error);
-        addToast('Failed to save profile. Please try again.', 'error');
+      await api.updateMemberAndUserProfile(memberUser.id, memberUser.member_id, userUpdateData, memberUpdateData);
+      addToast('Profile complete! Welcome to the commons.', 'success');
+    } catch (error: any) {
+      console.error("Profile completion failed:", error);
+      const errorMessage = error.message || 'Failed to update profile. Please try again.';
+      addToast(errorMessage, 'error');
     }
   };
 
@@ -245,7 +260,7 @@ const App: React.FC = () => {
     if (firebaseUser && !firebaseUser.emailVerified && currentUser.isProfileComplete) {
         return <VerifyEmailPage user={currentUser} onLogout={requestLogout} />;
     }
-
+    
     if (!currentUser.isProfileComplete) {
         return <div className="p-4 sm:p-6 lg:p-8"><CompleteProfilePage user={currentUser} onProfileComplete={handleProfileComplete} /></div>;
     }

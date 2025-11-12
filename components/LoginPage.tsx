@@ -24,9 +24,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isProcessing, onS
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onLogin({ email, password }).catch(() => {
-        // Errors are handled by the context, but this catch prevents unhandled promise rejection warnings.
-    });
+    await onLogin({ email, password });
   };
 
   return (

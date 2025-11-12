@@ -246,8 +246,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
 
     const renderProfileView = () => (
          <div className="mt-6 space-y-8">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <StatCard title="Social Capital (SCAP)" value={(currentUser.scap ?? 0).toLocaleString()} icon={<SparkleIcon className="h-5 w-5 text-yellow-400"/>} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <StatCard title="Civic Capital (CCAP)" value={(currentUser.ccap ?? 0).toLocaleString()} icon={<DatabaseIcon className="h-5 w-5 text-blue-400"/>} />
                 <StatCard title="Referral Earnings" value={`$${(currentUser.referralEarnings ?? 0).toFixed(2)}`} icon={<DollarSignIcon className="h-5 w-5 text-green-400"/>} />
             </div>

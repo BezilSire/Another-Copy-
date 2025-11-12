@@ -1,11 +1,11 @@
 import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, useRef } from 'react';
 import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
-import { doc, onSnapshot } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
 import { useToast } from './ToastContext';
 import { api } from '../services/apiService';
 import { auth, db } from '../services/firebase';
-import { User, Agent, NewPublicMemberData } from '../types';
-import { generateReferralCode } from '../utils';
+import { User, Agent, NewPublicMemberData, MemberUser } from '../types';
+import { generateReferralCode, generateAgentCode } from '../utils';
 
 type LoginCredentials = { email: string; password: string };
 type AgentSignupCredentials = Pick<Agent, 'name' | 'email' | 'circle'> & { password: string };
@@ -59,14 +59,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (userDoc.exists()) {
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
 
-            if (!userData.referralCode) {
-              const newReferralCode = generateReferralCode();
-              api.updateUser(userDoc.id, { referralCode: newReferralCode }).catch(err => {
-                console.error("Failed to backfill referral code:", err);
-              });
-              userData.referralCode = newReferralCode;
-            }
-
             if (userData.status === 'ousted') {
               if (currentUserRef.current?.id === userData.id) {
                 addToast('Your account has been suspended.', 'error');
@@ -76,10 +68,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               setCurrentUser(userData);
             }
           } else {
-            // It might take a moment for the user doc to be created.
+            // It might take a moment for the user doc to be created, especially with a cloud function.
             // Only log out if we are not in the middle of a signup process.
             if (!isProcessingAuthRef.current) {
               console.warn("User document not found for authenticated user. Logging out.");
+              addToast("Your user profile could not be found. Please sign up again or contact support if the issue persists.", "error");
               api.logout();
             }
           }
@@ -140,8 +133,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsProcessingAuth(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
-      await api.agentSignup(userCredential.user, credentials.name, credentials.circle);
-      addToast(`Account created successfully! Welcome.`, 'success');
+      const { user } = userCredential;
+
+      const newAgent: Omit<Agent, 'id'> = {
+        name: credentials.name,
+        email: credentials.email,
+        name_lowercase: credentials.name.toLowerCase(),
+        role: 'agent',
+        status: 'pending',
+        circle: credentials.circle,
+        agent_code: generateAgentCode(),
+        referralCode: generateReferralCode(),
+        createdAt: Timestamp.now(),
+        lastSeen: Timestamp.now(),
+        isProfileComplete: false,
+        hasCompletedInduction: true,
+        commissionBalance: 0,
+        referralEarnings: 0,
+      };
+
+      await setDoc(doc(db, 'users', user.uid), newAgent);
+      await sendEmailVerification(user);
+      addToast(`Account created for ${credentials.name}! A verification email has been sent.`, 'success');
+
     } catch (error) {
       const firebaseError = error as { code?: string; message?: string; customData?: any };
       let message = `Signup failed: ${firebaseError.message || 'Please try again.'}`;
@@ -167,9 +181,71 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const publicMemberSignup = useCallback(async (memberData: NewPublicMemberData, password: string) => {
     setIsProcessingAuth(true);
     try {
-      const userCredential = await createUserWithEmailAndPassword(auth, memberData.email, password);
-      await sendEmailVerification(userCredential.user);
-      await api.publicMemberSignup(userCredential.user, memberData.full_name, memberData.referralCode);
+        const userCredential = await createUserWithEmailAndPassword(auth, memberData.email, password);
+        const { user } = userCredential;
+
+        const batch = writeBatch(db);
+
+        // Find referrer if a code was provided.
+        let referrerId = '';
+        if (memberData.referralCode) {
+            const referrerQuery = query(collection(db, 'users'), where('referralCode', '==', memberData.referralCode), limit(1));
+            const snapshot = await getDocs(referrerQuery);
+            if (!snapshot.empty) {
+                referrerId = snapshot.docs[0].id;
+            }
+        }
+        
+        const welcomeMessage = `Welcome, ${memberData.full_name}! We're thrilled to have you join the Global Commons Network. Explore, connect, and let's build a better future together.`;
+
+        // Prepare the 'members' collection document.
+        const memberRef = doc(collection(db, 'members'));
+        const newMemberDoc = {
+            full_name: memberData.full_name,
+            email: memberData.email,
+            uid: user.uid,
+            agent_id: 'PUBLIC_SIGNUP',
+            agent_name: 'Self-Registered',
+            date_registered: serverTimestamp(),
+            payment_status: 'pending_verification',
+            registration_amount: 10,
+            welcome_message: welcomeMessage,
+            membership_card_id: `UGC-M-${generateReferralCode()}`,
+            phone: '',
+            circle: '',
+        };
+        batch.set(memberRef, newMemberDoc);
+
+        // Prepare the 'users' collection document.
+        const userRef = doc(db, 'users', user.uid);
+        const newUserDoc: Omit<MemberUser, 'id' | 'createdAt' | 'lastSeen'> = {
+            name: memberData.full_name,
+            email: memberData.email,
+            name_lowercase: memberData.full_name.toLowerCase(),
+            role: 'member',
+            status: 'pending',
+            isProfileComplete: false,
+            member_id: memberRef.id,
+            credibility_score: 100,
+            distress_calls_available: 1,
+            referralCode: generateReferralCode(),
+            referredBy: memberData.referralCode || '',
+            referrerId: referrerId,
+            hasCompletedInduction: false,
+            phone: '',
+            address: '',
+            circle: '',
+            id_card_number: '',
+            ubtBalance: 0,
+            initialUbtStake: 0,
+        };
+        batch.set(userRef, {...newUserDoc, createdAt: serverTimestamp(), lastSeen: serverTimestamp()});
+
+        await batch.commit();
+        
+        await sendEmailVerification(user);
+        
+        addToast('Account created! A verification email has been sent.', 'success');
     } catch (error: any) {
         let message = `Signup failed: ${error.message || 'Please try again.'}`;
         if (error.code) {
