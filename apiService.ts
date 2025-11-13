@@ -52,8 +52,8 @@ import {
     User, Agent, Member, NewMember, MemberUser, Broadcast, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, NewPublicMemberData, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
-    Distribution
-} from '../types';
+    Distribution, Transaction, GlobalEconomy, Admin
+} from './types';
 
 
 const usersCollection = collection(db, 'users');
@@ -70,7 +70,6 @@ const sustenanceCollection = collection(db, 'sustenance_cycles');
 const vouchersCollection = collection(db, 'sustenance_vouchers');
 const venturesCollection = collection(db, 'ventures');
 const globalsCollection = collection(db, 'globals');
-const checkMemberByEmailCallable = httpsCallable(functions, 'checkMemberByEmail');
 
 // Helper function for robust post deletion
 const _deletePostAndSubcollections = async (postId: string) => {
@@ -99,97 +98,6 @@ export const api = {
             .then(userCredential => userCredential.user);
     },
     logout: () => signOut(auth),
-    signup: async (name: string, email: string, password: string, circle: string): Promise<void> => {
-        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-        const { user } = userCredential;
-        const agentCode = generateAgentCode();
-        const referralCode = generateReferralCode();
-        const newAgent: Omit<Agent, 'id'> = {
-            name, email, role: 'agent', status: 'active', circle, agent_code: agentCode,
-            referralCode: referralCode, createdAt: Timestamp.now(), lastSeen: Timestamp.now(),
-            isProfileComplete: false, hasCompletedInduction: true, commissionBalance: 0, referralEarnings: 0,
-        };
-        await setDoc(doc(db, 'users', user.uid), newAgent);
-    },
-    memberSignup: async (memberData: NewPublicMemberData, password: string): Promise<void> => {
-        const userCredential = await createUserWithEmailAndPassword(auth, memberData.email, password);
-        const { user } = userCredential;
-        
-        let referredByAdmin = false;
-        let referrerId: string | undefined = undefined;
-        if (memberData.referralCode) {
-            const q = query(usersCollection, where('referralCode', '==', memberData.referralCode), limit(1));
-            const snapshot = await getDocs(q);
-            if (!snapshot.empty) {
-                const referrer = snapshot.docs[0].data() as User;
-                referrerId = snapshot.docs[0].id;
-                if (referrer.role === 'admin') {
-                    referredByAdmin = true;
-                }
-            }
-        }
-
-        // FIX: 'circle' does not exist on NewPublicMemberData. Pass an empty string.
-        const welcomeMessage = await generateWelcomeMessage(memberData.full_name, "");
-
-        const batch = writeBatch(db);
-        const memberRef = doc(membersCollection);
-        // FIX: 'phone' and 'circle' are required in the Member type but not present in NewPublicMemberData. Initialize them as empty strings.
-        const newMemberDoc: Omit<Member, 'id'> = {
-            ...memberData, uid: user.uid, agent_id: 'PUBLIC_SIGNUP', agent_name: 'Self-Registered',
-            date_registered: new Date().toISOString(), payment_status: 'pending_verification', registration_amount: 10,
-            welcome_message: welcomeMessage, membership_card_id: `UGC-M-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
-            phone: '',
-            circle: '',
-        };
-        batch.set(memberRef, newMemberDoc);
-        
-        const referralCode = generateReferralCode();
-        const userRef = doc(db, 'users', user.uid);
-        // FIX: 'phone', 'address', 'national_id', and 'circle' do not exist on NewPublicMemberData. Initialize them as empty strings.
-        const newUserDoc: Omit<MemberUser, 'id'> = {
-            name: memberData.full_name, email: memberData.email, phone: '', address: '',
-            id_card_number: '', role: 'member', status: 'pending', circle: '',
-            createdAt: Timestamp.now(), lastSeen: Timestamp.now(), isProfileComplete: false, member_id: memberRef.id,
-            credibility_score: 100, distress_calls_available: 1, referralCode, referredBy: memberData.referralCode || '',
-            referrerId: referrerId,
-            hasCompletedInduction: false,
-        };
-        batch.set(userRef, newUserDoc);
-        
-        await batch.commit();
-
-        if (referredByAdmin) {
-            await addDoc(payoutsCollection, {
-                userId: user.uid,
-                userName: memberData.full_name,
-                type: 'admin_referral_bonus',
-                amount: 5,
-                status: 'pending',
-                requestedAt: serverTimestamp(),
-                ecocashName: '',
-                ecocashNumber: '',
-            });
-        }
-    },
-    activateMemberAccount: async (member: Member, password: string): Promise<void> => {
-         if (!member.email) throw new Error("Member email is missing.");
-         const userCredential = await createUserWithEmailAndPassword(auth, member.email, password);
-         const { user } = userCredential;
-         
-         const referralCode = generateReferralCode();
-         const newUser: Omit<MemberUser, 'id'> = {
-            name: member.full_name, email: member.email, phone: member.phone, role: 'member',
-            status: 'active', circle: member.circle, createdAt: Timestamp.now(), lastSeen: Timestamp.now(),
-            isProfileComplete: false, member_id: member.id, credibility_score: 100, distress_calls_available: 1, referralCode,
-            hasCompletedInduction: false,
-         };
-
-         const batch = writeBatch(db);
-         batch.set(doc(db, 'users', user.uid), newUser);
-         batch.update(doc(db, 'members', member.id), { uid: user.uid });
-         await batch.commit();
-    },
     sendPasswordReset: (email: string) => sendPasswordResetEmail(auth, email),
     sendVerificationEmail: async () => {
         if (auth.currentUser) await sendEmailVerification(auth.currentUser);
@@ -233,6 +141,27 @@ export const api = {
         return { id: doc.id, ...doc.data() } as User;
     },
     updateUser: (uid: string, data: Partial<User>) => updateDoc(doc(db, 'users', uid), data),
+    updateMemberAndUserProfile: async (userId: string, memberId: string, userUpdateData: Partial<User>, memberUpdateData: Partial<Member>) => {
+        const batch = writeBatch(db);
+
+        const userRef = doc(usersCollection, userId);
+        batch.update(userRef, userUpdateData);
+    
+        const memberRef = doc(membersCollection, memberId);
+        batch.update(memberRef, memberUpdateData);
+
+        try {
+            await batch.commit();
+        } catch (error: any) {
+            console.error("Atomic profile update failed:", error);
+            const newError = new Error(
+                "Failed to save profile. This is likely a security rule issue. " +
+                "Ensure you have permission to update all fields. Note: Changing your name is not permitted."
+            );
+            (newError as any).code = error.code;
+            throw newError;
+        }
+    },
     getPublicUserProfile: async (uid: string): Promise<PublicUserProfile | null> => {
         const userDoc = await getDoc(doc(usersCollection, uid));
         if (!userDoc.exists()) return null;
@@ -240,7 +169,7 @@ export const api = {
         return {
             id: userDoc.id, name: d.name, email: d.email, role: d.role, circle: d.circle, status: d.status, bio: d.bio, profession: d.profession,
             skills: d.skills, interests: d.interests, businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
-            lookingFor: d.lookingFor, credibility_score: d.credibility_score, scap: d.scap, ccap: d.ccap, createdAt: d.createdAt,
+            lookingFor: d.lookingFor, credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
             pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides,
         };
     },
@@ -279,39 +208,53 @@ export const api = {
         return users;
     },
     searchUsers: async (searchQuery: string, currentUser: User): Promise<PublicUserProfile[]> => {
-        if (!searchQuery.trim()) return [];
-        
+        if (!searchQuery.trim()) {
+            return [];
+        }
         const lowerCaseQuery = searchQuery.toLowerCase();
+
         const q = query(
             usersCollection,
-            where('name', '>=', lowerCaseQuery),
-            where('name', '<=', lowerCaseQuery + '\uf8ff'),
-            limit(20)
+            where('name_lowercase', '>=', lowerCaseQuery),
+            where('name_lowercase', '<=', lowerCaseQuery + '\uf8ff'),
+            limit(15)
         );
 
         try {
             const snapshot = await getDocs(q);
-            const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile));
+            const users = snapshot.docs
+                .map(doc => {
+                    const d = doc.data();
+                    return {
+                        id: doc.id,
+                        name: d.name,
+                        email: d.email,
+                        role: d.role,
+                        circle: d.circle,
+                        status: d.status,
+                        bio: d.bio,
+                        profession: d.profession,
+                        skills: Array.isArray(d.skills) ? d.skills : (typeof d.skills === 'string' ? d.skills.split(',').map(s => s.trim()).filter(Boolean) : []),
+                        interests: Array.isArray(d.interests) ? d.interests : (typeof d.interests === 'string' ? d.interests.split(',').map(s => s.trim()).filter(Boolean) : []),
+                        businessIdea: d.businessIdea,
+                        isLookingForPartners: d.isLookingForPartners,
+                        lookingFor: d.lookingFor,
+                        credibility_score: d.credibility_score,
+                        ccap: d.ccap,
+                        createdAt: d.createdAt,
+                        pitchDeckTitle: d.pitchDeckTitle,
+                        pitchDeckSlides: d.pitchDeckSlides
+                    } as PublicUserProfile;
+                });
+
             return users.filter(u => u.id !== currentUser.id);
         } catch (error) {
             console.error("Error searching users:", error);
             if ((error as any).code === 'failed-precondition') {
-                throw new Error("User search is not configured. Please contact an admin to enable it.");
+                throw new Error("User search is not configured. A database index is required. Please check the browser console for a link to create it.");
             }
-            throw new Error("Could not perform search at this time.");
+            throw new Error("Could not perform search at this time due to a database error.");
         }
-    },
-    getChatContacts: async (currentUser: User): Promise<User[]> => {
-        const q = query(usersCollection, where('status', '==', 'active'));
-        const snapshot = await getDocs(q);
-        const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
-        return users.filter(u => u.id !== currentUser.id);
-    },
-    getSearchableUsers: async (currentUser: User): Promise<PublicUserProfile[]> => {
-        const q = query(usersCollection, where('status', '==', 'active'), orderBy('createdAt', 'desc'), limit(100));
-        const snapshot = await getDocs(q);
-        const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile));
-        return users.filter(u => u.id !== currentUser.id);
     },
 
     // Admin
@@ -330,44 +273,36 @@ export const api = {
         const q = query(membersCollection, where('agent_id', '==', agent.id));
         const snapshot = await getDocs(q);
         const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Member));
-        members.sort((a, b) => new Date(b.date_registered).getTime() - new Date(a.date_registered).getTime());
+        members.sort((a, b) => (b.date_registered.toDate().getTime()) - (a.date_registered.toDate().getTime()));
         return members;
     },
     registerMember: async (agent: Agent, memberData: NewMember): Promise<Member> => {
         const welcomeMessage = await generateWelcomeMessage(memberData.full_name, memberData.circle);
-        const newMember: Omit<Member, 'id'> = {
-            ...memberData, agent_id: agent.id, agent_name: agent.name, date_registered: new Date().toISOString(),
-            welcome_message: welcomeMessage, membership_card_id: `UGC-M-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+        const newMemberForFirestore: Omit<Member, 'id' | 'date_registered'> & { date_registered: any } = {
+            ...memberData,
+            agent_id: agent.id,
+            agent_name: agent.name,
+            date_registered: serverTimestamp(),
+            welcome_message: welcomeMessage,
+            membership_card_id: `UGC-M-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
         };
-        const docRef = await addDoc(membersCollection, newMember);
-        return { id: docRef.id, ...newMember };
+        const docRef = await addDoc(membersCollection, newMemberForFirestore);
+    
+        // For local state update, return a valid Member object with a client-side timestamp
+        const returnedMember = {
+            id: docRef.id,
+            ...memberData,
+            agent_id: agent.id,
+            agent_name: agent.name,
+            date_registered: Timestamp.now(), // Use client-side Timestamp for immediate UI update
+            welcome_message: welcomeMessage,
+            membership_card_id: newMemberForFirestore.membership_card_id,
+        };
+        return returnedMember as Member;
     },
     processPendingWelcomeMessages: async () => 0, // Simplified
 
     // Member
-    getMemberByEmail: async (email: string): Promise<Member | null> => {
-        try {
-            const result = await checkMemberByEmailCallable({ email });
-            const data = result.data as { status: 'found' | 'exists' | 'not_found', memberData?: Member };
-            
-            if (data.status === 'found' && data.memberData) {
-                return data.memberData;
-            }
-            if (data.status === 'exists') {
-                // This is a special case to trigger the "account already exists" message in the UI
-                // The existing UI checks for member.uid to determine the flow.
-                const existingMemberRecord: Partial<Member> = { email, uid: 'exists' };
-                return existingMemberRecord as Member;
-            }
-            // for 'not_found' status
-            return null;
-        } catch (error) {
-            console.error("Error calling checkMemberByEmail function:", error);
-            // Re-throw so the UI can catch it and display a generic error.
-            throw error;
-        }
-    },
-    updateMemberProfile: (memberId: string, data: Partial<Member>) => updateDoc(doc(db, 'members', memberId), data),
     listenForReferredUsers: (userId: string, callback: (users: PublicUserProfile[]) => void, onError: (error: Error) => void) => {
         return onSnapshot(doc(usersCollection, userId), async (userSnap) => {
             try {
@@ -388,11 +323,42 @@ export const api = {
             }
         }, onError);
     },
-    approveMember: async (admin: User, member: Member) => {
-        const batch = writeBatch(db);
-        batch.update(doc(membersCollection, member.id), { payment_status: 'complete' });
-        if (member.uid) batch.update(doc(usersCollection, member.uid), { status: 'active' });
-        await batch.commit();
+    updateMemberProfile: (memberId: string, data: Partial<Member>) => updateDoc(doc(membersCollection, memberId), data),
+    approveMemberAndCreditUbt: async (admin: User, member: Member) => {
+        if (!member.uid) {
+            throw new Error("This member has not created an account yet and cannot be approved.");
+        }
+    
+        return runTransaction(db, async (t) => {
+            const memberRef = doc(membersCollection, member.id);
+            const userRef = doc(usersCollection, member.uid!);
+            const transactionLogRef = doc(collection(db, 'users', member.uid!, 'transactions'));
+    
+            // 1. Mark member as complete
+            t.update(memberRef, { payment_status: 'complete' });
+    
+            const INITIAL_STAKE_AMOUNT = 100; // Corresponds to the $10 registration fee
+    
+            // 2. Activate user and credit initial UBT stake
+            t.update(userRef, { 
+                status: 'active',
+                ubtBalance: increment(INITIAL_STAKE_AMOUNT),
+                initialUbtStake: INITIAL_STAKE_AMOUNT,
+            });
+    
+            // 3. Create a transaction log for the credit
+            const logEntry: Omit<Transaction, 'id' | 'timestamp'> & { timestamp: any } = {
+                type: 'credit',
+                amount: INITIAL_STAKE_AMOUNT,
+                reason: 'Initial UBT stake on verification',
+                timestamp: serverTimestamp(),
+                actorId: admin.id,
+                actorName: admin.name,
+                balanceBefore: 0,
+                balanceAfter: INITIAL_STAKE_AMOUNT,
+            };
+            t.set(transactionLogRef, logEntry);
+        });
     },
     rejectMember: (admin: User, member: Member) => updateDoc(doc(membersCollection, member.id), { payment_status: 'rejected' }),
     updatePaymentStatus: (admin: User, memberId: string, status: Member['payment_status']) => updateDoc(doc(membersCollection, memberId), { payment_status: status }),
@@ -415,18 +381,15 @@ export const api = {
 
     // Posts
     createPost: (user: User, content: string, type: Post['types'], ccapToAward: number) => {
-        const transaction = runTransaction(db, async (t) => {
-            const postRef = doc(collection(db, 'posts'));
-            const userRef = doc(db, 'users', user.id);
-
-            const newPost: Omit<Post, 'id'> = {
-                authorId: user.id, authorName: user.name, authorCircle: user.circle, authorRole: user.role,
-                content, date: new Date().toISOString(), upvotes: [], types: type,
-            };
-            t.set(postRef, newPost);
-            if (ccapToAward > 0) t.update(userRef, { ccap: increment(ccapToAward) });
-        });
-        return transaction;
+        // SECURITY FIX: Removed insecure client-side CCAP update.
+        // A user cannot be allowed to award themselves currency from the client.
+        // This must be handled by a secure backend process (e.g., Cloud Function).
+        const postRef = doc(collection(db, 'posts'));
+        const newPost: Omit<Post, 'id'> = {
+            authorId: user.id, authorName: user.name, authorCircle: user.circle, authorRole: user.role,
+            content, date: new Date().toISOString(), upvotes: [], types: type,
+        };
+        return setDoc(postRef, newPost);
     },
     repostPost: async (originalPost: Post, user: User, comment: string) => {
         const batch = writeBatch(db);
@@ -447,16 +410,14 @@ export const api = {
     },
     sendDistressPost: async (user: MemberUser, content: string) => {
         if (user.distress_calls_available <= 0) throw new Error("No distress calls available.");
-        const batch = writeBatch(db);
+        // SECURITY FIX: Removed insecure client-side quota update.
+        // The user's distress call availability must be decremented by a secure backend process.
         const postRef = doc(postsCollection);
-        const userRef = doc(usersCollection, user.id);
         const newPost: Omit<Post, 'id'> = {
             authorId: user.id, authorName: `Anonymous Member`, authorCircle: user.circle, authorRole: user.role,
             content, date: new Date().toISOString(), upvotes: [], types: 'distress',
         };
-        batch.set(postRef, newPost);
-        batch.update(userRef, { distress_calls_available: increment(-1), last_distress_call: serverTimestamp() });
-        await batch.commit();
+        await setDoc(postRef, newPost);
     },
     getRecentPosts: async (count: number): Promise<Post[]> => {
         const publicTypes = ['general', 'proposal', 'offer', 'opportunity'];
@@ -754,7 +715,48 @@ export const api = {
         });
     },
     listenForPayoutRequests: (admin: User, callback: (reqs: PayoutRequest[]) => void, onError: (error: Error) => void) => onSnapshot(query(payoutsCollection, orderBy('requestedAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), onError),
-    updatePayoutStatus: (payoutId: string, status: 'completed' | 'rejected') => updateDoc(doc(payoutsCollection, payoutId), { status }),
+    updatePayoutStatus: (adminUser: User, payout: PayoutRequest, status: 'completed' | 'rejected') => {
+        return runTransaction(db, async (t) => {
+            const payoutRef = doc(payoutsCollection, payout.id);
+            const userRef = doc(usersCollection, payout.userId);
+    
+            const updateData = {
+                status,
+                processedBy: {
+                    adminId: adminUser.id,
+                    adminName: adminUser.name,
+                },
+                completedAt: serverTimestamp(),
+            };
+            t.update(payoutRef, updateData);
+    
+            if (status === 'rejected') {
+                let amountToRefund: number | undefined;
+                
+                if (payout.type === 'onchain_withdrawal') {
+                    amountToRefund = payout.amount; // amount is in UBT
+                } else if (payout.type === 'ubt_redemption') {
+                    amountToRefund = payout.meta?.ubtAmount; // meta.ubtAmount is in UBT
+                }
+                
+                if (typeof amountToRefund === 'number' && amountToRefund > 0) {
+                    t.update(userRef, { ubtBalance: increment(amountToRefund) });
+    
+                    // Create reversal transaction log
+                    const txRef = doc(collection(db, 'users', payout.userId, 'transactions'));
+                    const txData: Omit<Transaction, 'id'|'timestamp'> & {timestamp: any} = {
+                        type: 'credit',
+                        amount: amountToRefund,
+                        reason: `Reversal for rejected ${payout.type.replace(/_/g, ' ')}`,
+                        timestamp: serverTimestamp(),
+                        actorId: adminUser.id,
+                        actorName: adminUser.name,
+                    };
+                    t.set(txRef, txData);
+                }
+            }
+        });
+    },
     redeemCcapForCash: (user: User, ecocashName: string, ecocashNumber: string, usdtValue: number, ccapToRedeem: number, ccap_to_usd_rate: number) => Promise.resolve(),
     stakeCcapForNextCycle: (user: MemberUser) => Promise.resolve(),
     convertCcapToVeq: (user: MemberUser, venture: Venture, ccapAmount: number, ccapRate: number) => Promise.resolve(),
@@ -772,20 +774,15 @@ export const api = {
         slf_balance: balance, hamper_cost: cost, last_run: serverTimestamp(), next_run: serverTimestamp(),
     }),
     runSustenanceLottery: (admin: User): Promise<{ winners_count: number }> => { return Promise.resolve({ winners_count: 0 }); /* Complex logic here */ },
-    performDailyCheckin: (userId: string): Promise<Partial<User>> => {
-      return updateDoc(doc(usersCollection, userId), { 
-        scap: increment(10), 
-        lastDailyCheckin: serverTimestamp() 
-      }).then(() => ({
-        scap: increment(10), 
-        lastDailyCheckin: Timestamp.now()
-      }));
+    performDailyCheckin: (userId: string): Promise<void> => {
+      // SECURITY FIX: Removed insecure client-side SCAP update.
+      // This action now does nothing on the database.
+      return Promise.resolve();
     },
     submitPriceVerification: (userId: string, item: string, price: number, shop: string) => {
-        const batch = writeBatch(db);
-        batch.update(doc(usersCollection, userId), { ccap: increment(15) });
-        batch.set(doc(collection(db, 'price_verifications')), { userId, item, price, shop, date: serverTimestamp() });
-        return batch.commit();
+        // SECURITY FIX: Removed insecure client-side CCAP update.
+        const priceVerificationRef = doc(collection(db, 'price_verifications'));
+        return setDoc(priceVerificationRef, { userId, item, price, shop, date: serverTimestamp() });
     },
     redeemVoucher: async (vendor: User, voucherId: string): Promise<number> => {
         return runTransaction(db, async t => {
@@ -803,21 +800,24 @@ export const api = {
     },
 
     // Ventures
-    getVentureMembers: async (count: number): Promise<{ users: User[] }> => {
-        const q = query(usersCollection, where('role', '==', 'member'), where('isLookingForPartners', '==', true), limit(count));
+    getVentureMembers: async (count: number): Promise<{ users: PublicUserProfile[] }> => {
+        // Fetch a batch of recent members and filter client-side to avoid index issues.
+        const q = query(usersCollection, where('role', '==', 'member'), orderBy('createdAt', 'desc'), limit(count > 500 ? 500 : count));
         const snapshot = await getDocs(q);
-        return { users: snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User)) };
-    },
-    getCollaborators: async (count: number): Promise<{ users: User[] }> => {
-        const q = query(usersCollection, where('isLookingForPartners', '==', true), limit(count));
-        const snapshot = await getDocs(q);
-        return { users: snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User)) };
-    },
-    findCollaborators: async (currentUser: User): Promise<PublicUserProfile[]> => {
-        const q = query(usersCollection, where('isLookingForPartners', '==', true), limit(50));
-        const snapshot = await getDocs(q);
-        const users = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile));
-        return users.filter(u => u.id !== currentUser.id);
+        const allUsers = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User));
+        const collaborators = allUsers.filter(u => u.isLookingForPartners === true);
+
+        // Map to PublicUserProfile to strip sensitive data before returning from the API.
+        return { 
+            users: collaborators.map(d => ({
+                id: d.id, name: d.name, email: d.email, role: d.role, circle: d.circle, status: d.status, bio: d.bio, profession: d.profession,
+                skills: Array.isArray(d.skills) ? d.skills : (typeof d.skills === 'string' ? d.skills.split(',').map(s => s.trim()).filter(Boolean) : []),
+                interests: Array.isArray(d.interests) ? d.interests : (typeof d.interests === 'string' ? d.interests.split(',').map(s => s.trim()).filter(Boolean) : []),
+                businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
+                lookingFor: d.lookingFor, credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
+                pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides
+            }))
+        };
     },
     getFundraisingVentures: async (): Promise<Venture[]> => {
         const q = query(venturesCollection, where('status', '==', 'fundraising'), orderBy('createdAt', 'desc'));
@@ -885,7 +885,8 @@ export const api = {
         const userRef = doc(usersCollection, userId);
         const userDoc = await getDoc(userRef);
         if (userDoc.exists() && !userDoc.data().hasReadKnowledgeBase) {
-            await updateDoc(userRef, { hasReadKnowledgeBase: true, knowledgePoints: increment(10) });
+            // SECURITY FIX: Only update the 'hasReadKnowledgeBase' flag. Do not award points from the client.
+            await updateDoc(userRef, { hasReadKnowledgeBase: true });
             return true;
         }
         return false;
@@ -906,4 +907,168 @@ export const api = {
         const newTotal = (cvpDoc.data()?.total_usd_value || 0) + amount;
         t.set(cvpRef, { total_usd_value: newTotal }, { merge: true });
     }),
+    
+    // Wallet & Economy
+    listenForUserTransactions: (userId: string, callback: (txs: Transaction[]) => void, onError: (error: Error) => void) => {
+        const q = query(collection(db, 'users', userId, 'transactions'), orderBy('timestamp', 'desc'), limit(50));
+        return onSnapshot(q, (snapshot) => {
+            const transactions = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+            callback(transactions);
+        }, onError);
+    },
+    listenForGlobalEconomy: (callback: (economy: GlobalEconomy | null) => void, onError: (error: Error) => void) => {
+        const docRef = doc(globalsCollection, 'economy');
+        return onSnapshot(docRef, (snapshot) => {
+            callback(snapshot.exists() ? snapshot.data() as GlobalEconomy : null);
+        }, onError);
+    },
+    setGlobalEconomy: (adminUser: User, data: Partial<GlobalEconomy>) => {
+        const docRef = doc(globalsCollection, 'economy');
+        return setDoc(docRef, data, { merge: true });
+    },
+    updateUbtRedemptionWindow: (adminUser: User, open: boolean) => {
+        const docRef = doc(globalsCollection, 'economy');
+        if (open) {
+            const now = Timestamp.now();
+            const closesAt = new Date(now.toDate());
+            closesAt.setDate(closesAt.getDate() + 5);
+            return setDoc(docRef, {
+                ubtRedemptionWindowOpen: true,
+                ubtRedemptionWindowStartedAt: now,
+                ubtRedemptionWindowClosesAt: Timestamp.fromDate(closesAt)
+            }, { merge: true });
+        } else {
+            return setDoc(docRef, { 
+                ubtRedemptionWindowOpen: false,
+                ubtRedemptionWindowClosesAt: null,
+            }, { merge: true });
+        }
+    },
+    updateUserUbt: (adminUser: Admin, userId: string, amount: number, reason: string) => {
+        return runTransaction(db, async (transaction) => {
+            const userRef = doc(db, 'users', userId);
+            const transactionLogRef = doc(collection(db, 'users', userId, 'transactions'));
+
+            const userDoc = await transaction.get(userRef);
+
+            if (!userDoc.exists()) {
+                throw new Error(`User profile for ID ${userId} not found.`);
+            }
+
+            const currentBalance = parseFloat(userDoc.data().ubtBalance as any) || 0;
+            const newBalance = currentBalance + amount;
+
+            if (newBalance < 0) {
+                throw new Error(`Insufficient balance. Cannot debit ${Math.abs(amount).toFixed(2)} from ${currentBalance.toFixed(2)}.`);
+            }
+
+            transaction.update(userRef, { ubtBalance: newBalance });
+
+            const logEntry: Omit<Transaction, 'id' | 'timestamp'> & { timestamp: any } = {
+                type: amount > 0 ? 'credit' : 'debit',
+                amount: Math.abs(amount),
+                reason: reason,
+                timestamp: serverTimestamp(),
+                actorId: adminUser.id,
+                actorName: adminUser.name,
+                balanceBefore: currentBalance,
+                balanceAfter: newBalance,
+            };
+            transaction.set(transactionLogRef, logEntry);
+        });
+    },
+    requestUbtRedemption: (user: User, ubtAmount: number, usdValue: number, ecocashName: string, ecocashNumber: string) => {
+        return runTransaction(db, async (t) => {
+            const userRef = doc(usersCollection, user.id);
+            const userDoc = await t.get(userRef);
+            if (!userDoc.exists()) throw new Error("User not found.");
+
+            const currentBalance = userDoc.data()?.ubtBalance || 0;
+            const initialStake = userDoc.data()?.initialUbtStake || 0;
+            const redeemableUbt = Math.max(0, currentBalance - initialStake);
+
+            if (ubtAmount > redeemableUbt) {
+                throw new Error("Amount exceeds redeemable balance.");
+            }
+
+            // Create payout request
+            const payoutRef = doc(collection(db, 'payouts'));
+            const payoutReq: Omit<PayoutRequest, 'id'|'requestedAt'> & {requestedAt: any} = {
+                userId: user.id,
+                userName: user.name,
+                type: 'ubt_redemption',
+                amount: usdValue, // Storing USD value in amount field
+                status: 'pending',
+                requestedAt: serverTimestamp(),
+                ecocashName,
+                ecocashNumber,
+                meta: {
+                    ubtAmount: ubtAmount,
+                    ubtToUsdRate: ubtAmount > 0 ? usdValue / ubtAmount : 0,
+                }
+            };
+            t.set(payoutRef, payoutReq);
+
+            // Deduct balance immediately
+            t.update(userRef, { ubtBalance: increment(-ubtAmount) });
+            
+            // Create transaction log
+            const txRef = doc(collection(db, 'users', user.id, 'transactions'));
+            const txData: Omit<Transaction, 'id'|'timestamp'> & {timestamp: any} = {
+                type: 'debit',
+                amount: ubtAmount,
+                reason: 'UBT redemption request',
+                timestamp: serverTimestamp(),
+                actorId: user.id,
+                actorName: user.name
+            };
+            t.set(txRef, txData);
+        });
+    },
+    requestOnchainWithdrawal: (user: User, ubtAmount: number, solanaAddress: string) => {
+        return runTransaction(db, async (t) => {
+            const userRef = doc(usersCollection, user.id);
+            const userDoc = await t.get(userRef);
+            if (!userDoc.exists()) {
+                throw new Error("User profile not found.");
+            }
+    
+            const currentBalance = userDoc.data()?.ubtBalance || 0;
+            if (ubtAmount > currentBalance) {
+                throw new Error("Amount exceeds available balance.");
+            }
+    
+            // 1. Create payout request
+            const payoutRef = doc(collection(db, 'payouts'));
+            const payoutReq: Omit<PayoutRequest, 'id' | 'requestedAt'> & { requestedAt: any } = {
+                userId: user.id,
+                userName: user.name,
+                type: 'onchain_withdrawal',
+                amount: ubtAmount, // amount is in UBT
+                status: 'pending',
+                requestedAt: serverTimestamp(),
+                ecocashName: 'N/A', // Not applicable for onchain
+                ecocashNumber: 'N/A', // Not applicable for onchain
+                meta: {
+                    solanaAddress: solanaAddress,
+                }
+            };
+            t.set(payoutRef, payoutReq);
+    
+            // 2. Deduct balance from user's wallet
+            t.update(userRef, { ubtBalance: increment(-ubtAmount) });
+    
+            // 3. Create transaction log
+            const txRef = doc(collection(db, 'users', user.id, 'transactions'));
+            const txData: Omit<Transaction, 'id'|'timestamp'> & {timestamp: any} = {
+                type: 'debit',
+                amount: ubtAmount,
+                reason: 'On-chain withdrawal request',
+                timestamp: serverTimestamp(),
+                actorId: user.id,
+                actorName: user.name
+            };
+            t.set(txRef, txData);
+        });
+    },
 };

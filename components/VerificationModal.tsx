@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Member } from '../types';
 import { XCircleIcon } from './icons/XCircleIcon';
 import { ExclamationTriangleIcon } from './icons/ExclamationTriangleIcon';
+import { Timestamp } from 'firebase/firestore';
 
 interface VerificationModalProps {
   isOpen: boolean;
@@ -75,7 +76,7 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ isOpen, on
                     <DetailItem label="Circle" value={member.circle} />
                     <DetailItem label="Address" value={member.address ?? 'Not provided'} />
                     <DetailItem label="National ID" value={member.national_id ?? 'Not provided'} />
-                    <DetailItem label="Date Submitted" value={member.date_registered.toDate().toLocaleString()} />
+                    <DetailItem label="Date Submitted" value={(member.date_registered as Timestamp)?.toDate ? (member.date_registered as Timestamp).toDate().toLocaleString() : new Date(member.date_registered as any).toLocaleString()} />
                 </div>
             </div>
           </div>

@@ -273,17 +273,36 @@ export const api = {
         const q = query(membersCollection, where('agent_id', '==', agent.id));
         const snapshot = await getDocs(q);
         const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Member));
-        members.sort((a, b) => (b.date_registered.toDate().getTime()) - (a.date_registered.toDate().getTime()));
+        members.sort((a, b) => {
+            const aMillis = (a.date_registered as Timestamp)?.toDate ? (a.date_registered as Timestamp).toDate().getTime() : new Date(a.date_registered as any).getTime();
+            const bMillis = (b.date_registered as Timestamp)?.toDate ? (b.date_registered as Timestamp).toDate().getTime() : new Date(b.date_registered as any).getTime();
+            return bMillis - aMillis;
+        });
         return members;
     },
     registerMember: async (agent: Agent, memberData: NewMember): Promise<Member> => {
         const welcomeMessage = await generateWelcomeMessage(memberData.full_name, memberData.circle);
-        const newMember: Omit<Member, 'id'> & { date_registered: any } = {
-            ...memberData, agent_id: agent.id, agent_name: agent.name, date_registered: serverTimestamp(),
-            welcome_message: welcomeMessage, membership_card_id: `UGC-M-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+        const newMemberForFirestore: Omit<Member, 'id' | 'date_registered'> & { date_registered: any } = {
+            ...memberData,
+            agent_id: agent.id,
+            agent_name: agent.name,
+            date_registered: serverTimestamp(),
+            welcome_message: welcomeMessage,
+            membership_card_id: `UGC-M-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
         };
-        const docRef = await addDoc(membersCollection, newMember);
-        return { id: docRef.id, ...newMember, date_registered: Timestamp.now() } as Member;
+        const docRef = await addDoc(membersCollection, newMemberForFirestore);
+    
+        // For local state update, return a valid Member object with a client-side timestamp
+        const returnedMember = {
+            id: docRef.id,
+            ...memberData,
+            agent_id: agent.id,
+            agent_name: agent.name,
+            date_registered: Timestamp.now(), // Use client-side Timestamp for immediate UI update
+            welcome_message: welcomeMessage,
+            membership_card_id: newMemberForFirestore.membership_card_id,
+        };
+        return returnedMember as Member;
     },
     processPendingWelcomeMessages: async () => 0, // Simplified
 
@@ -365,22 +384,16 @@ export const api = {
     },
 
     // Posts
-    createPost: async (user: User, content: string, type: Post['types'], ccapToAward: number) => {
-        const batch = writeBatch(db);
-        
+    createPost: (user: User, content: string, type: Post['types'], ccapToAward: number) => {
+        // SECURITY FIX: Removed insecure client-side CCAP update.
+        // A user cannot be allowed to award themselves currency from the client.
+        // This must be handled by a secure backend process (e.g., Cloud Function).
         const postRef = doc(collection(db, 'posts'));
         const newPost: Omit<Post, 'id'> = {
             authorId: user.id, authorName: user.name, authorCircle: user.circle, authorRole: user.role,
             content, date: new Date().toISOString(), upvotes: [], types: type,
         };
-        batch.set(postRef, newPost);
-
-        if (ccapToAward > 0) {
-            const userRef = doc(db, 'users', user.id);
-            batch.update(userRef, { ccap: increment(ccapToAward) });
-        }
-
-        return await batch.commit();
+        return setDoc(postRef, newPost);
     },
     repostPost: async (originalPost: Post, user: User, comment: string) => {
         const batch = writeBatch(db);
@@ -765,6 +778,11 @@ export const api = {
         slf_balance: balance, hamper_cost: cost, last_run: serverTimestamp(), next_run: serverTimestamp(),
     }),
     runSustenanceLottery: (admin: User): Promise<{ winners_count: number }> => { return Promise.resolve({ winners_count: 0 }); /* Complex logic here */ },
+    performDailyCheckin: (userId: string): Promise<void> => {
+      // SECURITY FIX: Removed insecure client-side SCAP update.
+      // This action now does nothing on the database.
+      return Promise.resolve();
+    },
     submitPriceVerification: (userId: string, item: string, price: number, shop: string) => {
         // SECURITY FIX: Removed insecure client-side CCAP update.
         const priceVerificationRef = doc(collection(db, 'price_verifications'));
@@ -800,7 +818,7 @@ export const api = {
                 skills: Array.isArray(d.skills) ? d.skills : (typeof d.skills === 'string' ? d.skills.split(',').map(s => s.trim()).filter(Boolean) : []),
                 interests: Array.isArray(d.interests) ? d.interests : (typeof d.interests === 'string' ? d.interests.split(',').map(s => s.trim()).filter(Boolean) : []),
                 businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
-                lookingFor: d.lookingFor, credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
+                lookingFor: d.lookingFor, credibility_score: d.credibility_score, scap: d.scap, ccap: d.ccap, createdAt: d.createdAt,
                 pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides
             }))
         };

@@ -274,17 +274,36 @@ export const api = {
         const q = query(membersCollection, where('agent_id', '==', agent.id));
         const snapshot = await getDocs(q);
         const members = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Member));
-        members.sort((a, b) => (b.date_registered.toDate().getTime()) - (a.date_registered.toDate().getTime()));
+        members.sort((a, b) => {
+            const aMillis = (a.date_registered as Timestamp)?.toDate ? (a.date_registered as Timestamp).toDate().getTime() : new Date(a.date_registered as any).getTime();
+            const bMillis = (b.date_registered as Timestamp)?.toDate ? (b.date_registered as Timestamp).toDate().getTime() : new Date(b.date_registered as any).getTime();
+            return bMillis - aMillis;
+        });
         return members;
     },
     registerMember: async (agent: Agent, memberData: NewMember): Promise<Member> => {
         const welcomeMessage = await generateWelcomeMessage(memberData.full_name, memberData.circle);
-        const newMember: Omit<Member, 'id'> & { date_registered: any } = {
-            ...memberData, agent_id: agent.id, agent_name: agent.name, date_registered: serverTimestamp(),
-            welcome_message: welcomeMessage, membership_card_id: `UGC-M-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+        const newMemberForFirestore: Omit<Member, 'id' | 'date_registered'> & { date_registered: any } = {
+            ...memberData,
+            agent_id: agent.id,
+            agent_name: agent.name,
+            date_registered: serverTimestamp(),
+            welcome_message: welcomeMessage,
+            membership_card_id: `UGC-M-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
         };
-        const docRef = await addDoc(membersCollection, newMember);
-        return { id: docRef.id, ...newMember, date_registered: Timestamp.now() } as Member;
+        const docRef = await addDoc(membersCollection, newMemberForFirestore);
+    
+        // For local state update, return a valid Member object with a client-side timestamp
+        const returnedMember = {
+            id: docRef.id,
+            ...memberData,
+            agent_id: agent.id,
+            agent_name: agent.name,
+            date_registered: Timestamp.now(), // Use client-side Timestamp for immediate UI update
+            welcome_message: welcomeMessage,
+            membership_card_id: newMemberForFirestore.membership_card_id,
+        };
+        return returnedMember as Member;
     },
     processPendingWelcomeMessages: async () => 0, // Simplified
 
