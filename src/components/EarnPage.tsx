@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { MemberUser, User, PayoutRequest, RedemptionCycle } from '../types';
 import { api } from '../services/apiService';
@@ -118,11 +119,13 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
     const [otherCommodity, setOtherCommodity] = useState('');
     const [isCopied, setIsCopied] = useState(false);
     
-    // Payout state
     const [payoutData, setPayoutData] = useState({ ecocashName: '', ecocashNumber: '' });
     const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
     const [referredUsers, setReferredUsers] = useState<User[]>([]);
     const [cycle, setCycle] = useState<RedemptionCycle | null>(null);
+
+    const [timeLeft, setTimeLeft] = useState('');
+    const canCheckIn = !user.lastDailyCheckin || (new Date().getTime() - user.lastDailyCheckin.toDate().getTime()) > 24 * 60 * 60 * 1000;
 
     const referralLink = `${window.location.origin}?ref=${user.referralCode}`;
     const referralEarnings = user.referralEarnings ?? 0;
@@ -134,13 +137,51 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
             setReferredUsers(users as User[]);
         }, (error) => {
             console.error("Failed to load referred users:", error);
-            addToast("Could not load referral list. This may be due to a database configuration issue.", "error");
         });
         return () => {
             unsubPayouts();
             unsubReferrals();
         };
     }, [user.id, addToast]);
+
+
+    useEffect(() => {
+        if (!canCheckIn && user.lastDailyCheckin) {
+            const calculateTimeLeft = () => {
+                const now = new Date().getTime();
+                const lastCheckinTime = user.lastDailyCheckin!.toDate().getTime();
+                const nextAvailableTime = lastCheckinTime + 24 * 60 * 60 * 1000;
+                const diff = nextAvailableTime - now;
+
+                if (diff <= 0) {
+                    setTimeLeft('');
+                    return true;
+                } else {
+                    const hours = Math.floor(diff / (1000 * 60 * 60));
+                    const minutes = Math.floor((diff / 1000 / 60) % 60);
+                    setTimeLeft(`${hours}h ${minutes}m`);
+                    return false;
+                }
+            };
+            
+            if (!calculateTimeLeft()) {
+                const interval = setInterval(calculateTimeLeft, 60000);
+                return () => clearInterval(interval);
+            }
+        }
+    }, [canCheckIn, user.lastDailyCheckin]);
+
+    const handleCheckIn = async () => {
+        setIsLoading(prev => ({ ...prev, checkin: true }));
+        try {
+            await api.performDailyCheckin(user.id); 
+            addToast('Checked in! +10 SCAP awarded.', 'success');
+        } catch (error) {
+            addToast(error instanceof Error ? error.message : "Check-in failed.", "error");
+        } finally {
+            setIsLoading(prev => ({ ...prev, checkin: false }));
+        }
+    };
     
     const handlePriceSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -153,7 +194,6 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
         setIsLoading(prev => ({ ...prev, price: true }));
         try {
             await api.submitPriceVerification(user.id, commodityToSubmit, parseFloat(priceData.price), priceData.shop);
-            await onUpdateUser({}); // Just to trigger a user data refresh
             addToast('Price submitted! +15 CCAP awarded.', 'success');
             setPriceData({ commodity: COMMODITIES[0], price: '', shop: '' });
             setOtherCommodity('');
@@ -194,36 +234,43 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
         <>
             <div className="space-y-8 animate-fade-in">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <StatCard title="Social Capital (SCAP)" value={(user.scap ?? 0).toLocaleString()} icon={<SparkleIcon className="h-6 w-6 text-yellow-400"/>} description="Earned from daily activity. Your SCAP increases your chances in the bi-monthly Sustenance Dividend lottery."/>
                     <StatCard title="Civic Capital (CCAP)" value={(user.ccap ?? 0).toLocaleString()} icon={<DatabaseIcon className="h-6 w-6 text-blue-400"/>} description="Earned by making valuable contributions. During the bi-monthly Redemption Cycle, you can convert your CCAP to cash, stake it for a 10% bonus, or invest it in community ventures to earn Venture Equity (VEQ)."/>
-                    <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                        <h2 className="text-xl font-semibold text-white flex items-center mb-2">
-                            <BriefcaseIcon className="h-6 w-6 mr-3 text-yellow-400" />
-                            Venture Equity (VEQ)
-                        </h2>
-                        <p className="text-gray-400 mb-4">Your ownership in community ventures. Redeem your shares or watch your investments grow.</p>
-                        <div className="bg-slate-900/50 p-4 rounded-lg flex items-center justify-between">
-                            <div>
-                                <p className="text-sm text-gray-400">Your Holdings</p>
-                                <p className="text-lg font-semibold text-white">
-                                    {user.ventureEquity?.length > 0 
-                                        ? `Invested in ${user.ventureEquity.length} venture(s)` 
-                                        : 'No investments yet'}
-                                </p>
-                            </div>
-                            <button onClick={onNavigateToInvestments} className="px-4 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-600 font-semibold text-sm">
-                                Manage
-                            </button>
-                        </div>
-                    </div>
                 </div>
                 
                 <RedemptionStatus cycle={cycle} onNavigate={onNavigateToRedemption} user={user} />
+
+                <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                    <h2 className="text-xl font-semibold text-white flex items-center mb-2">
+                        <BriefcaseIcon className="h-6 w-6 mr-3 text-yellow-400" />
+                        Venture Equity (VEQ)
+                    </h2>
+                    <p className="text-gray-400 mb-4">Your ownership in community ventures. Redeem your shares or watch your investments grow.</p>
+                    <div className="bg-slate-900/50 p-4 rounded-lg flex items-center justify-between">
+                        <div>
+                            <p className="text-sm text-gray-400">Your Holdings</p>
+                            <p className="text-lg font-semibold text-white">
+                                {user.ventureEquity?.length > 0 
+                                    ? `Invested in ${user.ventureEquity.length} venture(s)` 
+                                    : 'No investments yet'}
+                            </p>
+                        </div>
+                        <button onClick={onNavigateToInvestments} className="px-4 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-600 font-semibold text-sm">
+                            Manage Investments
+                        </button>
+                    </div>
+                </div>
+
+                <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
+                    <h2 className="text-xl font-semibold text-white mb-2">Daily Check-in</h2>
+                    <p className="text-gray-400 mb-4">Earn 10 SCAP every 24 hours just for being an active member of the commons.</p>
+                    <button onClick={handleCheckIn} disabled={!canCheckIn || isLoading.checkin} className="w-full sm:w-auto px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold disabled:bg-slate-600 disabled:cursor-not-allowed">
+                        {isLoading.checkin ? <LoaderIcon className="h-5 w-5 animate-spin"/> : canCheckIn ? 'Check-in Now (+10 SCAP)' : `Next check-in in ${timeLeft}`}
+                    </button>
+                </div>
                 
-                {/* Ways to Earn CCAP */}
                 <div className="space-y-6">
-                    <h2 className="text-2xl font-bold text-white">Earn Civic Capital (CCAP)</h2>
-                    
-                    {/* Price Verification */}
+                    <h2 className="text-2xl font-bold text-white">Earn More Civic Capital (CCAP)</h2>
                     <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
                         <h3 className="text-xl font-semibold text-white">Price Verification (+15 CCAP)</h3>
                         <p className="text-gray-400 mt-1 mb-4">Help the commons track fair market prices. Submit the current price of a commodity in your area.</p>
@@ -243,14 +290,7 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
                             {priceData.commodity === 'Other' && (
                                 <div className="animate-fade-in">
                                     <label htmlFor="otherCommodity" className="block text-sm font-medium text-gray-300">Specify Commodity Name <span className="text-red-400">*</span></label>
-                                    <input
-                                        type="text"
-                                        id="otherCommodity"
-                                        value={otherCommodity}
-                                        onChange={e => setOtherCommodity(e.target.value)}
-                                        className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"
-                                        required
-                                    />
+                                    <input type="text" id="otherCommodity" value={otherCommodity} onChange={e => setOtherCommodity(e.target.value)} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" required />
                                 </div>
                             )}
                             <div>
@@ -266,7 +306,6 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
                     </div>
                 </div>
                 
-                {/* Referral System */}
                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
                     <h2 className="text-2xl font-bold text-white mb-2">Referral Program</h2>
                     <p className="text-gray-400 mb-4">Earn <strong className="text-white">$1.00 USDT</strong> for every new member who joins using your referral code.</p>
@@ -302,7 +341,6 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
                     </div>
                 </div>
 
-                {/* Payout Requests */}
                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
                     <h3 className="text-lg font-semibold text-white mb-4">Payout History</h3>
                     {payouts.length > 0 ? (

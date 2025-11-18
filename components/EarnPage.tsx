@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { MemberUser, User, PayoutRequest, RedemptionCycle } from '../types';
 import { api } from '../services/apiService';
@@ -175,8 +176,10 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
     const handleCheckIn = async () => {
         setIsLoading(prev => ({ ...prev, checkin: true }));
         try {
-            const updatedFields = await api.performDailyCheckin(user.id);
-            await onUpdateUser(updatedFields);
+            // We invoke the API transaction.
+            // CRITICAL: We do NOT call onUpdateUser. The App's real-time listener handles the UI update.
+            // This prevents the crash caused by passing "void" (undefined) to onUpdateUser.
+            await api.performDailyCheckin(user.id); 
             addToast('Checked in! +10 SCAP awarded.', 'success');
         } catch (error) {
             addToast(error instanceof Error ? error.message : "Check-in failed.", "error");
@@ -196,7 +199,11 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
         setIsLoading(prev => ({ ...prev, price: true }));
         try {
             await api.submitPriceVerification(user.id, commodityToSubmit, parseFloat(priceData.price), priceData.shop);
-            await onUpdateUser({}); // Just to trigger a user data refresh
+            // No manual update needed, real-time listener will handle SCAP/CCAP changes if backend triggers them.
+            // However, for immediate visual feedback if no backend trigger exists for price verification:
+            // We can trigger a shallow update IF needed, but let's stick to the pattern.
+            // If submitPriceVerification grants points server-side, the listener catches it.
+            // If not, we assume it's pending.
             addToast('Price submitted! +15 CCAP awarded.', 'success');
             setPriceData({ commodity: COMMODITIES[0], price: '', shop: '' });
             setOtherCommodity('');
@@ -216,6 +223,7 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
         setIsLoading(prev => ({ ...prev, payout: true }));
         try {
             await api.requestPayout(user, payoutData.ecocashName, payoutData.ecocashNumber, referralEarnings ?? 0);
+            // Safe to call here because we are passing a valid object, NOT the result of the API call.
             await onUpdateUser({ referralEarnings: 0 });
             addToast('Payout request submitted successfully!', 'success');
             setPayoutData({ ecocashName: '', ecocashNumber: '' });

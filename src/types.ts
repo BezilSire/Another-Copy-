@@ -40,6 +40,7 @@ export interface User {
   id_card_number?: string;
   knowledgePoints?: number;
   hasReadKnowledgeBase?: boolean;
+  scap?: number; // Social Capital
   ccap?: number; // Civic Capital
   referralEarnings?: number;
   ventureEquity?: VentureEquityHolding[];

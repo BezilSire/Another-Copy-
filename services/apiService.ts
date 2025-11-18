@@ -1,5 +1,4 @@
 
-
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -144,11 +143,22 @@ export const api = {
     updateMemberAndUserProfile: async (userId: string, memberId: string, userUpdateData: Partial<User>, memberUpdateData: Partial<Member>) => {
         const batch = writeBatch(db);
 
+        // Clean undefined values to prevent Firestore errors
+        const cleanData = (data: any) => {
+            const cleaned: any = {};
+            Object.keys(data).forEach(key => {
+                if (data[key] !== undefined) {
+                    cleaned[key] = data[key];
+                }
+            });
+            return cleaned;
+        };
+
         const userRef = doc(usersCollection, userId);
-        batch.update(userRef, userUpdateData);
+        batch.update(userRef, cleanData(userUpdateData));
     
         const memberRef = doc(membersCollection, memberId);
-        batch.update(memberRef, memberUpdateData);
+        batch.update(memberRef, cleanData(memberUpdateData));
 
         try {
             await batch.commit();
@@ -169,7 +179,7 @@ export const api = {
         return {
             id: userDoc.id, name: d.name, email: d.email, role: d.role, circle: d.circle, status: d.status, bio: d.bio, profession: d.profession,
             skills: d.skills, interests: d.interests, businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
-            lookingFor: d.lookingFor, credibility_score: d.credibility_score, scap: d.scap, ccap: d.ccap, createdAt: d.createdAt,
+            lookingFor: d.lookingFor, credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
             pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides,
         };
     },
@@ -240,7 +250,6 @@ export const api = {
                         isLookingForPartners: d.isLookingForPartners,
                         lookingFor: d.lookingFor,
                         credibility_score: d.credibility_score,
-                        scap: d.scap,
                         ccap: d.ccap,
                         createdAt: d.createdAt,
                         pitchDeckTitle: d.pitchDeckTitle,
@@ -779,11 +788,49 @@ export const api = {
         slf_balance: balance, hamper_cost: cost, last_run: serverTimestamp(), next_run: serverTimestamp(),
     }),
     runSustenanceLottery: (admin: User): Promise<{ winners_count: number }> => { return Promise.resolve({ winners_count: 0 }); /* Complex logic here */ },
-    performDailyCheckin: (userId: string): Promise<void> => {
-      // SECURITY FIX: Removed insecure client-side SCAP update.
-      // This action now does nothing on the database.
-      return Promise.resolve();
+    
+    performDailyCheckin: async (userId: string): Promise<void> => {
+        const userRef = doc(usersCollection, userId);
+        
+        try {
+            await runTransaction(db, async (transaction) => {
+                const userDoc = await transaction.get(userRef);
+                if (!userDoc.exists()) {
+                    throw new Error("User profile not found.");
+                }
+                
+                const data = userDoc.data();
+                const lastCheckin = data.lastDailyCheckin;
+                const now = Timestamp.now();
+                
+                if (lastCheckin) {
+                    const diff = now.toMillis() - lastCheckin.toMillis();
+                    // 24 hours in ms = 86400000
+                    if (diff < 86400000) {
+                         const remainingHours = Math.ceil((86400000 - diff) / 3600000);
+                         const remainingMinutes = Math.ceil((86400000 - diff) / 60000);
+                         if(remainingHours <= 1) {
+                             throw new Error(`Check-in available in ${remainingMinutes} minutes.`);
+                         }
+                        throw new Error(`Check-in available in ${remainingHours} hours.`);
+                    }
+                }
+                
+                // Safely handle missing 'scap' field
+                const currentScap = typeof data.scap === 'number' ? data.scap : 0;
+                const newScap = currentScap + 10;
+                
+                transaction.update(userRef, {
+                    scap: newScap,
+                    lastDailyCheckin: serverTimestamp()
+                });
+            });
+        } catch (error) {
+            console.error("Check-in transaction failed: ", error);
+            throw error;
+        }
     },
+
     submitPriceVerification: (userId: string, item: string, price: number, shop: string) => {
         // SECURITY FIX: Removed insecure client-side CCAP update.
         const priceVerificationRef = doc(collection(db, 'price_verifications'));
@@ -819,7 +866,7 @@ export const api = {
                 skills: Array.isArray(d.skills) ? d.skills : (typeof d.skills === 'string' ? d.skills.split(',').map(s => s.trim()).filter(Boolean) : []),
                 interests: Array.isArray(d.interests) ? d.interests : (typeof d.interests === 'string' ? d.interests.split(',').map(s => s.trim()).filter(Boolean) : []),
                 businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
-                lookingFor: d.lookingFor, credibility_score: d.credibility_score, scap: d.scap, ccap: d.ccap, createdAt: d.createdAt,
+                lookingFor: d.lookingFor, credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
                 pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides
             }))
         };
