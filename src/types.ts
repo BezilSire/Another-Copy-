@@ -1,5 +1,4 @@
 
-
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -44,6 +43,7 @@ export interface User {
   ccap?: number; // Civic Capital
   referralEarnings?: number;
   ventureEquity?: VentureEquityHolding[];
+  lastDailyCheckin?: Timestamp;
   sustenanceVouchers?: SustenanceVoucher[];
   stakedCcap?: number;
   currentCycleCcap?: number;
@@ -52,6 +52,8 @@ export interface User {
   skills_lowercase?: string[]; // For case-insensitive search
   ubtBalance?: number; // UBT Wallet Balance
   initialUbtStake?: number; // The initial UBT stake for verification
+  fcmToken?: string; // Firebase Cloud Messaging Token
+  publicKey?: string; // Base64 encoded public key for E2EE
 }
 
 // Specific User Roles
@@ -147,6 +149,7 @@ export interface Post {
   commentCount?: number;
   repostCount?: number;
   isPinned?: boolean;
+  requiredSkills?: string[]; // For 'opportunity' posts to match collaborators
   repostedFrom?: {
     authorId: string;
     authorName: string;
@@ -203,6 +206,8 @@ export interface Message {
     senderName: string;
     text: string;
     timestamp: Timestamp;
+    nonce?: string; // For E2EE
+    isEncrypted?: boolean;
 }
 
 // Notifications & Activity
@@ -246,10 +251,12 @@ export interface PublicUserProfile extends Partial<User> {
     isLookingForPartners?: boolean;
     lookingFor?: string[];
     credibility_score?: number;
+    scap?: number;
     ccap?: number;
     createdAt?: Timestamp;
     pitchDeckTitle?: string;
     pitchDeckSlides?: { title: string; content: string }[];
+    publicKey?: string;
 }
 
 // Proposals

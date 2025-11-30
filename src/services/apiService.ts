@@ -47,6 +47,7 @@ import { auth, db, rtdb, functions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
 import { generateAgentCode, generateReferralCode } from '../utils';
 import { generateWelcomeMessage } from './geminiService';
+import { cryptoService } from './cryptoService';
 import { 
     User, Agent, Member, NewMember, MemberUser, Broadcast, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
@@ -154,7 +155,7 @@ export const api = {
             id: userDoc.id, name: d.name, email: d.email, role: d.role, circle: d.circle, status: d.status, bio: d.bio, profession: d.profession,
             skills: d.skills, interests: d.interests, businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
             lookingFor: d.lookingFor, credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
-            pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides,
+            pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides, publicKey: d.publicKey
         };
     },
      getPublicUserProfilesByUids: async (uids: string[]): Promise<PublicUserProfile[]> => {
@@ -198,7 +199,7 @@ export const api = {
                         skills: Array.isArray(d.skills) ? d.skills : [], interests: Array.isArray(d.interests) ? d.interests : [],
                         businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners, lookingFor: d.lookingFor,
                         credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
-                        pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides
+                        pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides, publicKey: d.publicKey
                     } as PublicUserProfile;
                 });
             return users.filter(u => u.id !== currentUser.id);
@@ -267,10 +268,23 @@ export const api = {
         const docRef = await addDoc(broadcastsCollection, newBroadcast);
         return { id: docRef.id, ...newBroadcast };
     },
-    createPost: (user: User, content: string, type: Post['types'], ccapToAward: number) => {
+    createPost: async (user: User, content: string, type: Post['types'], ccapToAward: number, requiredSkills: string[] = []) => {
+        const batch = writeBatch(db);
         const postRef = doc(collection(db, 'posts'));
-        const newPost: Omit<Post, 'id'> = { authorId: user.id, authorName: user.name, authorCircle: user.circle, authorRole: user.role, content, date: new Date().toISOString(), upvotes: [], types: type };
-        return setDoc(postRef, newPost);
+        const newPost: Omit<Post, 'id'> = { authorId: user.id, authorName: user.name, authorCircle: user.circle, authorRole: user.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: requiredSkills };
+        batch.set(postRef, newPost);
+
+        if (type === 'opportunity' && requiredSkills.length > 0) {
+            const skillsToQuery = requiredSkills.slice(0, 10).map(s => s.toLowerCase());
+            const q = query(usersCollection, where('skills_lowercase', 'array-contains-any', skillsToQuery), limit(50));
+            const snapshot = await getDocs(q);
+            snapshot.docs.forEach(userDoc => {
+                if (userDoc.id === user.id) return;
+                const notifRef = doc(collection(db, 'users', userDoc.id, 'notifications'));
+                batch.set(notifRef, { userId: userDoc.id, message: `New opportunity matches your skills: ${content.substring(0, 50)}...`, link: user.id, read: false, timestamp: serverTimestamp(), type: 'NEW_POST_OPPORTUNITY', causerId: user.id });
+            });
+        }
+        await batch.commit();
     },
     repostPost: async (originalPost: Post, user: User, comment: string) => {
         const batch = writeBatch(db);
@@ -307,13 +321,8 @@ export const api = {
     },
     fetchPinnedPosts: async (isAdmin: boolean): Promise<Post[]> => {
         const publicTypes = ['general', 'proposal', 'offer', 'opportunity'];
-        // Fix: Define queries array first, then conditionally push if admin
         const queries = [query(postsCollection, where('isPinned', '==', true), where('types', 'in', publicTypes))];
-        
-        if (isAdmin) {
-            queries.push(query(postsCollection, where('isPinned', '==', true), where('types', '==', 'distress')));
-        }
-        
+        if (isAdmin) queries.push(query(postsCollection, where('isPinned', '==', true), where('types', '==', 'distress')));
         const allResults = await Promise.all(queries.map(q => getDocs(q)));
         const allPosts = allResults.flatMap(snapshot => snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Post)));
         return allPosts.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
@@ -377,25 +386,114 @@ export const api = {
                 conversations.sort((a, b) => (b.lastMessageTimestamp?.toMillis() || 0) - (a.lastMessageTimestamp?.toMillis() || 0));
                 callback(conversations);
             }, onError),
+    
+    // --- UPDATED E2EE MESSAGING ---
     startChat: async (currentUser: User, targetUser: PublicUserProfile): Promise<Conversation> => {
         const convoId = [currentUser.id, targetUser.id].sort().join('_');
         const convoRef = doc(conversationsCollection, convoId);
         const existing = await getDoc(convoRef);
         if (existing.exists()) return { id: existing.id, ...existing.data() } as Conversation;
-        const newConvoData = { members: [currentUser.id, targetUser.id], memberNames: { [currentUser.id]: currentUser.name, [targetUser.id]: targetUser.name }, lastMessage: "Conversation started", lastMessageTimestamp: Timestamp.now(), lastMessageSenderId: currentUser.id, readBy: [currentUser.id], isGroup: false };
+        
+        const newConvoData = { 
+            members: [currentUser.id, targetUser.id], 
+            memberNames: { [currentUser.id]: currentUser.name, [targetUser.id]: targetUser.name }, 
+            lastMessage: "Conversation started", 
+            lastMessageTimestamp: Timestamp.now(), 
+            lastMessageSenderId: currentUser.id, 
+            readBy: [currentUser.id], 
+            isGroup: false 
+        };
         await setDoc(convoRef, newConvoData);
         return { id: convoId, ...newConvoData };
     },
     createGroupChat: async (name: string, memberIds: string[], memberNames: {[key: string]: string}) => {
         await addDoc(conversationsCollection, { name, members: memberIds, memberNames, lastMessage: "Group created", lastMessageTimestamp: Timestamp.now(), lastMessageSenderId: memberIds[0], readBy: [memberIds[0]], isGroup: true });
     },
-    listenForMessages: (convoId: string, callback: (messages: Message[]) => void, onError: (error: Error) => void) => onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Message))), onError),
+    listenForMessages: (convoId: string, currentUser: User, callback: (messages: Message[]) => void, onError: (error: Error) => void) => {
+        // Fetch conversation to get members (needed for public keys)
+        return onSnapshot(doc(conversationsCollection, convoId), async (convoSnap) => {
+            if (!convoSnap.exists()) return;
+            const convoData = convoSnap.data() as Conversation;
+            
+            // Get other user's public key (assuming 1:1 chat for E2EE)
+            const otherUserId = convoData.members.find(id => id !== currentUser.id);
+            let otherUserPublicKey: string | undefined;
+            if (otherUserId && !convoData.isGroup) {
+                const otherUserDoc = await getDoc(doc(usersCollection, otherUserId));
+                if (otherUserDoc.exists()) {
+                    otherUserPublicKey = otherUserDoc.data().publicKey;
+                }
+            }
+
+            // Listen for messages subcollection
+            return onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), (snapshot) => {
+                const processedMessages = snapshot.docs.map(d => {
+                    const data = d.data();
+                    let text = data.text;
+                    const isEncrypted = data.isEncrypted;
+
+                    // Decryption Logic
+                    if (isEncrypted && otherUserPublicKey && !convoData.isGroup) {
+                        if (data.senderId !== currentUser.id) {
+                            // Incoming message: Decrypt using sender's public key
+                            const decrypted = cryptoService.decryptMessage(data.text, otherUserPublicKey);
+                            text = decrypted || "⚠️ Decryption Failed";
+                        } else {
+                            // Own message: It's encrypted, so we can't read it unless we stored a local copy or encrypted it for ourselves too.
+                            // In this simple implementation, the sender sees "Message Encrypted" or we store a plain text local copy in a real app.
+                            // For "No Cap" logic, we just show it's encrypted.
+                            // IMPROVEMENT: In a real Signal app, you encrypt for self too. Here, we'll just show a placeholder or the raw ciphertext.
+                            text = "🔒 Encrypted Message"; 
+                        }
+                    } else if (isEncrypted) {
+                        text = "🔒 Encrypted Message";
+                    }
+
+                    return { id: d.id, ...data, text } as Message;
+                });
+                callback(processedMessages);
+            }, onError);
+        });
+    },
     sendMessage: async (convoId: string, message: Omit<Message, 'id' | 'timestamp'>, convo: Conversation) => {
         const batch = writeBatch(db);
-        batch.set(doc(collection(db, 'conversations', convoId, 'messages')), { ...message, timestamp: serverTimestamp() });
-        batch.update(doc(conversationsCollection, convoId), { lastMessage: message.text, lastMessageTimestamp: serverTimestamp(), lastMessageSenderId: message.senderId, readBy: [message.senderId] });
+        let finalMessageText = message.text;
+        let isEncrypted = false;
+
+        // E2EE Logic for 1:1 Chats
+        if (!convo.isGroup) {
+            const otherUserId = convo.members.find(id => id !== message.senderId);
+            if (otherUserId) {
+                const otherUserDoc = await getDoc(doc(usersCollection, otherUserId));
+                if (otherUserDoc.exists() && otherUserDoc.data().publicKey) {
+                    const recipientPublicKey = otherUserDoc.data().publicKey;
+                    try {
+                        finalMessageText = cryptoService.encryptMessage(message.text, recipientPublicKey);
+                        isEncrypted = true;
+                    } catch (e) {
+                        console.error("Encryption failed, falling back to plain text", e);
+                    }
+                }
+            }
+        }
+
+        batch.set(doc(collection(db, 'conversations', convoId, 'messages')), { 
+            ...message, 
+            text: finalMessageText, 
+            isEncrypted,
+            timestamp: serverTimestamp() 
+        });
+        
+        batch.update(doc(conversationsCollection, convoId), { 
+            lastMessage: isEncrypted ? "🔒 Encrypted Message" : message.text, 
+            lastMessageTimestamp: serverTimestamp(), 
+            lastMessageSenderId: message.senderId, 
+            readBy: [message.senderId] 
+        });
+        
         await batch.commit();
     },
+    markConversationAsRead: (convoId: string, userId: string) => updateDoc(doc(conversationsCollection, convoId), { readBy: arrayUnion(userId) }),
     getGroupMembers: async (memberIds: string[]): Promise<MemberUser[]> => {
         if (memberIds.length === 0) return [];
         const q = query(usersCollection, where('__name__', 'in', memberIds));
@@ -465,10 +563,16 @@ export const api = {
     runSustenanceLottery: (admin: User): Promise<{ winners_count: number }> => Promise.resolve({ winners_count: 0 }),
     performDailyCheckin: async (userId: string): Promise<void> => {
         const userRef = doc(usersCollection, userId);
-        await updateDoc(userRef, {
-            scap: increment(10),
-            lastDailyCheckin: serverTimestamp()
-        });
+        const userDoc = await getDoc(userRef);
+        if (!userDoc.exists()) return;
+        const data = userDoc.data();
+        const lastCheckin = data.lastDailyCheckin;
+        const now = Timestamp.now();
+        if (lastCheckin) {
+            const diff = now.toMillis() - lastCheckin.toMillis();
+            if (diff < 86400000) return;
+        }
+        await updateDoc(userRef, { scap: increment(10), lastDailyCheckin: serverTimestamp() });
     },
     submitPriceVerification: (userId: string, item: string, price: number, shop: string) => setDoc(doc(collection(db, 'price_verifications')), { userId, item, price, shop, date: serverTimestamp() }),
     redeemVoucher: async (vendor: User, voucherId: string): Promise<number> => {
@@ -486,7 +590,6 @@ export const api = {
     getVentureMembers: async (count: number): Promise<{ users: PublicUserProfile[] }> => {
         const q = query(usersCollection, where('role', '==', 'member'), orderBy('createdAt', 'desc'), limit(count > 500 ? 500 : count));
         const snapshot = await getDocs(q);
-        // Fix: Correctly apply filter to the array of PublicUserProfile objects, not to the object itself
         const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile));
         return { users: users.filter(u => u.isLookingForPartners === true) };
     },

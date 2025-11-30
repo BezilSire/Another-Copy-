@@ -4,6 +4,7 @@ import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPasswor
 import { doc, onSnapshot, setDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
 import { useToast } from './ToastContext';
 import { api } from '../services/apiService';
+import { cryptoService } from '../services/cryptoService';
 import { auth, db } from '../services/firebase';
 import { User, Agent, NewPublicMemberData, MemberUser } from '../types';
 import { generateReferralCode, generateAgentCode } from '../utils';
@@ -21,7 +22,7 @@ interface AuthContextType {
   agentSignup: (credentials: AgentSignupCredentials) => Promise<void>;
   publicMemberSignup: (data: NewPublicMemberData, password: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
-  updateUser: (updatedUser?: Partial<User> & { isCompletingProfile?: boolean }) => Promise<void>;
+  updateUser: (updatedUser: Partial<User> & { isCompletingProfile?: boolean }) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -46,7 +47,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     let userDocListener: (() => void) | undefined;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (userDocListener) {
         userDocListener();
         userDocListener = undefined;
@@ -56,7 +57,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (user && !user.isAnonymous) {
         const userDocRef = doc(db, 'users', user.uid);
         
-        userDocListener = onSnapshot(userDocRef, (userDoc) => {
+        userDocListener = onSnapshot(userDocRef, async (userDoc) => {
           if (userDoc.exists()) {
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
 
@@ -67,16 +68,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               }
             } else {
               setCurrentUser(userData);
+              
+              // E2EE Key Initialization
+              const keys = cryptoService.getOrGenerateKeyPair();
+              if (userData.publicKey !== keys.publicKey) {
+                  console.log("Publishing public key for E2EE...");
+                  await api.updateUser(user.uid, { publicKey: keys.publicKey });
+              }
             }
           } else {
             if (!isProcessingAuthRef.current) {
               console.warn("User document not found for authenticated user. Logging out.");
-              // api.logout(); // Optional: auto-logout if doc missing
+              addToast("Your user profile could not be found. Please sign up again or contact support if the issue persists.", "error");
+              api.logout();
             }
           }
           setIsLoadingAuth(false);
         }, (error) => {
           console.error("Error listening to user document:", error);
+          addToast("Connection to your profile was lost. Please log in again.", "error");
+          api.logout();
           setIsLoadingAuth(false);
         });
         
@@ -130,6 +141,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
       const { user } = userCredential;
 
+      const keys = cryptoService.getOrGenerateKeyPair(); // Generate keys on signup
+
       const newAgent: Omit<Agent, 'id'> = {
         name: credentials.name,
         email: credentials.email,
@@ -145,6 +158,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         hasCompletedInduction: true,
         commissionBalance: 0,
         referralEarnings: 0,
+        publicKey: keys.publicKey, // Store public key
       };
 
       await setDoc(doc(db, 'users', user.uid), newAgent);
@@ -196,6 +210,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
         batch.set(memberRef, newMemberDoc);
 
+        const keys = cryptoService.getOrGenerateKeyPair(); // Generate keys on signup
+
         const userRef = doc(db, 'users', user.uid);
         const newUserDoc: Omit<MemberUser, 'id' | 'createdAt' | 'lastSeen'> = {
             name: memberData.full_name,
@@ -217,6 +233,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             id_card_number: '',
             ubtBalance: 0,
             initialUbtStake: 0,
+            publicKey: keys.publicKey, // Store public key
         };
         batch.set(userRef, {...newUserDoc, createdAt: serverTimestamp(), lastSeen: serverTimestamp()});
 
@@ -242,11 +259,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [addToast]);
 
-  // FIXED: Added default value for updatedData to prevent destructuring errors
   const updateUser = useCallback(async (updatedData: Partial<User> & { isCompletingProfile?: boolean } = {}) => {
     if (!currentUser) return;
     
-    // Defensive check: ensure updatedData is an object
     const safeData = updatedData || {};
 
     try {

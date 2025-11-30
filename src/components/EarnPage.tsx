@@ -261,6 +261,7 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
                     </div>
                 </div>
 
+                {/* Daily Check-in */}
                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
                     <h2 className="text-xl font-semibold text-white mb-2">Daily Check-in</h2>
                     <p className="text-gray-400 mb-4">Earn 10 SCAP every 24 hours just for being an active member of the commons.</p>

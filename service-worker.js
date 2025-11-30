@@ -6,8 +6,8 @@ const IGNORED_HOST_SUFFIXES = [
   'gstatic.com',    // Firebase JS SDK is served from here
 ];
 
-const STATIC_CACHE_NAME = 'gcn-static-cache-v4'; // Incremented version to force update
-const DYNAMIC_CACHE_NAME = 'gcn-dynamic-cache-v4';
+const STATIC_CACHE_NAME = 'gcn-static-cache-v6'; // BUMPED VERSION TO FORCE UPDATE
+const DYNAMIC_CACHE_NAME = 'gcn-dynamic-cache-v6'; // BUMPED VERSION TO FORCE UPDATE
 
 // List all critical static assets that form the application shell.
 const APP_SHELL_ASSETS = [
@@ -26,6 +26,8 @@ self.addEventListener('install', event => {
       return cache.addAll(APP_SHELL_ASSETS);
     })
   );
+  // Force the waiting service worker to become the active service worker.
+  self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
@@ -41,6 +43,7 @@ self.addEventListener('activate', event => {
       );
     })
   );
+  // Tell the active service worker to take control of the page immediately.
   return self.clients.claim();
 });
 
@@ -59,8 +62,7 @@ self.addEventListener('fetch', event => {
       return;
   }
 
-  // **THE FIX**: For all other requests (dynamic data, images, etc.), use a "Network First, then Cache" strategy.
-  // This ensures the user always sees the most up-to-date information if they are online.
+  // "Network First, then Cache" strategy for dynamic content
   event.respondWith(
     fetch(request)
       .then(networkResponse => {

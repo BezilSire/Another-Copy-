@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -23,7 +24,9 @@
     "firebase/messaging": "https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging.js",
     "firebase/functions": "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js",
     "firebase/": "https://www.gstatic.com/firebasejs/10.12.5/",
-    "react-dom/": "https://aistudiocdn.com/react-dom@19.2.0/"
+    "react-dom/": "https://aistudiocdn.com/react-dom@19.2.0/",
+    "tweetnacl": "https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/+esm",
+    "tweetnacl-util": "https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/+esm"
   }
 }
 </script>
@@ -36,6 +39,9 @@
         extend: {
           fontFamily: {
             sans: ['Inter', 'sans-serif'],
+          },
+          backgroundImage: {
+            'gradient-conic': 'conic-gradient(var(--tw-gradient-stops))',
           },
           keyframes: {
             'fade-in': {
@@ -56,6 +62,7 @@
             'fade-in': 'fade-in 0.5s ease-out',
             'check-pop': 'check-pop 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
             'slide-up-banner': 'slide-up-banner 0.5s ease-out forwards',
+            'spin-slow': 'spin 8s linear infinite',
           },
         },
       },

@@ -24,8 +24,11 @@ import { PostTypeFilter } from './PostTypeFilter';
 import { VerificationHub } from './VerificationHub';
 import { VerificationRedirectModal } from './VerificationRedirectModal';
 import { WalletPage } from './WalletPage';
+import { ChatsPage } from './ChatsPage';
+import { MemberSearchModal } from './MemberSearchModal';
+import { CreateGroupModal } from './CreateGroupModal';
 
-type MemberView = 'home' | 'ventures' | 'community' | 'more' | 'profile' | 'knowledge' | 'pitch' | 'myinvestments' | 'sustenance' | 'earn' | 'notifications' | 'launchpad' | 'wallet';
+type MemberView = 'home' | 'ventures' | 'community' | 'more' | 'profile' | 'knowledge' | 'pitch' | 'myinvestments' | 'sustenance' | 'earn' | 'notifications' | 'launchpad' | 'wallet' | 'chats';
 
 interface MemberDashboardProps {
   user: MemberUser;
@@ -43,6 +46,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
   const { addToast } = useToast();
   const [typeFilter, setTypeFilter] = useState<FilterType>('foryou');
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
+  
+  // Chat state for internal dashboard view
+  const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
+  const [isNewGroupModalOpen, setIsNewGroupModalOpen] = useState(false);
+  const [selectedChat, setSelectedChat] = useState<Conversation | null>(null);
 
   const handlePostCreated = (ccapAwarded: number) => {
     if (ccapAwarded > 0) {
@@ -71,10 +79,15 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
 
   const handleNotificationNavigate = (item: NotificationItem) => {
     if (item.type === 'NEW_CHAT' || item.type === 'NEW_MESSAGE') {
-      console.log('Navigate to chat not implemented here.');
+      setView('chats');
     } else if (item.link) {
       onViewProfile(item.link);
     }
+  };
+
+  const handleNewChatSelect = (newConversation: Conversation) => {
+    setSelectedChat(newConversation);
+    setIsNewChatModalOpen(false);
   };
 
   const renderContent = () => {
@@ -92,6 +105,20 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
               <PostsFeed user={user} onViewProfile={onViewProfile as (userId: string) => void} typeFilter={typeFilter} />
             </>
           );
+      case 'chats':
+        return (
+            <ChatsPage
+              user={user}
+              initialTarget={selectedChat}
+              onClose={() => {
+                  setSelectedChat(null);
+                  setView('home');
+              }}
+              onViewProfile={onViewProfile as (userId: string) => void}
+              onNewMessageClick={() => setIsNewChatModalOpen(true)}
+              onNewGroupClick={() => setIsNewGroupModalOpen(true)}
+            />
+        );
       case 'wallet':
         return <WalletPage user={user} />;
       case 'ventures':
@@ -137,6 +164,24 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
         onDistressClick={() => setIsDistressModalOpen(true)}
         user={user}
       />
+      
+      {isNewChatModalOpen && (
+        <MemberSearchModal 
+            isOpen={isNewChatModalOpen} 
+            onClose={() => setIsNewChatModalOpen(false)}
+            currentUser={user}
+            onSelectUser={handleNewChatSelect}
+        />
+      )}
+      
+      {isNewGroupModalOpen && (
+        <CreateGroupModal
+            isOpen={isNewGroupModalOpen}
+            onClose={() => setIsNewGroupModalOpen(false)}
+            currentUser={user}
+        />
+      )}
+
       {isNewPostModalOpen && (
         <NewPostModal
           isOpen={isNewPostModalOpen}

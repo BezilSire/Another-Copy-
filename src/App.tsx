@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -27,6 +26,9 @@ import { arrayUnion } from 'firebase/firestore';
 import { AndroidApkBanner } from './components/AndroidApkBanner';
 import { WalletPage } from './components/WalletPage';
 import { UbtVerificationPage } from './components/UbtVerificationPage';
+import { usePushNotifications } from './hooks/usePushNotifications';
+import { NotificationPermissionBanner } from './components/NotificationPermissionBanner';
+import { RadarModal } from './components/RadarModal';
 
 
 type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge' | 'wallet';
@@ -48,8 +50,10 @@ const App: React.FC = () => {
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isNewGroupModalOpen, setIsNewGroupModalOpen] = useState(false);
+  const [isRadarOpen, setIsRadarOpen] = useState(false);
 
   useProfileCompletionReminder(currentUser);
+  const { permission, requestPermission } = usePushNotifications(currentUser);
 
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth >= 768);
@@ -111,7 +115,8 @@ const App: React.FC = () => {
     await logout();
     setIsLogoutConfirmOpen(false);
   };
-  const handleOpenChat = (target?: Conversation) => setChatTarget(target || 'main');
+  
+  const handleOpenChat = (target?: Conversation | 'main') => setChatTarget(target || 'main');
   
   const handleStartChatFromProfile = async (targetUserId: string) => {
     if (!currentUser) return;
@@ -142,83 +147,81 @@ const App: React.FC = () => {
   
   const handleProfileComplete = async (updatedData: Partial<User>) => {
     if (!currentUser) return;
-  
-    // For non-members (agents/admins), perform a simple update.
+
     if (currentUser.role !== 'member') {
-      const updatePayload: Partial<User> = {
+        const updatePayload: Partial<User> = {
+            name_lowercase: currentUser.name.toLowerCase(),
+            phone: updatedData.phone,
+            address: updatedData.address,
+            bio: updatedData.bio,
+            id_card_number: updatedData.id_card_number,
+            isProfileComplete: true,
+        };
+        if (currentUser.role === 'agent') {
+            updatePayload.circle = updatedData.circle;
+        }
+        await updateUser({ ...updatePayload, isCompletingProfile: true });
+        addToast('Profile complete! Welcome to the commons.', 'success');
+        return;
+    }
+
+    const memberUser = currentUser as MemberUser;
+    if (!memberUser.member_id) {
+        addToast("Cannot complete profile: Member ID is missing.", "error");
+        return;
+    }
+
+    const skillsAsArray = updatedData.skills || [];
+    const interestsAsArray = updatedData.interests || [];
+    const passionsAsArray = updatedData.passions || [];
+    
+    const skillsLowercase = skillsAsArray.map(s => s.toLowerCase());
+
+    const userUpdateData: Partial<User> = {
         name_lowercase: currentUser.name.toLowerCase(),
         phone: updatedData.phone,
         address: updatedData.address,
         bio: updatedData.bio,
+        profession: updatedData.profession,
+        skills: skillsAsArray,
+        interests: interestsAsArray,
+        passions: passionsAsArray,
+        skills_lowercase: skillsLowercase,
+        gender: updatedData.gender,
+        age: updatedData.age,
+        circle: updatedData.circle,
         id_card_number: updatedData.id_card_number,
+        isLookingForPartners: updatedData.isLookingForPartners,
+        lookingFor: updatedData.lookingFor,
+        businessIdea: updatedData.businessIdea,
         isProfileComplete: true,
-      };
-      if (currentUser.role === 'agent') {
-        updatePayload.circle = updatedData.circle;
-      }
-      await updateUser({ ...updatePayload, isCompletingProfile: true });
-      addToast('Profile complete! Welcome to the commons.', 'success');
-      return;
-    }
-  
-    // For members, perform an atomic update on both 'users' and 'members' collections.
-    const memberUser = currentUser as MemberUser;
-    if (!memberUser.member_id) {
-      addToast('Cannot complete profile: Member ID is missing.', 'error');
-      return;
-    }
-  
-    const skillsAsArray = updatedData.skills || [];
-    const interestsAsArray = updatedData.interests || [];
-    const passionsAsArray = updatedData.passions || [];
-    const skillsLowercase = skillsAsArray.map(s => s.toLowerCase());
-  
-    // Explicitly build the update objects to ensure no protected fields are sent.
-    const userUpdateData: Partial<User> = {
-      name_lowercase: currentUser.name.toLowerCase(),
-      phone: updatedData.phone,
-      address: updatedData.address,
-      bio: updatedData.bio,
-      profession: updatedData.profession,
-      skills: skillsAsArray,
-      interests: interestsAsArray,
-      passions: passionsAsArray,
-      skills_lowercase: skillsLowercase,
-      gender: updatedData.gender,
-      age: updatedData.age,
-      circle: updatedData.circle,
-      id_card_number: updatedData.id_card_number,
-      isLookingForPartners: updatedData.isLookingForPartners,
-      lookingFor: updatedData.lookingFor,
-      businessIdea: updatedData.businessIdea,
-      isProfileComplete: true,
     };
-  
+
     const memberUpdateData: Partial<Member> = {
-      phone: updatedData.phone,
-      address: updatedData.address,
-      bio: updatedData.bio,
-      profession: updatedData.profession,
-      skills: skillsAsArray,
-      interests: interestsAsArray,
-      passions: passionsAsArray,
-      gender: updatedData.gender,
-      age: updatedData.age,
-      circle: updatedData.circle,
-      national_id: updatedData.id_card_number,
-      isLookingForPartners: updatedData.isLookingForPartners,
-      lookingFor: updatedData.lookingFor,
-      businessIdea: updatedData.businessIdea,
-      skills_lowercase: skillsLowercase,
+        phone: updatedData.phone,
+        address: updatedData.address,
+        bio: updatedData.bio,
+        profession: updatedData.profession,
+        skills: skillsAsArray,
+        interests: interestsAsArray,
+        passions: passionsAsArray,
+        gender: updatedData.gender,
+        age: updatedData.age,
+        circle: updatedData.circle,
+        national_id: updatedData.id_card_number,
+        isLookingForPartners: updatedData.isLookingForPartners,
+        lookingFor: updatedData.lookingFor,
+        businessIdea: updatedData.businessIdea,
+        skills_lowercase: skillsLowercase,
     };
-  
+    
     try {
-      await api.updateMemberAndUserProfile(memberUser.id, memberUser.member_id, userUpdateData, memberUpdateData);
-      addToast('Profile complete! Welcome to the commons.', 'success');
+        await api.updateMemberAndUserProfile(memberUser.id, memberUser.member_id, userUpdateData, memberUpdateData);
+        addToast('Profile complete! Welcome to the commons.', 'success');
     } catch (error: any) {
-      console.error("Profile completion failed:", error);
-      const errorMessage = error.message || 'Failed to update profile. Please try again.';
-      addToast(errorMessage, 'error');
+        console.error("Profile completion failed:", error);
+        const errorMessage = error.message || 'Failed to update profile. Please try again.';
+        addToast(errorMessage, 'error');
     }
   };
 
@@ -261,6 +264,10 @@ const App: React.FC = () => {
         return <VerifyEmailPage user={currentUser} onLogout={requestLogout} />;
     }
     
+    if (currentUser.isProfileComplete && currentUser.status === 'pending' && currentUser.role === 'member') {
+        return <div className="p-4 sm:p-6 lg:p-8"><UbtVerificationPage user={currentUser} onLogout={requestLogout} /></div>;
+    }
+
     if (!currentUser.isProfileComplete) {
         return <div className="p-4 sm:p-6 lg:p-8"><CompleteProfilePage user={currentUser} onProfileComplete={handleProfileComplete} /></div>;
     }
@@ -321,9 +328,29 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white dark">
-      <Header user={currentUser} onLogout={requestLogout} onViewProfile={handleViewProfile} />
+      <Header 
+        user={currentUser} 
+        onLogout={requestLogout} 
+        onViewProfile={handleViewProfile} 
+        onChatClick={() => handleOpenChat('main')}
+        onRadarClick={() => setIsRadarOpen(true)} 
+      />
       {renderContent()}
       
+      {currentUser && (
+         <NotificationPermissionBanner permission={permission} onRequestPermission={requestPermission} />
+      )}
+
+      {currentUser && isRadarOpen && (
+        <RadarModal 
+            isOpen={isRadarOpen}
+            onClose={() => setIsRadarOpen(false)}
+            currentUser={currentUser}
+            onViewProfile={handleViewProfile}
+            onStartChat={handleStartChatFromProfile}
+        />
+      )}
+
       {currentUser && isNewChatModalOpen && (
         <MemberSearchModal 
             isOpen={isNewChatModalOpen} 
