@@ -1,13 +1,9 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Conversation, Message } from '../types';
 import { api } from '../services/apiService';
 import { SendIcon } from './icons/SendIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { ChatHeader } from './ChatHeader';
-import { formatTimeAgo } from '../utils';
-import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
-import { LockIcon } from './icons/LockIcon';
 import { CheckIcon } from './icons/CheckIcon';
 import { CheckAllIcon } from './icons/CheckAllIcon';
 
@@ -23,9 +19,6 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, currentUse
   const [newMessage, setNewMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-
-  // 1:1 Chats are automatically encrypted
-  const isEncrypted = !conversation.isGroup;
 
   useEffect(() => {
     setIsLoading(true);
@@ -88,16 +81,6 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, currentUse
         onHeaderClick={onHeaderClick}
       />
       
-      {/* High Visibility Encryption Banner */}
-      {isEncrypted && (
-          <div className="bg-emerald-900/80 border-b border-emerald-500 py-3 px-4 flex items-center justify-center space-x-2 shadow-md z-10 backdrop-blur-sm">
-              <div className="bg-emerald-500/20 p-1.5 rounded-full">
-                <LockIcon className="h-4 w-4 text-emerald-400" />
-              </div>
-              <span className="text-xs font-bold text-emerald-300 uppercase tracking-widest">End-to-End Encrypted</span>
-          </div>
-      )}
-
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {isLoading ? (
           <div className="flex justify-center items-center h-full"><LoaderIcon className="h-6 w-6 animate-spin"/></div>
@@ -106,8 +89,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, currentUse
             const isOwnMessage = msg.senderId === currentUser.id;
             const showSender = conversation.isGroup && !isOwnMessage && (index === 0 || messages[index-1].senderId !== msg.senderId);
             
-            // Check read status: If user sent it, and someone else is in 'readBy', assume read for simplicity in this context
-            // Ideally, readBy should be checked against message timestamp vs read timestamp
+            // Check read status
             const isRead = isOwnMessage && conversation.readBy.some(id => id !== currentUser.id);
 
             return (
@@ -115,12 +97,7 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, currentUse
                     {showSender && <span className="text-xs text-gray-400 ml-1 mb-1 font-semibold">{msg.senderName}</span>}
                     <div className={`flex flex-col max-w-[85%] md:max-w-md ${isOwnMessage ? 'items-end' : 'items-start'}`}>
                          <div className={`px-4 py-2 rounded-2xl shadow-sm relative text-sm ${isOwnMessage ? 'bg-green-600 text-white rounded-br-none' : 'bg-slate-700 text-gray-200 rounded-bl-none'}`}>
-                            <p className="break-words leading-relaxed">{msg.text}</p>
-                            {(msg.isEncrypted || isEncrypted) && (
-                                 <div className="absolute top-1 right-1 opacity-50" title="Secured">
-                                    <LockIcon className="h-3 w-3 text-white" />
-                                 </div>
-                             )}
+                            <p className="break-words leading-relaxed whitespace-pre-wrap">{msg.text}</p>
                          </div>
                          <div className="flex items-center gap-1 mt-1 px-1">
                             <span className="text-[10px] text-gray-500">
@@ -143,28 +120,22 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, currentUse
       <div className="p-4 border-t border-slate-700 flex-shrink-0 bg-slate-800">
         <form onSubmit={handleSendMessage} className="flex items-center space-x-3">
           <div className="relative flex-1 group">
-              {/* Left Lock Icon for Input */}
-              {isEncrypted && (
-                  <div className="absolute inset-y-0 left-3 flex items-center pointer-events-none">
-                      <LockIcon className="h-4 w-4 text-emerald-500" />
-                  </div>
-              )}
               <input
                 type="text"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder={isEncrypted ? "Message (E2E Encrypted)..." : "Type a message..."}
-                className={`flex-1 w-full bg-slate-700 rounded-full py-3 ${isEncrypted ? 'pl-10' : 'pl-5'} pr-4 text-white border transition-all duration-300 focus:outline-none focus:ring-2 ${isEncrypted ? 'border-emerald-900/50 focus:border-emerald-500 focus:ring-emerald-500/20' : 'border-slate-600 focus:ring-blue-500'}`}
+                placeholder="Type a message..."
+                className="flex-1 w-full bg-slate-700 rounded-full py-3 pl-5 pr-4 text-white border transition-all duration-300 focus:outline-none focus:ring-2 border-slate-600 focus:ring-blue-500"
                 disabled={isLoading}
               />
           </div>
           <button 
             type="submit" 
-            className={`p-3 rounded-full text-white shadow-lg transform transition-all duration-200 active:scale-95 disabled:bg-slate-600 disabled:shadow-none disabled:transform-none ${isEncrypted ? 'bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 ring-1 ring-emerald-400/50' : 'bg-blue-600 hover:bg-blue-500'}`} 
+            className="p-3 rounded-full text-white shadow-lg transform transition-all duration-200 active:scale-95 disabled:bg-slate-600 disabled:shadow-none disabled:transform-none bg-blue-600 hover:bg-blue-500"
             disabled={!newMessage.trim()}
-            title={isEncrypted ? "Send Encrypted Message" : "Send Message"}
+            title="Send Message"
           >
-            {isEncrypted ? <LockIcon className="h-5 w-5" /> : <SendIcon className="h-5 w-5" />}
+            <SendIcon className="h-5 w-5" />
           </button>
         </form>
       </div>

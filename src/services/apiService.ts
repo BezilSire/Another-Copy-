@@ -1,5 +1,3 @@
-
-
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -48,7 +46,6 @@ import { auth, db, rtdb, functions } from './firebase';
 import { httpsCallable } from 'firebase/functions';
 import { generateAgentCode, generateReferralCode } from '../utils';
 import { generateWelcomeMessage } from './geminiService';
-import { cryptoService } from './cryptoService';
 import { 
     User, Agent, Member, NewMember, MemberUser, Broadcast, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
@@ -156,7 +153,7 @@ export const api = {
             id: userDoc.id, name: d.name, email: d.email, role: d.role, circle: d.circle, status: d.status, bio: d.bio, profession: d.profession,
             skills: d.skills, interests: d.interests, businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
             lookingFor: d.lookingFor, credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
-            pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides, publicKey: d.publicKey,
+            pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides,
             followers: d.followers || [], following: d.following || [], socialLinks: d.socialLinks || []
         };
     },
@@ -201,7 +198,8 @@ export const api = {
                         skills: Array.isArray(d.skills) ? d.skills : [], interests: Array.isArray(d.interests) ? d.interests : [],
                         businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners, lookingFor: d.lookingFor,
                         credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
-                        pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides, publicKey: d.publicKey
+                        pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides,
+                        followers: d.followers || [], following: d.following || [], socialLinks: d.socialLinks || []
                     } as PublicUserProfile;
                 });
             return users.filter(u => u.id !== currentUser.id);
@@ -210,37 +208,52 @@ export const api = {
             throw new Error("Could not perform search at this time.");
         }
     },
-    // Follow/Unfollow
+    // Follow/Unfollow - Updated to be more robust with permissions
     followUser: async (follower: User, targetUserId: string) => {
-        const batch = writeBatch(db);
-        const followerRef = doc(usersCollection, follower.id);
-        const targetRef = doc(usersCollection, targetUserId);
-        const notificationRef = doc(collection(db, 'users', targetUserId, 'notifications'));
+        try {
+            // 1. Update local user's 'following' list (Allowed: Owner)
+            await updateDoc(doc(usersCollection, follower.id), { 
+                following: arrayUnion(targetUserId) 
+            });
 
-        batch.update(followerRef, { following: arrayUnion(targetUserId) });
-        batch.update(targetRef, { followers: arrayUnion(follower.id) });
-        
-        batch.set(notificationRef, {
-            userId: targetUserId,
-            message: `${follower.name} started following you.`,
-            link: follower.id,
-            read: false,
-            timestamp: serverTimestamp(),
-            type: 'NEW_FOLLOWER',
-            causerId: follower.id
-        });
+            // 2. Update target user's 'followers' list (Allowed: SignedIn + affects only 'followers')
+            await updateDoc(doc(usersCollection, targetUserId), { 
+                followers: arrayUnion(follower.id) 
+            });
+            
+            // 3. Create notification (Allowed: SignedIn + Create)
+            // We do this separately so if it fails, the follow still persists
+            const notificationRef = doc(collection(db, 'users', targetUserId, 'notifications'));
+            await setDoc(notificationRef, {
+                userId: targetUserId,
+                message: `${follower.name} started following you.`,
+                link: follower.id,
+                read: false,
+                timestamp: serverTimestamp(),
+                type: 'NEW_FOLLOWER',
+                causerId: follower.id
+            });
 
-        await batch.commit();
+        } catch (error) {
+            console.error("Follow user failed:", error);
+            throw error;
+        }
     },
     unfollowUser: async (followerId: string, targetUserId: string) => {
-        const batch = writeBatch(db);
-        const followerRef = doc(usersCollection, followerId);
-        const targetRef = doc(usersCollection, targetUserId);
-
-        batch.update(followerRef, { following: arrayRemove(targetUserId) });
-        batch.update(targetRef, { followers: arrayRemove(followerId) });
-
-        await batch.commit();
+        try {
+            // 1. Remove from local following
+            await updateDoc(doc(usersCollection, followerId), { 
+                following: arrayRemove(targetUserId) 
+            });
+            
+            // 2. Remove from target followers
+            await updateDoc(doc(usersCollection, targetUserId), { 
+                followers: arrayRemove(followerId) 
+            });
+        } catch (error) {
+            console.error("Unfollow user failed:", error);
+            throw error;
+        }
     },
 
     // Admin
@@ -433,7 +446,7 @@ export const api = {
                 callback(conversations);
             }, onError),
     
-    // --- UPDATED E2EE MESSAGING ---
+    // --- SIMPLE MESSAGING (NO CRYPTO) ---
     startChat: async (currentUser: User, targetUser: PublicUserProfile): Promise<Conversation> => {
         const convoId = [currentUser.id, targetUser.id].sort().join('_');
         const convoRef = doc(conversationsCollection, convoId);
@@ -456,82 +469,23 @@ export const api = {
         await addDoc(conversationsCollection, { name, members: memberIds, memberNames, lastMessage: "Group created", lastMessageTimestamp: Timestamp.now(), lastMessageSenderId: memberIds[0], readBy: [memberIds[0]], isGroup: true });
     },
     listenForMessages: (convoId: string, currentUser: User, callback: (messages: Message[]) => void, onError: (error: Error) => void) => {
-        // Fetch conversation to get members (needed for public keys)
-        return onSnapshot(doc(conversationsCollection, convoId), async (convoSnap) => {
-            if (!convoSnap.exists()) return;
-            const convoData = convoSnap.data() as Conversation;
-            
-            // Get other user's public key (assuming 1:1 chat for E2EE)
-            const otherUserId = convoData.members.find(id => id !== currentUser.id);
-            let otherUserPublicKey: string | undefined;
-            if (otherUserId && !convoData.isGroup) {
-                const otherUserDoc = await getDoc(doc(usersCollection, otherUserId));
-                if (otherUserDoc.exists()) {
-                    otherUserPublicKey = otherUserDoc.data().publicKey;
-                }
-            }
-
-            // Listen for messages subcollection
-            return onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), (snapshot) => {
-                const processedMessages = snapshot.docs.map(d => {
-                    const data = d.data();
-                    let text = data.text;
-                    const isEncrypted = data.isEncrypted;
-
-                    // Decryption Logic
-                    if (isEncrypted && otherUserPublicKey && !convoData.isGroup) {
-                        if (data.senderId !== currentUser.id) {
-                            // Incoming message: Decrypt using sender's public key
-                            const decrypted = cryptoService.decryptMessage(data.text, otherUserPublicKey);
-                            text = decrypted || "⚠️ Decryption Failed";
-                        } else {
-                            // Own message: It's encrypted, so we can't read it unless we stored a local copy or encrypted it for ourselves too.
-                            // In this simple implementation, the sender sees "Message Encrypted" or we store a plain text local copy in a real app.
-                            // For "No Cap" logic, we just show it's encrypted.
-                            // IMPROVEMENT: In a real Signal app, you encrypt for self too. Here, we'll just show a placeholder or the raw ciphertext.
-                            text = "🔒 Encrypted Message"; 
-                        }
-                    } else if (isEncrypted) {
-                        text = "🔒 Encrypted Message";
-                    }
-
-                    return { id: d.id, ...data, text } as Message;
-                });
-                callback(processedMessages);
-            }, onError);
-        });
+        return onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), (snapshot) => {
+            const processedMessages = snapshot.docs.map(d => {
+                const data = d.data();
+                return { id: d.id, ...data } as Message;
+            });
+            callback(processedMessages);
+        }, onError);
     },
     sendMessage: async (convoId: string, message: Omit<Message, 'id' | 'timestamp'>, convo: Conversation) => {
         const batch = writeBatch(db);
-        let finalMessageText = message.text;
-        let isEncrypted = false;
-
-        // E2EE Logic for 1:1 Chats
-        if (!convo.isGroup) {
-            const otherUserId = convo.members.find(id => id !== message.senderId);
-            if (otherUserId) {
-                const otherUserDoc = await getDoc(doc(usersCollection, otherUserId));
-                if (otherUserDoc.exists() && otherUserDoc.data().publicKey) {
-                    const recipientPublicKey = otherUserDoc.data().publicKey;
-                    try {
-                        finalMessageText = cryptoService.encryptMessage(message.text, recipientPublicKey);
-                        isEncrypted = true;
-                    } catch (e) {
-                        console.error("Encryption failed, falling back to plain text", e);
-                    }
-                }
-            }
-        }
-
         batch.set(doc(collection(db, 'conversations', convoId, 'messages')), { 
             ...message, 
-            text: finalMessageText, 
-            isEncrypted,
             timestamp: serverTimestamp() 
         });
         
         batch.update(doc(conversationsCollection, convoId), { 
-            lastMessage: isEncrypted ? "🔒 Encrypted Message" : message.text, 
+            lastMessage: message.text, 
             lastMessageTimestamp: serverTimestamp(), 
             lastMessageSenderId: message.senderId, 
             readBy: [message.senderId] 

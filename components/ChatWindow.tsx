@@ -5,7 +5,6 @@ import { api } from '../services/apiService';
 import { SendIcon } from './icons/SendIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { ChatHeader } from './ChatHeader';
-import { formatTimeAgo } from '../utils';
 import { CheckIcon } from './icons/CheckIcon';
 import { CheckAllIcon } from './icons/CheckAllIcon';
 

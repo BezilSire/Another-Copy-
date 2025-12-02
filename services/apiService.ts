@@ -376,6 +376,7 @@ export const api = {
             if (start) constraints.push(startAfter(start));
             finalQuery = query(postsCollection, ...constraints);
         } else if (filter === 'following') {
+             // User follows no one, return empty
              return { posts: [], lastVisible: null };
         } else {
              const constraints: any[] = [ where('types', '==', filter), orderBy('date', 'desc'), limit(count) ];
@@ -429,6 +430,7 @@ export const api = {
                 callback(conversations);
             }, onError),
     
+    // --- SIMPLE MESSAGING (NO CRYPTO) ---
     startChat: async (currentUser: User, targetUser: PublicUserProfile): Promise<Conversation> => {
         const convoId = [currentUser.id, targetUser.id].sort().join('_');
         const convoRef = doc(conversationsCollection, convoId);
@@ -451,20 +453,17 @@ export const api = {
         await addDoc(conversationsCollection, { name, members: memberIds, memberNames, lastMessage: "Group created", lastMessageTimestamp: Timestamp.now(), lastMessageSenderId: memberIds[0], readBy: [memberIds[0]], isGroup: true });
     },
     listenForMessages: (convoId: string, currentUser: User, callback: (messages: Message[]) => void, onError: (error: Error) => void) => {
-        return onSnapshot(doc(conversationsCollection, convoId), async (convoSnap) => {
-            if (!convoSnap.exists()) return;
-            // Listen for messages subcollection
-            return onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), (snapshot) => {
-                const processedMessages = snapshot.docs.map(d => {
-                    const data = d.data();
-                    return { id: d.id, ...data } as Message;
-                });
-                callback(processedMessages);
-            }, onError);
-        });
+        return onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), (snapshot) => {
+            const processedMessages = snapshot.docs.map(d => {
+                const data = d.data();
+                return { id: d.id, ...data } as Message;
+            });
+            callback(processedMessages);
+        }, onError);
     },
     sendMessage: async (convoId: string, message: Omit<Message, 'id' | 'timestamp'>, convo: Conversation) => {
         const batch = writeBatch(db);
+        
         batch.set(doc(collection(db, 'conversations', convoId, 'messages')), { 
             ...message, 
             timestamp: serverTimestamp() 

@@ -10,7 +10,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { SearchIcon } from './icons/SearchIcon';
 import { MessageSquareIcon } from './icons/MessageSquareIcon';
 import { ConnectionRadar } from './ConnectionRadar';
-import { ActivityIcon } from './icons/ActivityIcon'; // Assuming we create/have this, or reuse another
+import { ActivityIcon } from './icons/ActivityIcon';
 
 interface CommunityPageProps {
   currentUser: User;
@@ -23,7 +23,7 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ currentUser, onVie
   const [searchQuery, setSearchQuery] = useState('');
   const { addToast } = useToast();
   const debouncedSearch = useDebounce(searchQuery, 300);
-  const [showRadar, setShowRadar] = useState(true); // Default to showing Radar
+  const [showRadar, setShowRadar] = useState(true);
 
   useEffect(() => {
     let isMounted = true;
@@ -37,7 +37,7 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ currentUser, onVie
           // Search if there is a query
           results = await api.searchUsers(debouncedSearch, currentUser);
         } else {
-          // Otherwise, fetch collaborators, which now securely returns PublicUserProfile[]
+          // Otherwise, fetch collaborators
           const { users: collaborators } = await api.getVentureMembers(100);
           results = collaborators.filter(u => u.id !== currentUser.id);
         }
@@ -67,12 +67,6 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ currentUser, onVie
           const targetUser = await api.getPublicUserProfile(targetUserId);
           if (targetUser) {
               await api.startChat(currentUser, targetUser);
-              // In a real app, this might navigate to the chat tab or open the chat modal
-              // For now, we assume the parent container or global context handles navigation/modal opening
-              // if we triggered a global event, but since we don't have a direct "onOpenChat" prop here,
-              // we rely on the user navigating to Chats. 
-              // However, ConnectionRadar props asks for onStartChat. 
-              // We will rely on a Toast for now or if we passed down the handler.
               addToast(`Chat started with ${targetUser.name}. Go to Chats to message.`, 'success');
           }
       } catch (e) {
@@ -102,11 +96,16 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ currentUser, onVie
                   </span>
                   Live Connections
               </h2>
-              <ConnectionRadar 
-                currentUser={currentUser} 
-                onViewProfile={onViewProfile}
-                onStartChat={handleStartChat}
-              />
+              
+              {/* Fixed Height Container for Radar */}
+              <div className="w-full h-[500px] relative">
+                <ConnectionRadar 
+                    currentUser={currentUser} 
+                    onViewProfile={onViewProfile}
+                    onStartChat={handleStartChat}
+                />
+              </div>
+
               <p className="text-xs text-gray-500 mt-2 text-center">
                   Visualizing active members in {currentUser.circle} and beyond.
               </p>

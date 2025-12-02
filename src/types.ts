@@ -1,4 +1,3 @@
-
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -53,7 +52,6 @@ export interface User {
   ubtBalance?: number; // UBT Wallet Balance
   initialUbtStake?: number; // The initial UBT stake for verification
   fcmToken?: string; // Firebase Cloud Messaging Token
-  publicKey?: string; // Base64 encoded public key for E2EE
   
   // Social & Network
   followers?: string[]; // Array of User IDs
@@ -211,8 +209,6 @@ export interface Message {
     senderName: string;
     text: string;
     timestamp: Timestamp;
-    nonce?: string; // For E2EE
-    isEncrypted?: boolean;
 }
 
 // Notifications & Activity
@@ -261,7 +257,6 @@ export interface PublicUserProfile extends Partial<User> {
     createdAt?: Timestamp;
     pitchDeckTitle?: string;
     pitchDeckSlides?: { title: string; content: string }[];
-    publicKey?: string;
     followers?: string[];
     following?: string[];
     socialLinks?: { title: string; url: string }[];
