@@ -6,4 +6,9 @@ export const usePushNotifications = (user: User | null) => {
   useEffect(() => {
     // Intentionally empty.
   }, [user]);
+
+  return {
+    permission: 'denied' as NotificationPermission,
+    requestPermission: async () => {}
+  };
 };

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, Conversation, PublicUserProfile } from '../types';
 import { ConversationList } from './ConversationList';
@@ -32,7 +33,7 @@ export const ChatsPage: React.FC<ChatsPageProps> = ({ user, initialTarget, onClo
 
   if (isMobile) {
     return (
-      <div className="fixed inset-0 bg-slate-900 z-40 flex flex-col">
+      <div className="fixed inset-0 bg-slate-900 z-50 flex flex-col">
         <div className="relative flex-1 overflow-hidden">
            <div className={`absolute top-0 left-0 w-full h-full transition-transform duration-300 ease-in-out ${selectedConvo ? '-translate-x-full' : 'translate-x-0'}`}>
             <ConversationList
@@ -66,7 +67,7 @@ export const ChatsPage: React.FC<ChatsPageProps> = ({ user, initialTarget, onClo
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-40 flex items-center justify-center" onClick={onClose}>
+    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" onClick={onClose}>
         <div className="bg-slate-800 w-full h-full max-w-4xl max-h-[80vh] rounded-lg shadow-2xl flex overflow-hidden" onClick={e => e.stopPropagation()}>
             <div className="w-1/3 border-r border-slate-700 flex flex-col">
                 <ConversationList

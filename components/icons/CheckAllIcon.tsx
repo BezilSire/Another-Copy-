@@ -1,7 +1,6 @@
-
 import React from 'react';
 
-export const TargetIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+export const CheckAllIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width="24"
@@ -14,8 +13,7 @@ export const TargetIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     strokeLinejoin="round"
     {...props}
   >
-    <circle cx="12" cy="12" r="10" />
-    <circle cx="12" cy="12" r="6" />
-    <circle cx="12" cy="12" r="2" />
+    <path d="M18 6 7 17l-5-5" />
+    <path d="m22 10-7.5 7.5L13 16" />
   </svg>
 );

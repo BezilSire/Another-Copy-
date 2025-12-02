@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -27,6 +26,9 @@ import { arrayUnion } from 'firebase/firestore';
 import { AndroidApkBanner } from './components/AndroidApkBanner';
 import { WalletPage } from './components/WalletPage';
 import { UbtVerificationPage } from './components/UbtVerificationPage';
+import { usePushNotifications } from './hooks/usePushNotifications';
+import { NotificationPermissionBanner } from './components/NotificationPermissionBanner';
+import { RadarModal } from './components/RadarModal';
 
 
 type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge' | 'wallet';
@@ -48,8 +50,10 @@ const App: React.FC = () => {
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isNewGroupModalOpen, setIsNewGroupModalOpen] = useState(false);
+  const [isRadarOpen, setIsRadarOpen] = useState(false);
 
   useProfileCompletionReminder(currentUser);
+  const { permission, requestPermission } = usePushNotifications(currentUser);
 
   useEffect(() => {
     const handleResize = () => setIsDesktop(window.innerWidth >= 768);
@@ -111,7 +115,8 @@ const App: React.FC = () => {
     await logout();
     setIsLogoutConfirmOpen(false);
   };
-  const handleOpenChat = (target?: Conversation) => setChatTarget(target || 'main');
+  
+  const handleOpenChat = (target?: Conversation | 'main') => setChatTarget(target || 'main');
   
   const handleStartChatFromProfile = async (targetUserId: string) => {
     if (!currentUser) return;
@@ -143,10 +148,9 @@ const App: React.FC = () => {
   const handleProfileComplete = async (updatedData: Partial<User>) => {
     if (!currentUser) return;
 
-    // For non-members, do a simple, explicit update to prevent security rule violations.
     if (currentUser.role !== 'member') {
         const updatePayload: Partial<User> = {
-            name_lowercase: currentUser.name.toLowerCase(), // Ensure lowercase name is set
+            name_lowercase: currentUser.name.toLowerCase(),
             phone: updatedData.phone,
             address: updatedData.address,
             bio: updatedData.bio,
@@ -156,43 +160,25 @@ const App: React.FC = () => {
         if (currentUser.role === 'agent') {
             updatePayload.circle = updatedData.circle;
         }
-        // The 'isCompletingProfile' flag is handled by the AuthContext to prevent a toast message on first completion.
         await updateUser({ ...updatePayload, isCompletingProfile: true });
         addToast('Profile complete! Welcome to the commons.', 'success');
         return;
     }
 
-    // For members, perform an atomic update on both 'users' and 'members' collections.
     const memberUser = currentUser as MemberUser;
     if (!memberUser.member_id) {
         addToast("Cannot complete profile: Member ID is missing.", "error");
         return;
     }
 
-    // FIX: The type of updatedData.skills is `string[] | undefined`. The previous logic
-    // incorrectly checked for a `string` type, which created an impossible type intersection ('never'), causing a compile error.
-    // This simplified logic correctly handles an array or an undefined value passed from CompleteProfilePage.
-    const skillsAsArray = Array.isArray(updatedData.skills)
-        ? updatedData.skills
-        : (typeof (updatedData.skills as any) === 'string' ? (updatedData.skills as any).split(',').map((s: string) => s.trim()).filter(Boolean) : []);
-    
-    // FIX: The type of updatedData.interests is `string[] | undefined`. The previous logic
-    // incorrectly checked for a `string` type, causing a 'never' type error.
-    const interestsAsArray = Array.isArray(updatedData.interests)
-        ? updatedData.interests
-        : (typeof (updatedData.interests as any) === 'string' ? (updatedData.interests as any).split(',').map((s: string) => s.trim()).filter(Boolean) : []);
-    
-    // FIX: The type of updatedData.passions is `string[] | undefined`. The previous logic
-    // incorrectly checked for a `string` type, causing a 'never' type error.
-    const passionsAsArray = Array.isArray(updatedData.passions)
-        ? updatedData.passions
-        : (typeof (updatedData.passions as any) === 'string' ? (updatedData.passions as any).split(',').map((s: string) => s.trim()).filter(Boolean) : []);
+    const skillsAsArray = updatedData.skills || [];
+    const interestsAsArray = updatedData.interests || [];
+    const passionsAsArray = updatedData.passions || [];
     
     const skillsLowercase = skillsAsArray.map(s => s.toLowerCase());
 
-    // Explicitly build the update objects to ensure no protected fields are sent.
     const userUpdateData: Partial<User> = {
-        name_lowercase: currentUser.name.toLowerCase(), // Ensure lowercase name is set for search
+        name_lowercase: currentUser.name.toLowerCase(),
         phone: updatedData.phone,
         address: updatedData.address,
         bio: updatedData.bio,
@@ -342,9 +328,29 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white dark">
-      <Header user={currentUser} onLogout={requestLogout} onViewProfile={handleViewProfile} />
+      <Header 
+        user={currentUser} 
+        onLogout={requestLogout} 
+        onViewProfile={handleViewProfile} 
+        onChatClick={() => handleOpenChat('main')}
+        onRadarClick={() => setIsRadarOpen(true)} 
+      />
       {renderContent()}
       
+      {currentUser && (
+         <NotificationPermissionBanner permission={permission} onRequestPermission={requestPermission} />
+      )}
+
+      {currentUser && isRadarOpen && (
+        <RadarModal 
+            isOpen={isRadarOpen}
+            onClose={() => setIsRadarOpen(false)}
+            currentUser={currentUser}
+            onViewProfile={handleViewProfile}
+            onStartChat={handleStartChatFromProfile}
+        />
+      )}
+
       {currentUser && isNewChatModalOpen && (
         <MemberSearchModal 
             isOpen={isNewChatModalOpen} 

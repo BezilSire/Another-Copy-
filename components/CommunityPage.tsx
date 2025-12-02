@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, PublicUserProfile } from '../types';
 import { api } from '../services/apiService';
@@ -8,6 +9,8 @@ import { useAuth } from '../contexts/AuthContext';
 import { useDebounce } from '../hooks/useDebounce';
 import { SearchIcon } from './icons/SearchIcon';
 import { MessageSquareIcon } from './icons/MessageSquareIcon';
+import { ConnectionRadar } from './ConnectionRadar';
+import { ActivityIcon } from './icons/ActivityIcon'; // Assuming we create/have this, or reuse another
 
 interface CommunityPageProps {
   currentUser: User;
@@ -20,6 +23,7 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ currentUser, onVie
   const [searchQuery, setSearchQuery] = useState('');
   const { addToast } = useToast();
   const debouncedSearch = useDebounce(searchQuery, 300);
+  const [showRadar, setShowRadar] = useState(true); // Default to showing Radar
 
   useEffect(() => {
     let isMounted = true;
@@ -58,11 +62,56 @@ export const CommunityPage: React.FC<CommunityPageProps> = ({ currentUser, onVie
     return () => { isMounted = false; };
   }, [currentUser, debouncedSearch, addToast]);
 
+  const handleStartChat = async (targetUserId: string) => {
+      try {
+          const targetUser = await api.getPublicUserProfile(targetUserId);
+          if (targetUser) {
+              await api.startChat(currentUser, targetUser);
+              // In a real app, this might navigate to the chat tab or open the chat modal
+              // For now, we assume the parent container or global context handles navigation/modal opening
+              // if we triggered a global event, but since we don't have a direct "onOpenChat" prop here,
+              // we rely on the user navigating to Chats. 
+              // However, ConnectionRadar props asks for onStartChat. 
+              // We will rely on a Toast for now or if we passed down the handler.
+              addToast(`Chat started with ${targetUser.name}. Go to Chats to message.`, 'success');
+          }
+      } catch (e) {
+          addToast("Failed to start chat.", 'error');
+      }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
         <h1 className="text-3xl font-bold text-white">Community</h1>
+        <button 
+            onClick={() => setShowRadar(!showRadar)}
+            className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${showRadar ? 'bg-green-600 text-white' : 'bg-slate-700 text-gray-300 hover:text-white'}`}
+        >
+            {showRadar ? 'Hide Radar' : 'Show Connection Radar'}
+        </button>
       </div>
+
+      {/* Connection Radar Section */}
+      {showRadar && (
+          <div className="animate-fade-in mb-8">
+              <h2 className="text-xl font-semibold text-green-400 mb-3 flex items-center">
+                  <span className="relative flex h-3 w-3 mr-3">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                  </span>
+                  Live Connections
+              </h2>
+              <ConnectionRadar 
+                currentUser={currentUser} 
+                onViewProfile={onViewProfile}
+                onStartChat={handleStartChat}
+              />
+              <p className="text-xs text-gray-500 mt-2 text-center">
+                  Visualizing active members in {currentUser.circle} and beyond.
+              </p>
+          </div>
+      )}
 
       <div className="relative">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">

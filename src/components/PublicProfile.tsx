@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect } from 'react';
 import { User, Member, Post, PublicUserProfile, FilterType } from '../types';
 import { api } from '../services/apiService';
@@ -15,6 +17,8 @@ import { FilePenIcon } from './icons/FilePenIcon';
 import { SparkleIcon } from './icons/SparkleIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
+import { UserPlusIcon } from './icons/UserPlusIcon';
+import { UserCheckIcon } from './icons/UserCheckIcon';
 
 
 interface PublicProfileProps {
@@ -43,6 +47,8 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
     const [publicProfile, setPublicProfile] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+    const [isFollowing, setIsFollowing] = useState(false);
+    const [isFollowLoading, setIsFollowLoading] = useState(false);
     const [activeTab, setActiveTab] = useState<'activity' | 'about' | 'card' | 'venture'>('activity');
     const [typeFilter, setTypeFilter] = useState<FilterType>('all');
     const { addToast } = useToast();
@@ -61,6 +67,12 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
 
                 if (profileData) {
                     setPublicProfile(profileData as User);
+                    // Check follow status
+                    if (currentUser.following?.includes(profileData.id)) {
+                        setIsFollowing(true);
+                    } else {
+                        setIsFollowing(false);
+                    }
                 } else {
                     addToast("Could not find user profile.", "error");
                 }
@@ -78,8 +90,32 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
             addToast("User ID is missing.", "error");
             setIsLoading(false);
         }
-    }, [userId, addToast, isAdminView]);
+    }, [userId, addToast, isAdminView, currentUser.following]);
     
+    const handleFollowToggle = async () => {
+        if (!publicProfile) return;
+        setIsFollowLoading(true);
+        try {
+            if (isFollowing) {
+                await api.unfollowUser(currentUser.id, publicProfile.id);
+                setIsFollowing(false);
+                // Optimistic update of follower count
+                setPublicProfile(prev => prev ? { ...prev, followers: prev.followers?.filter(id => id !== currentUser.id) || [] } : null);
+                addToast(`Unfollowed ${publicProfile.name}.`, 'info');
+            } else {
+                await api.followUser(currentUser, publicProfile.id);
+                setIsFollowing(true);
+                // Optimistic update
+                setPublicProfile(prev => prev ? { ...prev, followers: [...(prev.followers || []), currentUser.id] } : null);
+                addToast(`You are now following ${publicProfile.name}!`, 'success');
+            }
+        } catch (error) {
+            addToast("Failed to update follow status.", "error");
+        } finally {
+            setIsFollowLoading(false);
+        }
+    };
+
     const handleReportSubmit = async (reason: string, details: string) => {
         if (!publicProfile) return;
         try {
@@ -123,6 +159,25 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
                 <h3 className="text-md font-semibold text-gray-300 mb-2">About</h3>
                 <p className="text-gray-300 whitespace-pre-wrap">{publicProfile.bio || 'No bio provided.'}</p>
             </div>
+            
+            {publicProfile.socialLinks && publicProfile.socialLinks.length > 0 && (
+                <div>
+                    <h3 className="text-md font-semibold text-gray-300 mb-2">Links</h3>
+                    <div className="flex flex-wrap gap-2">
+                        {publicProfile.socialLinks.map((link, i) => (
+                            <a 
+                                key={i} 
+                                href={link.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="px-3 py-1 bg-slate-700 hover:bg-green-600 text-white text-sm rounded-md transition-colors truncate max-w-[200px]"
+                            >
+                                {link.title}
+                            </a>
+                        ))}
+                    </div>
+                </div>
+            )}
             
             {(isOwnProfile || isAdminView) && (
                 <div className="pt-6 mt-6 border-t border-slate-700">
@@ -216,10 +271,23 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
                             </div>
                             <p className="text-lg text-green-400">{publicProfile.profession || <span className="capitalize">{publicProfile.role}</span>}</p>
                             <p className="text-sm text-gray-400">{publicProfile.circle}</p>
+                            
+                            {/* Follow Stats */}
+                            <div className="flex items-center gap-4 mt-2 text-sm text-gray-300">
+                                <span className="font-semibold">{publicProfile.followers?.length || 0} <span className="font-normal text-gray-400">Followers</span></span>
+                                <span className="font-semibold">{publicProfile.following?.length || 0} <span className="font-normal text-gray-400">Following</span></span>
+                            </div>
+
                             <div className="flex items-center gap-4 mt-2">
                                 <div className="relative group flex items-center gap-1" title="Credibility Score">
                                     <span className="font-mono text-sm py-0.5 px-2 rounded-full bg-slate-700 text-green-400">
                                         CR: {publicProfile.credibility_score ?? 100}
+                                    </span>
+                                </div>
+                                <div className="relative group flex items-center gap-1" title="Social Capital (SCAP)">
+                                    <SparkleIcon className="h-4 w-4 text-yellow-400" />
+                                    <span className="font-mono text-sm py-0.5 px-2 rounded-full bg-slate-700 text-yellow-400">
+                                        {publicProfile.scap ?? 0}
                                     </span>
                                 </div>
                                 <div className="relative group flex items-center gap-1" title="Civic Capital (CCAP)">
@@ -233,24 +301,45 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
                     </div>
                      <div className="flex flex-row flex-wrap gap-2 w-full sm:w-auto">
                         {!isOwnProfile && (
-                             <button 
-                                onClick={() => onStartChat(publicProfile.id)}
-                                className="inline-flex items-center justify-center space-x-2 px-4 py-2 bg-slate-700 text-white text-sm font-semibold rounded-md hover:bg-slate-600 grow sm:grow-0"
-                            >
-                                <MessageSquareIcon className="h-4 w-4" />
-                                <span>Message</span>
-                            </button>
+                            <>
+                                <button 
+                                    onClick={handleFollowToggle}
+                                    disabled={isFollowLoading}
+                                    className={`inline-flex items-center justify-center space-x-2 px-4 py-2 text-sm font-semibold rounded-md grow sm:grow-0 transition-colors ${
+                                        isFollowing 
+                                            ? 'bg-slate-700 text-gray-300 hover:bg-red-900/50 hover:text-red-400 border border-slate-600' 
+                                            : 'bg-green-600 text-white hover:bg-green-700'
+                                    }`}
+                                >
+                                    {isFollowing ? (
+                                        <>
+                                            <UserCheckIcon className="h-4 w-4" />
+                                            <span>Following</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <UserPlusIcon className="h-4 w-4" />
+                                            <span>Follow</span>
+                                        </>
+                                    )}
+                                </button>
+                                <button 
+                                    onClick={() => onStartChat(publicProfile.id)}
+                                    className="inline-flex items-center justify-center space-x-2 px-4 py-2 bg-slate-700 text-white text-sm font-semibold rounded-md hover:bg-slate-600 grow sm:grow-0"
+                                >
+                                    <MessageSquareIcon className="h-4 w-4" />
+                                    <span>Message</span>
+                                </button>
+                                <button
+                                    onClick={() => setIsReportModalOpen(true)}
+                                    className="inline-flex items-center justify-center space-x-2 px-4 py-2 bg-red-900/50 text-red-400 text-sm font-semibold rounded-md hover:bg-red-900/80 grow sm:grow-0"
+                                    title="Report this user"
+                                >
+                                    <FlagIcon className="h-4 w-4" />
+                                    <span>Report</span>
+                                </button>
+                            </>
                         )}
-                         {!isOwnProfile && (
-                            <button
-                                onClick={() => setIsReportModalOpen(true)}
-                                className="inline-flex items-center justify-center space-x-2 px-4 py-2 bg-red-900/50 text-red-400 text-sm font-semibold rounded-md hover:bg-red-900/80 grow sm:grow-0"
-                                title="Report this user"
-                            >
-                                <FlagIcon className="h-4 w-4" />
-                                <span>Report</span>
-                            </button>
-                         )}
                     </div>
                 </div>
             </div>

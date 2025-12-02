@@ -3,7 +3,7 @@ import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
 export type UserStatus = 'active' | 'pending' | 'suspended' | 'ousted';
-export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress' | 'foryou';
+export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress' | 'foryou' | 'following';
 
 // Base User
 export interface User {
@@ -52,6 +52,12 @@ export interface User {
   skills_lowercase?: string[]; // For case-insensitive search
   ubtBalance?: number; // UBT Wallet Balance
   initialUbtStake?: number; // The initial UBT stake for verification
+  fcmToken?: string; // Firebase Cloud Messaging Token
+  
+  // Social & Network
+  followers?: string[]; // Array of User IDs
+  following?: string[]; // Array of User IDs
+  socialLinks?: { title: string; url: string }[]; // Max 4 links
 }
 
 // Specific User Roles
@@ -147,6 +153,7 @@ export interface Post {
   commentCount?: number;
   repostCount?: number;
   isPinned?: boolean;
+  requiredSkills?: string[]; // For 'opportunity' posts to match collaborators
   repostedFrom?: {
     authorId: string;
     authorName: string;
@@ -251,6 +258,9 @@ export interface PublicUserProfile extends Partial<User> {
     createdAt?: Timestamp;
     pitchDeckTitle?: string;
     pitchDeckSlides?: { title: string; content: string }[];
+    followers?: string[];
+    following?: string[];
+    socialLinks?: { title: string; url: string }[];
 }
 
 // Proposals

@@ -3,7 +3,7 @@ import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
 export type UserStatus = 'active' | 'pending' | 'suspended' | 'ousted';
-export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress' | 'foryou';
+export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress' | 'foryou' | 'following';
 
 // Base User
 export interface User {
@@ -54,6 +54,11 @@ export interface User {
   initialUbtStake?: number; // The initial UBT stake for verification
   fcmToken?: string; // Firebase Cloud Messaging Token
   publicKey?: string; // Base64 encoded public key for E2EE
+  
+  // Social & Network
+  followers?: string[]; // Array of User IDs
+  following?: string[]; // Array of User IDs
+  socialLinks?: { title: string; url: string }[]; // Max 4 links
 }
 
 // Specific User Roles
@@ -257,6 +262,9 @@ export interface PublicUserProfile extends Partial<User> {
     pitchDeckTitle?: string;
     pitchDeckSlides?: { title: string; content: string }[];
     publicKey?: string;
+    followers?: string[];
+    following?: string[];
+    socialLinks?: { title: string; url: string }[];
 }
 
 // Proposals

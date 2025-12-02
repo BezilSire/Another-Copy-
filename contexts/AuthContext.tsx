@@ -46,7 +46,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   useEffect(() => {
     let userDocListener: (() => void) | undefined;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       if (userDocListener) {
         userDocListener();
         userDocListener = undefined;
@@ -56,7 +56,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (user && !user.isAnonymous) {
         const userDocRef = doc(db, 'users', user.uid);
         
-        userDocListener = onSnapshot(userDocRef, (userDoc) => {
+        userDocListener = onSnapshot(userDocRef, async (userDoc) => {
           if (userDoc.exists()) {
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
 
@@ -69,8 +69,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               setCurrentUser(userData);
             }
           } else {
-            // It might take a moment for the user doc to be created, especially with a cloud function.
-            // Only log out if we are not in the middle of a signup process.
             if (!isProcessingAuthRef.current) {
               console.warn("User document not found for authenticated user. Logging out.");
               addToast("Your user profile could not be found. Please sign up again or contact support if the issue persists.", "error");
@@ -104,7 +102,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsProcessingAuth(true);
     try {
       await api.login(credentials.email, credentials.password);
-      // Success is handled by onAuthStateChanged
     } catch (error) {
       const firebaseError = error as { code?: string; message?: string };
       const errorCode = firebaseError.code || '';
@@ -160,18 +157,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch (error) {
       const firebaseError = error as { code?: string; message?: string; customData?: any };
       let message = `Signup failed: ${firebaseError.message || 'Please try again.'}`;
-      
-      switch (firebaseError.code) {
-          case 'auth/email-already-in-use':
-              message = 'An account with this email address already exists.';
-              break;
-          case 'auth/invalid-email':
-              message = 'Please enter a valid email address.';
-              break;
-          case 'auth/weak-password':
-              message = 'Password is too weak. It must be at least 6 characters.';
-              break;
-      }
       addToast(message, 'error');
       throw error;
     } finally {
@@ -186,8 +171,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const { user } = userCredential;
 
         const batch = writeBatch(db);
-
-        // Find referrer if a code was provided.
         let referrerId = '';
         if (memberData.referralCode) {
             const referrerQuery = query(collection(db, 'users'), where('referralCode', '==', memberData.referralCode), limit(1));
@@ -199,7 +182,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         
         const welcomeMessage = `Welcome, ${memberData.full_name}! We're thrilled to have you join the Global Commons Network. Explore, connect, and let's build a better future together.`;
 
-        // Prepare the 'members' collection document.
         const memberRef = doc(collection(db, 'members'));
         const newMemberDoc = {
             full_name: memberData.full_name,
@@ -217,7 +199,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
         batch.set(memberRef, newMemberDoc);
 
-        // Prepare the 'users' collection document.
         const userRef = doc(db, 'users', user.uid);
         const newUserDoc: Omit<MemberUser, 'id' | 'createdAt' | 'lastSeen'> = {
             name: memberData.full_name,
@@ -243,25 +224,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         batch.set(userRef, {...newUserDoc, createdAt: serverTimestamp(), lastSeen: serverTimestamp()});
 
         await batch.commit();
-        
         await sendEmailVerification(user);
-        
         addToast('Account created! A verification email has been sent.', 'success');
     } catch (error: any) {
         let message = `Signup failed: ${error.message || 'Please try again.'}`;
-        if (error.code) {
-            switch (error.code) {
-                case 'auth/email-already-in-use':
-                    message = 'An account with this email address already exists. Please log in.';
-                    break;
-                case 'auth/invalid-email':
-                    message = 'Please enter a valid email address.';
-                    break;
-                case 'auth/weak-password':
-                    message = 'Password is too weak. It must be at least 6 characters.';
-                    break;
-            }
-        }
         addToast(message, 'error');
         throw error;
     } finally {
@@ -279,26 +245,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [addToast]);
 
-  const updateUser = useCallback(async (updatedData: Partial<User> & { isCompletingProfile?: boolean }) => {
+  const updateUser = useCallback(async (updatedData: Partial<User> & { isCompletingProfile?: boolean } = {}) => {
     if (!currentUser) return;
     
-    // CRASH PREVENTION: Safely handle cases where updatedData is undefined or null
-    // This prevents the "Right side of assignment cannot be destructured" error.
     const safeData = updatedData || {};
-    
-    if (Object.keys(safeData).length === 0) {
-        return; // Nothing to update
-    }
 
     try {
-        // Destructure the transient `isCompletingProfile` flag to prevent it from being sent to Firestore.
         const { isCompletingProfile, ...userData } = safeData;
         
         if (Object.keys(userData).length > 0) {
             await api.updateUser(currentUser.id, userData);
         }
         
-        if (!isCompletingProfile) {
+        if (!isCompletingProfile && Object.keys(userData).length > 0) {
             addToast('Profile updated successfully!', 'success');
         }
     } catch (error: any) {
@@ -310,7 +269,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             errorMessage = `An unexpected error occurred: ${error.message}`;
         }
         addToast(errorMessage, 'error');
-        throw error; // Re-throw so component knows save failed
+        throw error;
     }
   }, [currentUser, addToast]);
 

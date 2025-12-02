@@ -1,4 +1,5 @@
 
+
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Post, User, Comment, Activity, PublicUserProfile, FilterType } from '../types';
 import { api } from '../services/apiService';
@@ -367,7 +368,8 @@ export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, feedT
             }
 
             const startAfter = loadMore ? lastVisible : null;
-            const { posts: newPosts, lastVisible: newLastVisible } = await api.fetchRegularPosts(10, typeFilter, isAdminView, startAfter as DocumentSnapshot<DocumentData> | undefined);
+            // Pass the current user to fetchRegularPosts so it can access the following list
+            const { posts: newPosts, lastVisible: newLastVisible } = await api.fetchRegularPosts(10, typeFilter, isAdminView, startAfter as DocumentSnapshot<DocumentData> | undefined, user);
             
             setPosts(prev => loadMore ? [...prev, ...newPosts] : newPosts);
             setLastVisible(newLastVisible);
@@ -378,7 +380,7 @@ export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, feedT
         } finally {
             loader(false);
         }
-    }, [authorId, typeFilter, isAdminView, lastVisible]);
+    }, [authorId, typeFilter, isAdminView, lastVisible, user]);
 
     useEffect(() => {
         loadPosts(false);
@@ -554,7 +556,7 @@ export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, feedT
             {allPosts.length === 0 && !isLoading && (
                 <div className="text-center text-gray-500 py-16 bg-slate-800 rounded-lg">
                     <p className="font-semibold text-lg text-white">The feed is empty</p>
-                    <p>No posts match the current filter. Why not be the first to post?</p>
+                    <p>No posts match the current filter.</p>
                 </div>
             )}
 

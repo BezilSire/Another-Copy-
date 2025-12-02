@@ -1,4 +1,5 @@
 
+
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
@@ -155,7 +156,8 @@ export const api = {
             id: userDoc.id, name: d.name, email: d.email, role: d.role, circle: d.circle, status: d.status, bio: d.bio, profession: d.profession,
             skills: d.skills, interests: d.interests, businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
             lookingFor: d.lookingFor, credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
-            pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides, publicKey: d.publicKey
+            pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides, publicKey: d.publicKey,
+            followers: d.followers || [], following: d.following || [], socialLinks: d.socialLinks || []
         };
     },
      getPublicUserProfilesByUids: async (uids: string[]): Promise<PublicUserProfile[]> => {
@@ -208,6 +210,40 @@ export const api = {
             throw new Error("Could not perform search at this time.");
         }
     },
+    // Follow/Unfollow
+    followUser: async (follower: User, targetUserId: string) => {
+        const batch = writeBatch(db);
+        const followerRef = doc(usersCollection, follower.id);
+        const targetRef = doc(usersCollection, targetUserId);
+        const notificationRef = doc(collection(db, 'users', targetUserId, 'notifications'));
+
+        batch.update(followerRef, { following: arrayUnion(targetUserId) });
+        batch.update(targetRef, { followers: arrayUnion(follower.id) });
+        
+        batch.set(notificationRef, {
+            userId: targetUserId,
+            message: `${follower.name} started following you.`,
+            link: follower.id,
+            read: false,
+            timestamp: serverTimestamp(),
+            type: 'NEW_FOLLOWER',
+            causerId: follower.id
+        });
+
+        await batch.commit();
+    },
+    unfollowUser: async (followerId: string, targetUserId: string) => {
+        const batch = writeBatch(db);
+        const followerRef = doc(usersCollection, followerId);
+        const targetRef = doc(usersCollection, targetUserId);
+
+        batch.update(followerRef, { following: arrayRemove(targetUserId) });
+        batch.update(targetRef, { followers: arrayRemove(followerId) });
+
+        await batch.commit();
+    },
+
+    // Admin
     listenForAllUsers: (adminUser: User, callback: (users: User[]) => void, onError: (error: Error) => void) => onSnapshot(query(usersCollection, orderBy('createdAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), onError),
     listenForAllMembers: (adminUser: User, callback: (members: Member[]) => void, onError: (error: Error) => void) => onSnapshot(query(membersCollection, orderBy('date_registered', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), onError),
     listenForAllAgents: (adminUser: User, callback: (agents: Agent[]) => void, onError: (error: Error) => void) => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => {
@@ -327,7 +363,7 @@ export const api = {
         const allPosts = allResults.flatMap(snapshot => snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Post)));
         return allPosts.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     },
-    fetchRegularPosts: async (count: number, filter: string, isAdmin: boolean, start?: DocumentSnapshot<DocumentData>) => {
+    fetchRegularPosts: async (count: number, filter: string, isAdmin: boolean, start?: DocumentSnapshot<DocumentData>, currentUser?: User) => {
         const publicTypes = ['general', 'proposal', 'offer', 'opportunity'];
         let finalQuery;
         if (filter === 'all') {
@@ -335,6 +371,16 @@ export const api = {
             const constraints: any[] = [ where('types', 'in', typesToQuery), orderBy('date', 'desc'), limit(count) ];
             if (start) constraints.push(startAfter(start));
             finalQuery = query(postsCollection, ...constraints);
+        } else if (filter === 'following' && currentUser && currentUser.following && currentUser.following.length > 0) {
+            // Note: Firestore 'in' query supports max 10 items. For a robust solution, we would chunk or use a separate feed collection.
+            // For this MVP, we will fetch up to 10 latest. A production app needs Feed fan-out.
+            const followingSlice = currentUser.following.slice(0, 10); 
+            const constraints: any[] = [ where('authorId', 'in', followingSlice), orderBy('date', 'desc'), limit(count) ];
+            if (start) constraints.push(startAfter(start));
+            finalQuery = query(postsCollection, ...constraints);
+        } else if (filter === 'following') {
+             // User follows no one, return empty
+             return { posts: [], lastVisible: null };
         } else {
              const constraints: any[] = [ where('types', '==', filter), orderBy('date', 'desc'), limit(count) ];
              if (start) constraints.push(startAfter(start));

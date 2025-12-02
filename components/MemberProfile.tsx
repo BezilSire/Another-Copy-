@@ -1,5 +1,4 @@
 
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Member, User, Post, PublicUserProfile, VentureEquityHolding, MemberUser, FilterType } from '../types';
 import { api } from '../services/apiService';
@@ -19,6 +18,9 @@ import { TrendingUpIcon } from './icons/TrendingUpIcon';
 import { formatTimeAgo } from '../utils';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
+import { TrashIcon } from './icons/TrashIcon';
+import { PlusIcon } from './icons/PlusIcon';
+import { FollowListModal } from './FollowListModal';
 
 const LOOKING_FOR_LIST = ['Co-founder', 'Business Partner', 'Investor', 'Mentor', 'Advisor', 'Employee', 'Freelancer'];
 
@@ -55,7 +57,11 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
     const [activeTab, setActiveTab] = useState<'profile' | 'activity'>('profile');
     const [typeFilter, setTypeFilter] = useState<FilterType>('all');
     const [isCopied, setIsCopied] = useState(false);
+    
+    // Modal State
+    const [followListType, setFollowListType] = useState<'followers' | 'following' | null>(null);
 
+    // Initial state for editing
     const [editData, setEditData] = useState({
         name: currentUser.name || '',
         phone: currentUser.phone || '',
@@ -73,6 +79,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
         businessIdea: currentUser.businessIdea || '',
         id_card_number: currentUser.id_card_number || '',
         circle: currentUser.circle || '',
+        socialLinks: currentUser.socialLinks || [] as { title: string; url: string }[]
     });
     
     // Sync edit form if currentUser changes (e.g., after save)
@@ -87,6 +94,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
             businessIdea: currentUser.businessIdea || '',
             id_card_number: currentUser.id_card_number || '',
             circle: currentUser.circle || '',
+            socialLinks: currentUser.socialLinks || []
         });
     }, [currentUser]);
     
@@ -110,11 +118,32 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
         else { setEditData(prev => ({ ...prev, lookingFor: checked ? [...prev.lookingFor, value] : prev.lookingFor.filter(item => item !== value) })); }
     };
 
+    // Social Links Handlers
+    const handleLinkChange = (index: number, field: 'title' | 'url', value: string) => {
+        const newLinks = [...editData.socialLinks];
+        newLinks[index] = { ...newLinks[index], [field]: value };
+        setEditData({ ...editData, socialLinks: newLinks });
+    };
+
+    const addLink = () => {
+        if (editData.socialLinks.length >= 4) return;
+        setEditData({ ...editData, socialLinks: [...editData.socialLinks, { title: '', url: '' }] });
+    };
+
+    const removeLink = (index: number) => {
+        const newLinks = editData.socialLinks.filter((_, i) => i !== index);
+        setEditData({ ...editData, socialLinks: newLinks });
+    };
+
     const handleSave = async () => {
         if (!currentUser.member_id) {
             addToast("Could not save profile. Member ID is missing.", "error");
             return;
         }
+        
+        // Simple validation for links
+        const validLinks = editData.socialLinks.filter(l => l.title.trim() !== '' && l.url.trim() !== '');
+        
         setIsSaving(true);
         try {
             const skillsAsArray = (editData.skills || '').split(',').map(s => s.trim()).filter(Boolean);
@@ -122,8 +151,6 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
             const interestsAsArray = (editData.interests || '').split(',').map(s => s.trim()).filter(Boolean);
             const passionsAsArray = (editData.passions || '').split(',').map(s => s.trim()).filter(Boolean);
     
-            // --- Explicitly define the payload to send ---
-            // This ensures no immutable fields like 'name' are ever sent, preventing security rule violations.
             const userUpdateData = {
                 phone: editData.phone,
                 address: editData.address,
@@ -141,6 +168,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
                 skills_lowercase: skillsLowercase,
                 id_card_number: editData.id_card_number,
                 circle: editData.circle,
+                socialLinks: validLinks
             };
     
             const memberUpdateData = {
@@ -194,12 +222,6 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
             : currentUser.interests || [];
     }, [isEditing, editData.interests, currentUser.interests]);
     
-    const passionsArray = useMemo(() => {
-        return isEditing 
-            ? (editData.passions || '').split(',').map(s => s.trim()).filter(Boolean)
-            : currentUser.passions || [];
-    }, [isEditing, editData.passions, currentUser.passions]);
-    
     const lookingForArray = (isEditing ? editData.lookingFor : currentUser.lookingFor)?.filter(Boolean) || [];
     const profileDataForMeter = isEditing ? editData : currentUser;
 
@@ -219,19 +241,43 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
                  <div><label htmlFor="profession" className="block text-sm font-medium text-gray-300">Job / Profession</label><input type="text" name="profession" id="profession" value={editData.profession} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white sm:text-sm" /></div>
                  <div><label htmlFor="circle" className="block text-sm font-medium text-gray-300">Circle</label><input type="text" name="circle" id="circle" value={editData.circle} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white sm:text-sm" /></div>
              </div>
-             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                 <div><label htmlFor="gender" className="block text-sm font-medium text-gray-300">Gender</label><input type="text" name="gender" id="gender" value={editData.gender} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white sm:text-sm" /></div>
-                 <div><label htmlFor="age" className="block text-sm font-medium text-gray-300">Age</label><input type="text" name="age" id="age" value={editData.age} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white sm:text-sm" /></div>
-            </div>
-             <div>
-                <label htmlFor="id_card_number" className="block text-sm font-medium text-gray-300">National ID / Passport</label>
-                <input type="text" name="id_card_number" id="id_card_number" value={editData.id_card_number} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white sm:text-sm" />
-             </div>
+             
              <div><label htmlFor="bio" className="block text-sm font-medium text-gray-300">Bio</label><textarea name="bio" id="bio" rows={4} value={editData.bio} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white sm:text-sm"></textarea></div>
+            
+            {/* Bio Links Edit Section */}
+            <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Bio Links (Max 4)</label>
+                <div className="space-y-2">
+                    {editData.socialLinks.map((link, index) => (
+                        <div key={index} className="flex gap-2">
+                            <input 
+                                type="text" 
+                                placeholder="Title (e.g. WhatsApp)" 
+                                value={link.title} 
+                                onChange={(e) => handleLinkChange(index, 'title', e.target.value)}
+                                className="flex-1 bg-slate-700 border border-slate-600 rounded-md px-3 py-2 text-white text-sm"
+                            />
+                            <input 
+                                type="text" 
+                                placeholder="URL (https://...)" 
+                                value={link.url} 
+                                onChange={(e) => handleLinkChange(index, 'url', e.target.value)}
+                                className="flex-[2] bg-slate-700 border border-slate-600 rounded-md px-3 py-2 text-white text-sm"
+                            />
+                            <button type="button" onClick={() => removeLink(index)} className="p-2 text-red-400 hover:text-red-300"><TrashIcon className="h-5 w-5"/></button>
+                        </div>
+                    ))}
+                    {editData.socialLinks.length < 4 && (
+                        <button type="button" onClick={addLink} className="flex items-center text-sm text-green-400 hover:text-green-300 mt-2">
+                            <PlusIcon className="h-4 w-4 mr-1" /> Add Link
+                        </button>
+                    )}
+                </div>
+            </div>
+
             <div><label htmlFor="skills" className="block text-sm font-medium text-gray-300">Skills (comma-separated)</label><input type="text" name="skills" id="skills" value={editData.skills} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white sm:text-sm" /></div>
              <div><label htmlFor="interests" className="block text-sm font-medium text-gray-300">Interests (comma-separated)</label><input type="text" name="interests" id="interests" value={editData.interests} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white sm:text-sm" /></div>
-            <div><label htmlFor="passions" className="block text-sm font-medium text-gray-300">Passions (comma-separated)</label><input type="text" name="passions" id="passions" value={editData.passions} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white sm:text-sm" /></div>
-            <div><label htmlFor="awards" className="block text-sm font-medium text-gray-300">Awards & Recognitions</label><textarea name="awards" id="awards" rows={3} value={editData.awards} onChange={handleEditChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white sm:text-sm"></textarea></div>
+            
             <h3 className="text-lg font-semibold text-gray-200 border-b border-slate-700 pb-2 pt-4">Ventures & Collaborations</h3>
             <div className="flex items-center mt-4"><input type="checkbox" id="isLookingForPartners" name="isLookingForPartners" checked={editData.isLookingForPartners} onChange={handleEditCheckboxChange} className="h-4 w-4 text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500" /><label htmlFor="isLookingForPartners" className="ml-2 block text-sm text-gray-200">I'm open to business collaborations.</label></div>
             {editData.isLookingForPartners && (
@@ -246,15 +292,57 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
 
     const renderProfileView = () => (
          <div className="mt-6 space-y-8">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <StatCard title="Social Capital (SCAP)" value={(currentUser.scap ?? 0).toLocaleString()} icon={<SparkleIcon className="h-5 w-5 text-yellow-400"/>} />
+            <div className="flex justify-between items-center text-sm text-gray-400 bg-slate-900/50 p-4 rounded-lg">
+                <button 
+                    onClick={() => setFollowListType('followers')}
+                    className="text-center hover:bg-slate-800 p-2 rounded-md transition-colors w-1/3"
+                >
+                    <span className="block font-bold text-white text-lg">{currentUser.followers?.length || 0}</span>
+                    <span>Followers</span>
+                </button>
+                <div className="h-8 w-px bg-slate-700"></div>
+                <button 
+                    onClick={() => setFollowListType('following')}
+                    className="text-center hover:bg-slate-800 p-2 rounded-md transition-colors w-1/3"
+                >
+                    <span className="block font-bold text-white text-lg">{currentUser.following?.length || 0}</span>
+                    <span>Following</span>
+                </button>
+                <div className="h-8 w-px bg-slate-700"></div>
+                <div className="text-center w-1/3">
+                    <span className="block font-bold text-white text-lg">{currentUser.credibility_score}</span>
+                    <span>Score</span>
+                </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <StatCard title="Civic Capital (CCAP)" value={(currentUser.ccap ?? 0).toLocaleString()} icon={<DatabaseIcon className="h-5 w-5 text-blue-400"/>} />
                 <StatCard title="Referral Earnings" value={`$${(currentUser.referralEarnings ?? 0).toFixed(2)}`} icon={<DollarSignIcon className="h-5 w-5 text-green-400"/>} />
             </div>
-             <div><h3 className="text-md font-semibold text-gray-300 border-b border-slate-700 pb-2 mb-4">About</h3>{currentUser.bio ? <p className="text-gray-300 whitespace-pre-line leading-relaxed">{currentUser.bio}</p> : <p className="text-gray-500 italic">No bio provided.</p>}</div>
+             
+             <div>
+                <h3 className="text-md font-semibold text-gray-300 border-b border-slate-700 pb-2 mb-4">About</h3>
+                {currentUser.bio ? <p className="text-gray-300 whitespace-pre-line leading-relaxed">{currentUser.bio}</p> : <p className="text-gray-500 italic">No bio provided.</p>}
+                
+                {currentUser.socialLinks && currentUser.socialLinks.length > 0 && (
+                    <div className="mt-4 flex flex-wrap gap-2">
+                        {currentUser.socialLinks.map((link, i) => (
+                            <a 
+                                key={i} 
+                                href={link.url} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                className="px-3 py-1 bg-slate-700 hover:bg-green-600 text-white text-sm rounded-md transition-colors truncate max-w-[200px]"
+                            >
+                                {link.title}
+                            </a>
+                        ))}
+                    </div>
+                )}
+             </div>
+
             {currentUser.isLookingForPartners && (<div><h3 className="text-md font-semibold text-gray-300 border-b border-slate-700 pb-2 mb-4">Ventures & Collaborations</h3>{currentUser.businessIdea && <p className="text-gray-300 whitespace-pre-line mb-4">{currentUser.businessIdea}</p>}{lookingForArray.length > 0 && (<div><h4 className="text-sm font-semibold text-gray-400 mb-2">Currently Looking For:</h4><div>{lookingForArray.map(item => <Pill key={item} text={item} />)}</div></div>)}</div>)}
             {skillsArray.length > 0 && (<div><h3 className="text-md font-semibold text-gray-300 border-b border-slate-700 pb-2 mb-4">Skills</h3><div>{skillsArray.map(skill => <Pill key={skill} text={skill} />)}</div></div>)}
-            {interestsArray.length > 0 && (<div><h3 className="text-md font-semibold text-gray-300 border-b border-slate-700 pb-2 mb-4">Interests</h3><div>{interestsArray.map(item => <Pill key={item} text={item} />)}</div></div>)}
             
             {currentUser.ventureEquity?.length > 0 && (
                 <div><h3 className="text-md font-semibold text-gray-300 border-b border-slate-700 pb-2 mb-4">My Investments (VEQ)</h3>
@@ -340,6 +428,19 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
                 </div>
             )}
         </div>
+
+        {/* Follow/Following Modal */}
+        {followListType && (
+            <FollowListModal 
+                isOpen={!!followListType}
+                onClose={() => setFollowListType(null)}
+                title={followListType === 'followers' ? 'Followers' : 'Following'}
+                userIds={followListType === 'followers' ? (currentUser.followers || []) : (currentUser.following || [])}
+                currentUser={currentUser}
+                onViewProfile={onViewProfile}
+                canManage={followListType === 'following'}
+            />
+        )}
     </div>
   );
 };
