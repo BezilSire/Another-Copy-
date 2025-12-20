@@ -6,6 +6,7 @@ import { ChatWindow } from './ChatWindow';
 import { GroupInfoPanel } from './GroupInfoPanel';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
+import { MessageSquareIcon } from './icons/MessageSquareIcon';
 
 interface ChatsPageProps {
   user: User;
@@ -26,16 +27,16 @@ export const ChatsPage: React.FC<ChatsPageProps> = ({ user, initialTarget, onClo
 
   const handleSelectConvo = (convo: Conversation) => {
     setSelectedConvo(convo);
-    setIsGroupInfoOpen(false); // Close info panel when switching convos
+    setIsGroupInfoOpen(false);
   };
 
   const isMobile = window.innerWidth < 768;
 
   if (isMobile) {
     return (
-      <div className="fixed inset-0 bg-slate-900 z-50 flex flex-col">
+      <div className="fixed inset-0 bg-black z-50 flex flex-col animate-fade-in">
         <div className="relative flex-1 overflow-hidden">
-           <div className={`absolute top-0 left-0 w-full h-full transition-transform duration-300 ease-in-out ${selectedConvo ? '-translate-x-full' : 'translate-x-0'}`}>
+           <div className={`absolute top-0 left-0 w-full h-full transition-transform duration-500 ease-protocol ${selectedConvo ? '-translate-x-full' : 'translate-x-0'}`}>
             <ConversationList
               currentUser={user}
               onSelectConversation={handleSelectConvo}
@@ -44,7 +45,7 @@ export const ChatsPage: React.FC<ChatsPageProps> = ({ user, initialTarget, onClo
               onBack={onClose}
             />
           </div>
-          <div className={`absolute top-0 left-0 w-full h-full transition-transform duration-300 ease-in-out ${selectedConvo ? 'translate-x-0' : 'translate-x-full'}`}>
+          <div className={`absolute top-0 left-0 w-full h-full transition-transform duration-500 ease-protocol ${selectedConvo ? 'translate-x-0' : 'translate-x-full'}`}>
             {selectedConvo && (
               <ChatWindow
                 conversation={selectedConvo}
@@ -67,9 +68,11 @@ export const ChatsPage: React.FC<ChatsPageProps> = ({ user, initialTarget, onClo
   }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center" onClick={onClose}>
-        <div className="bg-slate-800 w-full h-full max-w-4xl max-h-[80vh] rounded-lg shadow-2xl flex overflow-hidden" onClick={e => e.stopPropagation()}>
-            <div className="w-1/3 border-r border-slate-700 flex flex-col">
+    <div className="fixed inset-0 bg-black/95 backdrop-blur-xl z-50 flex items-center justify-center p-6" onClick={onClose}>
+        <div className="module-frame bg-slate-950 w-full h-full max-w-6xl max-h-[85vh] rounded-[3rem] shadow-[0_0_150px_-30px_rgba(212,175,55,0.1)] flex overflow-hidden border border-white/10" onClick={e => e.stopPropagation()}>
+            <div className="corner-tl"></div><div className="corner-tr"></div><div className="corner-bl"></div><div className="corner-br"></div>
+            
+            <div className="w-80 lg:w-96 border-r border-white/5 flex flex-col bg-black/40">
                 <ConversationList
                     currentUser={user}
                     onSelectConversation={handleSelectConvo}
@@ -79,7 +82,7 @@ export const ChatsPage: React.FC<ChatsPageProps> = ({ user, initialTarget, onClo
                     selectedConversationId={selectedConvo?.id}
                 />
             </div>
-            <div className="w-2/3 flex flex-col">
+            <div className="flex-1 flex flex-col bg-slate-900/30 relative">
                 {selectedConvo ? (
                     <ChatWindow 
                         conversation={selectedConvo} 
@@ -94,15 +97,17 @@ export const ChatsPage: React.FC<ChatsPageProps> = ({ user, initialTarget, onClo
                         }}
                     />
                 ) : (
-                    <div className="flex-1 flex flex-col items-center justify-center text-center text-gray-400">
-                        <UserCircleIcon className="h-24 w-24 text-slate-700" />
-                        <h2 className="mt-4 text-xl font-semibold text-white">Select a conversation</h2>
-                        <p>Or start a new one.</p>
+                    <div className="flex-1 flex flex-col items-center justify-center text-center p-12">
+                        <div className="w-24 h-24 bg-slate-950 rounded-[2rem] border border-white/5 flex items-center justify-center mb-8 shadow-inner">
+                            <MessageSquareIcon className="h-10 w-10 text-gray-800" />
+                        </div>
+                        <h2 className="text-3xl font-black text-white tracking-tighter uppercase gold-text leading-none">Comms Offline</h2>
+                        <p className="label-caps mt-4 !text-gray-600 !tracking-[0.4em]">Select an active node to initiate handshake</p>
                     </div>
                 )}
             </div>
             {selectedConvo && selectedConvo.isGroup && isGroupInfoOpen && (
-                <div className="w-1/3 border-l border-slate-700 flex flex-col">
+                <div className="w-80 lg:w-96 border-l border-white/5 flex flex-col animate-slide-left bg-black/40">
                    <GroupInfoPanel conversation={selectedConvo} currentUser={user} onClose={() => setIsGroupInfoOpen(false)} />
                 </div>
             )}

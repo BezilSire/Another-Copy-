@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
@@ -39,37 +40,20 @@ export const AuthPage: React.FC = () => {
             return <ForgotPasswordForm onReset={handlePasswordReset} isProcessing={isProcessingAuth} onBack={resetFlow} />;
         case 'passwordResetSent':
             return (
-                <div className="bg-slate-800 p-8 rounded-lg shadow-lg text-center animate-fade-in">
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="24"
-                        height="24"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="h-16 w-16 text-green-500 mx-auto"
-                    >
-                        <rect width="20" height="16" x="2" y="4" rx="2" />
-                        <path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" />
-                    </svg>
-                    <h2 className="text-2xl font-bold text-white mt-4">Check your inbox</h2>
-                    <p className="text-gray-300 mt-2">
-                        We've sent a password reset link to <strong className="text-green-400">{resetEmail}</strong>.
-                    </p>
-                    <p className="text-sm text-gray-400 mt-4">
-                        Didn't receive the email? Check your spam folder, or go back to try again.
-                    </p>
-                    <div className="mt-6">
-                        <button
-                            onClick={resetFlow}
-                            className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
-                        >
-                            Back to Login
-                        </button>
+                <div className="glass-card p-10 rounded-[3rem] border-white/10 text-center animate-fade-in space-y-6">
+                    <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto border border-green-500/20">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-green-400"><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
                     </div>
+                    <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Check your inbox</h2>
+                    <p className="text-gray-400 text-sm leading-relaxed uppercase tracking-wider font-bold">
+                        We've sent a recovery protocol to <strong className="text-brand-gold">{resetEmail}</strong>.
+                    </p>
+                    <button
+                        onClick={resetFlow}
+                        className="w-full py-4 bg-white/5 border border-white/10 text-white font-black rounded-2xl uppercase tracking-widest text-xs hover:bg-white/10 transition-all"
+                    >
+                        Back to Protocol
+                    </button>
                 </div>
             );
         default:
@@ -78,22 +62,24 @@ export const AuthPage: React.FC = () => {
   }
 
   return (
-    <div className="max-w-md mx-auto mt-10">
-        <div key={view} className="animate-fade-in">
-            {renderContent()}
-        </div>
-
-        <div className="text-center mt-8 text-xs text-gray-500 space-y-2">
-            <div className="flex justify-center items-center space-x-4">
-                <button onClick={() => setIsPolicyVisible(true)} className="hover:text-gray-300 transition-colors">
-                    Privacy Policy
-                </button>
-                <span>|</span>
-                <a href="mailto:support@globalcommons.app" className="hover:text-gray-300 transition-colors">
-                    Support
-                </a>
+    <div className="min-h-screen flex flex-col justify-center items-center px-4 py-12 relative">
+        <div className="w-full max-w-lg z-10">
+            <div key={view} className="animate-fade-in">
+                {renderContent()}
             </div>
-            <p>© Global Commons Network 2025. All rights reserved.</p>
+
+            <div className="mt-12 text-center space-y-4">
+                <div className="flex justify-center items-center gap-6">
+                    <button onClick={() => setIsPolicyVisible(true)} className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-600 hover:text-brand-gold transition-colors">
+                        Privacy Protocol
+                    </button>
+                    <span className="w-1 h-1 rounded-full bg-gray-800"></span>
+                    <a href="mailto:support@globalcommons.app" className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-600 hover:text-brand-gold transition-colors">
+                        Network Support
+                    </a>
+                </div>
+                <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.5em]">&copy; Ubuntium G.C.N v2.5.0</p>
+            </div>
         </div>
 
         <PrivacyPolicyModal isOpen={isPolicyVisible} onClose={() => setIsPolicyVisible(false)} />

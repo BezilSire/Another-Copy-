@@ -11,8 +11,12 @@ import { ChevronRightIcon } from './icons/ChevronRightIcon';
 import { SparkleIcon } from './icons/SparkleIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
+import { LockIcon } from './icons/LockIcon';
+// Added HistoryIcon import
+import { HistoryIcon } from './icons/HistoryIcon';
 
-type NavView = 'profile' | 'notifications' | 'sustenance' | 'myinvestments' | 'knowledge' | 'launchpad' | 'earn' | 'ledger';
+// Added 'versions' to NavView
+type NavView = 'profile' | 'notifications' | 'sustenance' | 'myinvestments' | 'knowledge' | 'launchpad' | 'earn' | 'ledger' | 'security' | 'versions';
 
 interface MorePageProps {
   user: User;
@@ -58,6 +62,9 @@ export const MorePage: React.FC<MorePageProps> = ({ user, onNavigate, onLogout, 
         <NavItem icon={<TrendingUpIcon className="h-5 w-5" />} label="My Investments" onClick={() => onNavigate('myinvestments')} />
         <NavItem icon={<GlobeIcon className="h-5 w-5" />} label="Public Ledger" onClick={() => onNavigate('ledger')} />
         <NavItem icon={<SparkleIcon className="h-5 w-5" />} label="Project Launchpad" onClick={() => onNavigate('launchpad')} />
+        <NavItem icon={<LockIcon className="h-5 w-5" />} label="Node Security & Vault" onClick={() => onNavigate('security')} />
+        {/* Added Temporal Ledger (Versions) option */}
+        <NavItem icon={<HistoryIcon className="h-5 w-5" />} label="Temporal Ledger (Versions)" onClick={() => onNavigate('versions')} />
         <NavItem icon={<HeartIcon className="h-5 w-5" />} label="Sustenance" onClick={() => onNavigate('sustenance')} />
         <NavItem icon={<BookOpenIcon className="h-5 w-5" />} label="Knowledge Base" onClick={() => onNavigate('knowledge')} />
       </div>

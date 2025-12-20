@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { NewPublicMemberData } from '../types';
 import { LogoIcon } from './icons/LogoIcon';
@@ -49,65 +50,100 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
   };
   
   return (
-    <div className="bg-slate-800 p-8 rounded-lg shadow-lg">
-        <div className="flex flex-col items-center mb-6">
-            <LogoIcon className="h-12 w-12 text-green-500" />
-            <h2 className="text-2xl font-bold text-center text-white mt-4">Become a Member</h2>
-            <p className="text-center text-gray-400 mb-6">Let's start with the basics. You can add more details to your profile later.</p>
+    <div className="module-frame glass-module p-8 sm:p-12 rounded-lg border-white/10 relative overflow-hidden shadow-2xl animate-fade-in">
+        <div className="corner-tl"></div><div className="corner-tr"></div><div className="corner-bl"></div><div className="corner-br"></div>
+        <div className="absolute inset-0 blueprint-grid opacity-[0.08] pointer-events-none"></div>
+
+        <div className="flex flex-col items-center mb-8 relative z-10">
+            <div className="w-16 h-16 bg-black rounded-xl border border-brand-gold/40 flex items-center justify-center shadow-glow-gold mb-4">
+                <LogoIcon className="h-10 w-10 text-brand-gold" />
+            </div>
+            <h2 className="text-3xl font-black text-center text-white tracking-tighter uppercase gold-text leading-none">Citizen Node</h2>
+            <p className="label-caps mt-3 !text-brand-gold text-center">Protocol Induction</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-                <label htmlFor="full_name" className="block text-sm font-medium text-gray-300">Full Name</label>
-                <input type="text" name="full_name" id="full_name" value={formData.full_name} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md shadow-sm text-white focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" />
+        <form onSubmit={handleSubmit} className="space-y-5 relative z-10">
+            <div className="space-y-1.5">
+                <label className="label-caps block pl-1 !text-white" htmlFor="full_name">Full Designation</label>
+                <input 
+                    type="text" 
+                    name="full_name" 
+                    id="full_name" 
+                    value={formData.full_name} 
+                    onChange={handleChange} 
+                    required 
+                    className="w-full bg-slate-950/90 border border-white/20 rounded-lg py-3.5 px-6 text-white text-base focus:outline-none focus:ring-1 focus:ring-brand-gold placeholder-slate-500" 
+                    placeholder="ENTER FULL NAME"
+                    disabled={isProcessing}
+                />
             </div>
-            <div>
-                <label htmlFor="email" className="block text-sm font-medium text-gray-300">Email Address</label>
-                <input type="email" name="email" id="email" value={formData.email} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md shadow-sm text-white focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" />
+            <div className="space-y-1.5">
+                <label className="label-caps block pl-1 !text-white" htmlFor="email">Comms Address</label>
+                <input 
+                    type="email" 
+                    name="email" 
+                    id="email" 
+                    value={formData.email} 
+                    onChange={handleChange} 
+                    required 
+                    className="w-full bg-slate-950/90 border border-white/20 rounded-lg py-3.5 px-6 text-white text-base focus:outline-none focus:ring-1 focus:ring-brand-gold placeholder-slate-500" 
+                    placeholder="EMAIL@PROTOCOL.ORG"
+                    disabled={isProcessing}
+                />
             </div>
-            <div>
-                <label className="block text-gray-300 text-sm font-bold mb-2" htmlFor="password">
-                    Create a Password
-                </label>
+            <div className="space-y-1.5">
+                <label className="label-caps block pl-1 !text-white" htmlFor="password">Security Anchor</label>
                 <div className="relative">
                     <input
-                    id="password"
-                    type={isPasswordVisible ? 'text' : 'password'}
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white pr-10 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
-                    placeholder="At least 6 characters"
-                    required
-                    minLength={6}
-                    disabled={isProcessing}
+                        id="password"
+                        type={isPasswordVisible ? 'text' : 'password'}
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full bg-slate-950/90 border border-white/20 rounded-lg py-3.5 px-6 text-white text-base pr-12 focus:outline-none focus:ring-1 focus:ring-brand-gold placeholder-slate-500"
+                        placeholder="MIN. 6 CHARACTERS"
+                        required
+                        minLength={6}
+                        disabled={isProcessing}
                     />
                     <button
-                    type="button"
-                    onClick={() => setIsPasswordVisible((prev) => !prev)}
-                    className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-200"
-                    aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
+                        type="button"
+                        onClick={() => setIsPasswordVisible((prev) => !prev)}
+                        className="absolute inset-y-0 right-0 px-4 flex items-center text-slate-400 hover:text-brand-gold transition-colors"
                     >
-                    {isPasswordVisible ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+                        {isPasswordVisible ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
                     </button>
                 </div>
             </div>
             
-            <div>
-                <label htmlFor="referralCode" className="block text-sm font-medium text-gray-300">Referral Code (Optional)</label>
-                <input type="text" name="referralCode" id="referralCode" value={formData.referralCode} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md shadow-sm text-white focus:outline-none focus:ring-green-500 focus:border-green-500 sm:text-sm" />
+            <div className="space-y-1.5">
+                <label className="label-caps block pl-1 !text-white" htmlFor="referralCode">Referral Node (Optional)</label>
+                <input 
+                    type="text" 
+                    name="referralCode" 
+                    id="referralCode" 
+                    value={formData.referralCode} 
+                    onChange={handleChange} 
+                    className="w-full bg-slate-950/90 border border-white/20 rounded-lg py-3.5 px-6 text-white text-base focus:outline-none focus:ring-1 focus:ring-brand-gold placeholder-slate-500 data-mono" 
+                    placeholder="CODE-XXXXX"
+                    disabled={isProcessing}
+                />
             </div>
             
-            <div className="flex items-center justify-between pt-2">
-                 <button
+            <div className="flex flex-col gap-4 pt-4">
+                <button 
+                    type="submit" 
+                    disabled={isProcessing} 
+                    className="w-full py-5 bg-brand-gold hover:bg-brand-gold-light text-black font-black rounded-lg transition-all active:scale-[0.98] shadow-glow-gold disabled:opacity-50 uppercase tracking-[0.4em] text-[11px]"
+                >
+                    {isProcessing ? 'SYNCHRONIZING...' : 'Initiate Node Entry'}
+                </button>
+                <button
                     type="button"
                     onClick={onBackToLogin}
                     disabled={isProcessing}
-                    className="inline-block align-baseline font-bold text-sm text-green-500 hover:text-green-400 disabled:opacity-50"
+                    className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 hover:text-white transition-colors py-2"
                 >
-                    Back to Login
-                </button>
-                <button type="submit" disabled={isProcessing} className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-green-600 hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-700 focus:ring-green-500 disabled:bg-gray-500">
-                    {isProcessing ? 'Creating Account...' : 'Create Account'}
+                    Return to Handshake
                 </button>
             </div>
         </form>

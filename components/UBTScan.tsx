@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef } from 'react';
-import QRCode from 'qrcode';
+import * as QRCodeLib from 'qrcode';
 import { Html5QrcodeScanner } from 'html5-qrcode';
 import { User, UbtTransaction } from '../types';
 import { cryptoService } from '../services/cryptoService';
@@ -9,6 +9,11 @@ import { useToast } from '../contexts/ToastContext';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
 import { QrCodeIcon } from './icons/QrCodeIcon';
+import { UserCircleIcon } from './icons/UserCircleIcon';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
+
+// Resolve QRCode reliably across different ESM wrappers
+const QRCode = (QRCodeLib as any).default || QRCodeLib;
 
 interface UBTScanProps {
     currentUser: User;
@@ -24,10 +29,9 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
     const [scannedData, setScannedData] = useState<string | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [sendAmount, setSendAmount] = useState('');
+    const [showConfirmation, setShowConfirmation] = useState(false);
     const { addToast } = useToast();
     
-    // Ref for the scanner container
-    const scannerRef = useRef<HTMLDivElement>(null);
     const scannerInstanceRef = useRef<any>(null);
 
     // Generate My QR Code
@@ -39,116 +43,99 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
                 key: currentUser.publicKey
             });
             
-            // Check if QRCode is loaded correctly
             if (QRCode && QRCode.toDataURL) {
                 QRCode.toDataURL(payload, { 
-                    width: 300,
-                    margin: 2,
+                    width: 600,
+                    margin: 1,
+                    errorCorrectionLevel: 'H',
                     color: {
-                        dark: '#0f172a',
-                        light: '#ffffff'
+                        dark: '#020617',
+                        light: '#FFD76A'
                     }
                 })
                 .then(url => setQrUrl(url))
                 .catch(err => {
-                    console.error("QR Generation Error:", err);
-                    addToast("Failed to generate QR Code.", "error");
+                    console.error("QR Error:", err);
                 });
-            } else {
-                 console.error("QRCode library not loaded properly.");
             }
         }
-    }, [mode, currentUser, addToast]);
+    }, [mode, currentUser.publicKey, currentUser.id, currentUser.name]);
 
-    // Initialize Scanner
+    // Initialize/Cleanup Scanner
     useEffect(() => {
-        if (mode === 'scan_code' && scannerRef.current) {
-            // Cleanup previous instance if exists
-            if (scannerInstanceRef.current) {
+        if (mode === 'scan_code' && !scannedData) {
+            const timer = setTimeout(() => {
                 try {
-                    scannerInstanceRef.current.clear();
-                } catch (e) {
-                    console.error("Failed to clear scanner", e);
+                    const scanner = new Html5QrcodeScanner(
+                        "reader", 
+                        { 
+                            fps: 20, 
+                            qrbox: { width: 280, height: 280 },
+                            aspectRatio: 1.0,
+                            showTorchButtonIfSupported: true
+                        },
+                        false
+                    );
+                    
+                    scanner.render(onScanSuccess, onScanFailure);
+                    scannerInstanceRef.current = scanner;
+                } catch (err) {
+                    console.error("Scanner init failed:", err);
+                    addToast("Scanner initialization failed.", "error");
                 }
-            }
-
-            try {
-                const scanner = new Html5QrcodeScanner(
-                    "reader", 
-                    { fps: 10, qrbox: { width: 250, height: 250 } },
-                    false
-                );
-                
-                scanner.render(onScanSuccess, onScanFailure);
-                scannerInstanceRef.current = scanner;
-            } catch (err) {
-                console.error("Scanner initialization failed:", err);
-                addToast("Camera access failed or library error.", "error");
-            }
+            }, 100);
 
             return () => {
-                try {
-                    scannerInstanceRef.current?.clear().catch((e: any) => console.error("Scanner clear error", e));
-                } catch (e) {
-                    // Ignore cleanup errors
+                clearTimeout(timer);
+                if (scannerInstanceRef.current) {
+                    scannerInstanceRef.current.clear().catch(() => {});
+                    scannerInstanceRef.current = null;
                 }
             };
         }
-    }, [mode, addToast]);
+    }, [mode, scannedData]);
 
     const onScanSuccess = (decodedText: string) => {
         try {
-            // Attempt to parse the scanned data
-            // Expected format: JSON { id, name, key }
             const data = JSON.parse(decodedText);
             if (data.id && data.key) {
-                setScannedData(decodedText); // Store raw JSON string
+                setScannedData(decodedText);
                 if (scannerInstanceRef.current) {
-                    scannerInstanceRef.current.pause(); // Pause scanning
+                    scannerInstanceRef.current.clear().catch(() => {});
                 }
-            } else {
-                 // Don't spam toast on invalid codes, just ignore or log
-                 console.warn("Invalid QR format");
             }
         } catch (e) {
-            console.error("Scan error", e);
+            console.warn("Detection failed.");
         }
     };
 
-    const onScanFailure = (error: any) => {
-        // console.warn(`Code scan error = ${error}`);
+    const onScanFailure = (error: any) => {};
+
+    const handleInitiateSend = () => {
+        const amount = parseFloat(sendAmount);
+        if (isNaN(amount) || amount <= 0) {
+            addToast("Enter valid amount.", "error");
+            return;
+        }
+        if (amount > (currentUser.ubtBalance || 0)) {
+            addToast("Insufficient holdings.", "error");
+            return;
+        }
+        setShowConfirmation(true);
     };
 
-    const handleSend = async () => {
+    const handleFinalSend = async () => {
         if (!scannedData || !sendAmount) return;
         
         const receiver = JSON.parse(scannedData);
         const amount = parseFloat(sendAmount);
-        
-        if (isNaN(amount) || amount <= 0) {
-            addToast("Please enter a valid amount.", "error");
-            return;
-        }
-        
-        if (amount > (currentUser.ubtBalance || 0)) {
-            addToast("Insufficient funds.", "error");
-            return;
-        }
 
         setIsProcessing(true);
         try {
-            // 1. Construct Transaction Payload
             const timestamp = Date.now();
             const nonce = cryptoService.generateNonce();
-            
-            // This string is what gets signed. It MUST match the reconstruction on the server.
             const payloadToSign = `${currentUser.id}:${receiver.id}:${amount}:${timestamp}:${nonce}`;
-            
-            // 2. Sign it offline (Client-side)
             const signature = cryptoService.signTransaction(payloadToSign);
-            
-            // 3. Create Transaction Object
-            // Use a safer ID generation for compatibility
             const txId = Date.now().toString(36) + Math.random().toString(36).substring(2);
             
             const transaction: UbtTransaction = {
@@ -159,116 +146,177 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
                 timestamp: timestamp,
                 nonce: nonce,
                 signature: signature,
-                hash: payloadToSign // Send the payload string for verification
+                hash: payloadToSign
             };
 
-            // 4. Sync to Server (The "Node")
             await api.processUbtTransaction(transaction);
             
-            addToast(`Sent ${amount} UBT to ${receiver.name}!`, "success");
+            addToast(`Successfully sent ${amount} UBT.`, "success");
             onTransactionComplete();
             onClose();
 
         } catch (error) {
             console.error(error);
-            const msg = error instanceof Error ? error.message : "Transaction failed";
-            addToast(msg, "error");
-            if (scannerInstanceRef.current) {
-                scannerInstanceRef.current.resume();
-            }
+            addToast("Transaction failed.", "error");
+            setShowConfirmation(false);
         } finally {
             setIsProcessing(false);
         }
     };
 
+    const recipientData = scannedData ? JSON.parse(scannedData) : null;
+
     return (
-        <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col animate-fade-in">
+        <div className="fixed inset-0 z-50 bg-slate-950 flex flex-col animate-fade-in overflow-hidden">
             {/* Header */}
-            <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800">
-                <div className="flex items-center gap-2">
-                    <QrCodeIcon className="h-6 w-6 text-green-400" />
-                    <h2 className="text-lg font-bold text-white">$UBT Scan</h2>
+            <div className="p-6 border-b border-white/5 flex justify-between items-center bg-slate-900/80 backdrop-blur-2xl">
+                <div className="flex items-center gap-3">
+                    <div className="p-2 bg-brand-gold/10 rounded-xl border border-brand-gold/20 shadow-glow-gold">
+                        <QrCodeIcon className="h-6 w-6 text-brand-gold" />
+                    </div>
+                    <h2 className="text-xl font-black text-white uppercase tracking-tighter gold-text">
+                        {showConfirmation ? 'Confirm' : mode === 'show_code' ? 'Identity' : 'Scanner'}
+                    </h2>
                 </div>
-                <button onClick={onClose} className="text-gray-400 hover:text-white">
+                <button onClick={onClose} className="p-2 text-gray-500 hover:text-brand-gold bg-white/5 rounded-full">
                     <XCircleIcon className="h-8 w-8" />
                 </button>
             </div>
 
-            {/* Tabs */}
-            <div className="flex p-2 bg-slate-800 gap-2">
+            {/* Sub Nav */}
+            <div className="flex p-3 bg-slate-900/50 gap-2 border-b border-white/5">
                 <button 
-                    onClick={() => { setMode('show_code'); setScannedData(null); }}
-                    className={`flex-1 py-2 rounded-md text-sm font-semibold transition-colors ${mode === 'show_code' ? 'bg-green-600 text-white' : 'bg-slate-700 text-gray-300'}`}
+                    onClick={() => { setMode('show_code'); setScannedData(null); setShowConfirmation(false); }}
+                    className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] transition-all duration-300 ${mode === 'show_code' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'bg-slate-800/30 text-gray-500 hover:text-gray-300'}`}
                 >
-                    My Code
+                    Identity
                 </button>
                 <button 
-                    onClick={() => { setMode('scan_code'); setScannedData(null); }}
-                    className={`flex-1 py-2 rounded-md text-sm font-semibold transition-colors ${mode === 'scan_code' ? 'bg-green-600 text-white' : 'bg-slate-700 text-gray-300'}`}
+                    onClick={() => { setMode('scan_code'); setScannedData(null); setShowConfirmation(false); }}
+                    className={`flex-1 py-3 rounded-2xl text-[10px] font-black uppercase tracking-[0.3em] transition-all duration-300 ${mode === 'scan_code' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'bg-slate-800/30 text-gray-500 hover:text-gray-300'}`}
                 >
-                    Scan & Pay
+                    Scanner
                 </button>
             </div>
 
-            {/* Content */}
-            <div className="flex-1 flex flex-col items-center justify-center p-6 overflow-y-auto">
+            {/* Main Area */}
+            <div className="flex-1 flex flex-col items-center justify-center p-6 overflow-y-auto relative">
                 {mode === 'show_code' ? (
-                    <div className="text-center w-full max-w-sm">
-                        <div className="bg-white p-4 rounded-xl shadow-lg mx-auto mb-6">
+                    <div className="text-center w-full max-w-sm animate-fade-in">
+                        <div className="glass-card p-6 rounded-[3rem] mx-auto mb-10 border-brand-gold/30 bg-white shadow-glow-gold">
                             {qrUrl ? (
-                                <img src={qrUrl} alt="My UBT QR Code" className="w-full h-auto" />
+                                <img src={qrUrl} alt="Identity QR" className="w-full h-auto rounded-2xl" />
                             ) : (
-                                <div className="h-64 flex items-center justify-center">
-                                    <LoaderIcon className="h-8 w-8 animate-spin text-slate-900" />
+                                <div className="h-64 flex flex-col items-center justify-center gap-4">
+                                    <LoaderIcon className="h-10 w-10 animate-spin text-brand-gold" />
                                 </div>
                             )}
                         </div>
-                        <h3 className="text-xl font-bold text-white">{currentUser.name}</h3>
-                        <p className="text-green-400 font-mono text-sm mt-1 break-all">
-                            {currentUser.publicKey ? `${currentUser.publicKey.substring(0, 16)}...` : 'Generating Identity...'}
+                        <h3 className="text-3xl font-black text-white tracking-tighter uppercase gold-text">{currentUser.name}</h3>
+                        <p className="text-brand-gold font-mono text-xs mt-3 font-bold opacity-70 break-all px-8 border-t border-brand-gold/10 pt-4">
+                            ID: {currentUser.publicKey || 'Initializing...'}
                         </p>
-                        <p className="text-gray-400 text-sm mt-4">
-                            Show this code to receive $UBT securely.
+                        <p className="text-gray-500 text-[10px] mt-8 uppercase font-black tracking-widest leading-loose">
+                            Show this anchor to receive assets from verified nodes.
                         </p>
                     </div>
                 ) : (
-                    <div className="w-full max-w-md">
+                    <div className="w-full max-w-md animate-fade-in">
                         {!scannedData ? (
-                            <div id="reader" className="bg-slate-800 rounded-lg overflow-hidden border border-slate-600"></div>
-                        ) : (
-                            <div className="bg-slate-800 p-6 rounded-lg shadow-lg animate-fade-in">
-                                <h3 className="text-lg font-bold text-white mb-4">Payment Details</h3>
-                                <div className="mb-4 p-3 bg-slate-700 rounded-md">
-                                    <p className="text-xs text-gray-400">Receiver</p>
-                                    <p className="text-white font-semibold">{JSON.parse(scannedData).name}</p>
-                                    <p className="text-xs text-green-400 font-mono truncate">{JSON.parse(scannedData).key}</p>
+                            <div className="relative rounded-[3rem] overflow-hidden border border-brand-gold/20 aspect-square bg-black shadow-2xl flex items-center justify-center">
+                                <div id="reader" className="w-full h-full scale-[1.02]"></div>
+                                <div className="absolute inset-0 border-[40px] border-black/40 pointer-events-none"></div>
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                    <div className="w-48 h-48 border-2 border-brand-gold rounded-3xl animate-pulse"></div>
                                 </div>
-                                
-                                <div className="mb-6">
-                                    <label className="block text-sm font-medium text-gray-300 mb-1">Amount ($UBT)</label>
-                                    <input 
-                                        type="number" 
-                                        value={sendAmount} 
-                                        onChange={e => setSendAmount(e.target.value)}
-                                        className="w-full bg-slate-900 border border-slate-600 rounded-md p-3 text-white text-lg focus:ring-green-500 focus:border-green-500"
-                                        placeholder="0.00"
-                                        autoFocus
-                                    />
+                            </div>
+                        ) : showConfirmation ? (
+                            <div className="glass-card p-8 rounded-[3rem] space-y-8 animate-fade-in border-brand-gold/40 shadow-glow-gold relative overflow-hidden">
+                                <div className="text-center">
+                                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em] mb-4">Transfer Amount</p>
+                                     <p className="text-6xl font-black text-white font-mono tracking-tighter">{sendAmount} <span className="text-2xl text-brand-gold">UBT</span></p>
                                 </div>
-                                
-                                <div className="flex gap-3">
+
+                                <div className="space-y-4 border-y border-white/5 py-8">
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Recipient</span>
+                                        <span className="text-sm font-black text-white tracking-tight">{recipientData.name}</span>
+                                    </div>
+                                    <div className="flex items-center justify-between">
+                                        <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Network Fee</span>
+                                        <span className="text-sm font-black text-green-500 font-mono tracking-tighter">0.00 UBT</span>
+                                    </div>
+                                </div>
+
+                                <div className="p-5 bg-red-950/30 border border-red-900/50 rounded-3xl flex gap-4 items-start">
+                                    <AlertTriangleIcon className="h-6 w-6 text-red-500 flex-shrink-0" />
+                                    <p className="text-[10px] text-red-200/80 leading-relaxed uppercase font-black tracking-tight">
+                                        Protocol Action is irreversible. Funds will be moved to target node.
+                                    </p>
+                                </div>
+
+                                <div className="flex flex-col gap-4">
                                     <button 
-                                        onClick={() => { setScannedData(null); if(scannerInstanceRef.current) scannerInstanceRef.current.resume(); }}
-                                        className="flex-1 py-3 bg-slate-700 text-white rounded-md font-semibold hover:bg-slate-600"
+                                        onClick={handleFinalSend}
+                                        disabled={isProcessing}
+                                        className="w-full py-5 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl active:scale-95 shadow-glow-gold flex justify-center items-center uppercase tracking-[0.2em] text-xs"
                                     >
-                                        Cancel
+                                        {isProcessing ? <LoaderIcon className="h-6 w-6 animate-spin" /> : 'Confirm & Sign Ledger'}
                                     </button>
                                     <button 
-                                        onClick={handleSend}
-                                        disabled={isProcessing || !sendAmount}
-                                        className="flex-1 py-3 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 disabled:bg-slate-600 flex justify-center items-center"
+                                        onClick={() => setShowConfirmation(false)}
+                                        className="w-full py-2 text-gray-500 hover:text-white transition-all text-[10px] font-black uppercase tracking-widest"
                                     >
-                                        {isProcessing ? <LoaderIcon className="h-5 w-5 animate-spin" /> : 'Sign & Send'}
+                                        Correction Protocol
+                                    </button>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="glass-card p-8 rounded-[3rem] shadow-2xl animate-fade-in border-brand-gold/20">
+                                <div className="flex items-center gap-5 mb-10 bg-slate-950/60 p-5 rounded-[2rem] border border-white/5">
+                                    <div className="w-16 h-16 bg-slate-900 rounded-2xl flex items-center justify-center border border-brand-gold/20">
+                                        <UserCircleIcon className="h-10 w-10 text-brand-gold/60" />
+                                    </div>
+                                    <div className="min-w-0">
+                                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Protocol Target</p>
+                                        <p className="text-2xl font-black text-white truncate tracking-tighter leading-tight gold-text">{recipientData.name}</p>
+                                    </div>
+                                </div>
+                                
+                                <div className="space-y-4">
+                                    <label className="block text-[10px] font-black text-gray-500 uppercase tracking-[0.4em] pl-1">Quantum Transfer</label>
+                                    <div className="relative group">
+                                        <input 
+                                            type="number" 
+                                            value={sendAmount} 
+                                            onChange={e => setSendAmount(e.target.value)}
+                                            className="w-full bg-slate-950/80 border border-white/10 rounded-[2rem] p-7 text-white text-5xl font-black font-mono focus:outline-none focus:ring-2 focus:ring-brand-gold/30 placeholder-gray-900"
+                                            placeholder="0.00"
+                                            autoFocus
+                                        />
+                                        <div className="absolute inset-y-0 right-8 flex items-center pointer-events-none">
+                                            <span className="text-gray-700 font-black tracking-tighter text-xl">UBT</span>
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-between items-center px-4">
+                                         <p className="text-[10px] text-gray-600 font-black uppercase tracking-widest">Balance: {(currentUser.ubtBalance || 0).toFixed(2)}</p>
+                                         <button onClick={() => setSendAmount(String(currentUser.ubtBalance || 0))} className="text-[10px] font-black text-brand-gold hover:text-white uppercase tracking-widest">Max Power</button>
+                                    </div>
+                                </div>
+                                
+                                <div className="flex flex-col gap-4 mt-12">
+                                    <button 
+                                        onClick={handleInitiateSend}
+                                        disabled={isProcessing || !sendAmount || parseFloat(sendAmount) <= 0}
+                                        className="w-full py-5 bg-slate-900 border border-brand-gold/20 hover:border-brand-gold/50 text-white font-black rounded-3xl active:scale-95 disabled:opacity-30 uppercase tracking-[0.2em] text-xs shadow-xl"
+                                    >
+                                        Review Protocol
+                                    </button>
+                                    <button 
+                                        onClick={() => { setScannedData(null); setShowConfirmation(false); }}
+                                        className="w-full py-2 text-gray-600 hover:text-gray-400 transition-all text-[10px] font-black uppercase tracking-widest"
+                                    >
+                                        Detection Fault: Rescan
                                     </button>
                                 </div>
                             </div>

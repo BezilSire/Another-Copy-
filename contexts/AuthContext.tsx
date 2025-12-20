@@ -4,6 +4,7 @@ import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPasswor
 import { doc, onSnapshot, setDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
 import { useToast } from './ToastContext';
 import { api } from '../services/apiService';
+import { cryptoService } from '../services/cryptoService';
 import { auth, db } from '../services/firebase';
 import { User, Agent, NewPublicMemberData, MemberUser } from '../types';
 import { generateReferralCode, generateAgentCode } from '../utils';
@@ -38,48 +39,49 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isProcessingAuthRef.current = isProcessingAuth;
   }, [isProcessingAuth]);
 
-  const currentUserRef = useRef(currentUser);
-  useEffect(() => {
-    currentUserRef.current = currentUser;
-  }, [currentUser]);
-
+  // Main Auth and User Profile Listener
   useEffect(() => {
     let userDocListener: (() => void) | undefined;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+      setFirebaseUser(user);
+      
+      // Clean up previous Firestore listener if it exists
       if (userDocListener) {
         userDocListener();
         userDocListener = undefined;
       }
-      setFirebaseUser(user);
 
       if (user && !user.isAnonymous) {
         const userDocRef = doc(db, 'users', user.uid);
         
-        userDocListener = onSnapshot(userDocRef, async (userDoc) => {
+        // Listen for user document changes
+        userDocListener = onSnapshot(userDocRef, (userDoc) => {
           if (userDoc.exists()) {
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
-
+            
+            // Check for ousted status
             if (userData.status === 'ousted') {
-              if (currentUserRef.current?.id === userData.id) {
-                addToast('Your account has been suspended.', 'error');
-                api.logout();
-              }
+              addToast('This account has been suspended.', 'error');
+              api.logout();
             } else {
               setCurrentUser(userData);
             }
           } else {
+            // Document doesn't exist. Only log out if we aren't in the middle of a signup process
             if (!isProcessingAuthRef.current) {
-              console.warn("User document not found for authenticated user. Logging out.");
-              addToast("Your user profile could not be found. Please sign up again or contact support if the issue persists.", "error");
-              api.logout();
+              console.warn("User document not found for active auth session.");
+              setCurrentUser(null);
             }
           }
           setIsLoadingAuth(false);
         }, (error) => {
-          console.error("Error listening to user document:", error);
-          addToast("Connection to your profile was lost. Please log in again.", "error");
-          api.logout();
+          console.error("Firestore Profile Listener Error:", error);
+          if (error.code === 'permission-denied') {
+             // Often happens if rules are being updated or session is stale
+             addToast("Access to your node profile was denied. Please re-sign in.", "error");
+             api.logout();
+          }
           setIsLoadingAuth(false);
         });
         
@@ -92,27 +94,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     return () => {
       unsubscribeAuth();
-      if (userDocListener) {
-        userDocListener();
-      }
+      if (userDocListener) userDocListener();
     };
   }, [addToast]);
+
+  // Dedicated effect for identity synchronization to prevent blocking the profile listener
+  useEffect(() => {
+    if (currentUser && !currentUser.publicKey) {
+        const syncKeys = async () => {
+            try {
+                const keys = cryptoService.getOrGenerateSigningKeys();
+                console.log("Synchronizing secure node address...");
+                await api.updateUser(currentUser.id, { publicKey: keys.publicKey });
+            } catch (e) {
+                console.error("Identity sync failed:", e);
+            }
+        };
+        syncKeys();
+    }
+  }, [currentUser?.id, currentUser?.publicKey]);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     setIsProcessingAuth(true);
     try {
       await api.login(credentials.email, credentials.password);
-    } catch (error) {
-      const firebaseError = error as { code?: string; message?: string };
-      const errorCode = firebaseError.code || '';
-
-      if (errorCode.includes('auth/invalid-credential') || errorCode.includes('auth/wrong-password') || errorCode.includes('auth/user-not-found')) {
-        addToast('Invalid credentials. Please check your email and password.', 'error');
-      } else if (errorCode.includes('auth/network-request-failed')) {
-        addToast('Network error. Please check your connection and try again.', 'error');
-      } else {
-        addToast(`Login failed: ${firebaseError.message || 'An unknown error occurred.'}`, 'error');
-      }
+    } catch (error: any) {
+      console.error("Login Error:", error);
+      let message = 'Invalid credentials. Check email and password.';
+      if (error.code === 'auth/network-request-failed') message = 'Network connection failed.';
+      addToast(message, 'error');
       throw error;
     } finally {
       setIsProcessingAuth(false);
@@ -124,14 +134,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         api.goOffline(currentUser.id);
     }
     await api.logout();
-    addToast('You have been logged out.', 'info');
-  }, [addToast, currentUser]);
+  }, [currentUser]);
 
   const agentSignup = useCallback(async (credentials: AgentSignupCredentials) => {
     setIsProcessingAuth(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
       const { user } = userCredential;
+      const keys = cryptoService.getOrGenerateSigningKeys();
 
       const newAgent: Omit<Agent, 'id'> = {
         name: credentials.name,
@@ -148,16 +158,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         hasCompletedInduction: true,
         commissionBalance: 0,
         referralEarnings: 0,
+        publicKey: keys.publicKey,
       };
 
       await setDoc(doc(db, 'users', user.uid), newAgent);
       await sendEmailVerification(user);
-      addToast(`Account created for ${credentials.name}! A verification email has been sent.`, 'success');
-
-    } catch (error) {
-      const firebaseError = error as { code?: string; message?: string; customData?: any };
-      let message = `Signup failed: ${firebaseError.message || 'Please try again.'}`;
-      addToast(message, 'error');
+      addToast(`Agent profile created. Verification email sent.`, 'success');
+    } catch (error: any) {
+      addToast(`Signup failed: ${error.message}`, 'error');
       throw error;
     } finally {
       setIsProcessingAuth(false);
@@ -169,21 +177,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, memberData.email, password);
         const { user } = userCredential;
-
+        const keys = cryptoService.getOrGenerateSigningKeys();
         const batch = writeBatch(db);
+        
         let referrerId = '';
         if (memberData.referralCode) {
             const referrerQuery = query(collection(db, 'users'), where('referralCode', '==', memberData.referralCode), limit(1));
             const snapshot = await getDocs(referrerQuery);
-            if (!snapshot.empty) {
-                referrerId = snapshot.docs[0].id;
-            }
+            if (!snapshot.empty) referrerId = snapshot.docs[0].id;
         }
         
-        const welcomeMessage = `Welcome, ${memberData.full_name}! We're thrilled to have you join the Global Commons Network. Explore, connect, and let's build a better future together.`;
-
         const memberRef = doc(collection(db, 'members'));
-        const newMemberDoc = {
+        batch.set(memberRef, {
             full_name: memberData.full_name,
             email: memberData.email,
             uid: user.uid,
@@ -192,15 +197,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             date_registered: serverTimestamp(),
             payment_status: 'pending_verification',
             registration_amount: 10,
-            welcome_message: welcomeMessage,
+            welcome_message: `Welcome, ${memberData.full_name}!`,
             membership_card_id: `UGC-M-${generateReferralCode()}`,
-            phone: '',
-            circle: '',
-        };
-        batch.set(memberRef, newMemberDoc);
+            phone: '', circle: '',
+        });
 
         const userRef = doc(db, 'users', user.uid);
-        const newUserDoc: Omit<MemberUser, 'id' | 'createdAt' | 'lastSeen'> = {
+        batch.set(userRef, {
             name: memberData.full_name,
             email: memberData.email,
             name_lowercase: memberData.full_name.toLowerCase(),
@@ -214,61 +217,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             referredBy: memberData.referralCode || '',
             referrerId: referrerId,
             hasCompletedInduction: false,
-            phone: '',
-            address: '',
-            circle: '',
-            id_card_number: '',
-            ubtBalance: 0,
-            initialUbtStake: 0,
-        };
-        batch.set(userRef, {...newUserDoc, createdAt: serverTimestamp(), lastSeen: serverTimestamp()});
+            phone: '', address: '', circle: '', id_card_number: '',
+            ubtBalance: 0, initialUbtStake: 0,
+            publicKey: keys.publicKey,
+            createdAt: serverTimestamp(),
+            lastSeen: serverTimestamp()
+        });
 
         await batch.commit();
         await sendEmailVerification(user);
-        addToast('Account created! A verification email has been sent.', 'success');
+        addToast('Welcome! Check your email to verify your node.', 'success');
     } catch (error: any) {
-        let message = `Signup failed: ${error.message || 'Please try again.'}`;
-        addToast(message, 'error');
+        addToast(`Signup error: ${error.message}`, 'error');
         throw error;
     } finally {
         setIsProcessingAuth(false);
     }
-}, [addToast]);
+  }, [addToast]);
 
   const sendPasswordReset = useCallback(async (email: string) => {
     try {
         await api.sendPasswordReset(email);
-        addToast(`A password reset link has been sent to ${email}.`, 'success');
+        addToast(`Recovery link sent to ${email}.`, 'success');
     } catch (error) {
-        addToast("Failed to send password reset email. Please check the address and try again.", "error");
+        addToast("Recovery failed. Check address and retry.", "error");
         throw error;
     }
   }, [addToast]);
 
   const updateUser = useCallback(async (updatedData: Partial<User> & { isCompletingProfile?: boolean } = {}) => {
     if (!currentUser) return;
-    
-    const safeData = updatedData || {};
-
     try {
-        const { isCompletingProfile, ...userData } = safeData;
-        
+        const { isCompletingProfile, ...userData } = updatedData;
         if (Object.keys(userData).length > 0) {
             await api.updateUser(currentUser.id, userData);
         }
-        
-        if (!isCompletingProfile && Object.keys(userData).length > 0) {
-            addToast('Profile updated successfully!', 'success');
-        }
+        if (!isCompletingProfile) addToast('Profile updated!', 'success');
     } catch (error: any) {
-        console.error("Failed to update user:", error);
-        let errorMessage = 'Profile update failed.';
-        if (error.code === 'permission-denied') {
-            errorMessage = 'Save failed due to a permissions issue. Please contact support.';
-        } else if (error.message) {
-            errorMessage = `An unexpected error occurred: ${error.message}`;
-        }
-        addToast(errorMessage, 'error');
+        addToast('Update failed.', 'error');
         throw error;
     }
   }, [currentUser, addToast]);
@@ -291,8 +277,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
 };

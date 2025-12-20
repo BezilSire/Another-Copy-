@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { Admin, Agent, Member, Broadcast, Report, User, MemberUser, Conversation, NotificationItem, Post, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PublicUserProfile } from '../types';
+import { Admin, Agent, Member, Broadcast, Report, User, MemberUser, Conversation, NotificationItem, Post, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PublicUserProfile, PendingUbtPurchase, SellRequest } from '../types';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
 import { MemberList } from './MemberList';
@@ -36,8 +36,11 @@ import { Dashboard } from './Dashboard';
 import { WalletIcon } from './icons/WalletIcon';
 import { WalletAdminPage } from './WalletAdminPage';
 import { ClockIcon } from './icons/ClockIcon';
+import { EcocashVerificationAdmin } from './EcocashVerificationAdmin';
+import { LiquidationOracleAdmin } from './LiquidationOracleAdmin';
+import { HistoryIcon } from './icons/HistoryIcon';
 
-type AdminView = 'dashboard' | 'users' | 'feed' | 'reports' | 'profile' | 'notifications' | 'proposals' | 'payouts' | 'sustenance' | 'ventures' | 'economy' | 'chats' | 'wallet' | 'versions';
+type AdminView = 'dashboard' | 'users' | 'feed' | 'reports' | 'profile' | 'notifications' | 'proposals' | 'payouts' | 'sustenance' | 'ventures' | 'economy' | 'chats' | 'wallet' | 'versions' | 'oracle' | 'liquidations';
 type UserSubView = 'agents' | 'members' | 'roles';
 
 interface AdminDashboardProps {
@@ -61,22 +64,18 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
   const [ventures, setVentures] = useState<Venture[]>([]);
   const [cvp, setCvp] = useState<CommunityValuePool | null>(null);
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
+  const [pendingPurchases, setPendingPurchases] = useState<PendingUbtPurchase[]>([]);
+  const [sellRequests, setSellRequests] = useState<SellRequest[]>([]);
   
   const [loadedStreamCount, setLoadedStreamCount] = useState(0);
   const [loadingErrors, setLoadingErrors] = useState<string[]>([]);
   const { addToast } = useToast();
   
-  const totalStreams = 9; 
+  const totalStreams = 11; 
   const isInitialLoading = loadedStreamCount < totalStreams;
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const [searchQuery, setSearchQuery] = useState('');
-  
-  const [dialogState, setDialogState] = useState<{ isOpen: boolean; member: Member | null; action: 'reset' | 'clear' }>({ isOpen: false, member: null, action: 'reset' });
-  const [roleChangeDialog, setRoleChangeDialog] = useState<{ isOpen: boolean; user: User | null; newRole: User['role'] | null }>({ isOpen: false, user: null, newRole: null });
-  const [verificationModalState, setVerificationModalState] = useState<{ isOpen: boolean, member: Member | null }>({ isOpen: false, member: null });
   const [typeFilter, setTypeFilter] = useState<PostFilterType>('all');
-  
+
   useEffect(() => {
     setLoadedStreamCount(0);
     setLoadingErrors([]);
@@ -96,11 +95,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
     const unsubPayouts = api.listenForPayoutRequests(user, (data) => { setPayouts(data); handleStreamLoaded(); }, (e) => handleError('payouts', e));
     const unsubVentures = api.listenForVentures(user, (data) => { setVentures(data); handleStreamLoaded(); }, (e) => handleError('ventures', e));
     const unsubCvp = api.listenForCVP(user, (data) => { setCvp(data); handleStreamLoaded(); }, (e) => handleError('cvp', e));
+    const unsubOracle = api.listenForPendingPurchases((data) => { setPendingPurchases(data); handleStreamLoaded(); });
+    const unsubLiq = api.listenToSellRequests((data) => { setSellRequests(data); handleStreamLoaded(); });
     api.getBroadcasts().then(data => { setBroadcasts(data); handleStreamLoaded(); }).catch(e => handleError('broadcasts', e));
 
     return () => {
         unsubUsers(); unsubMembers(); unsubAgents(); unsubPending(); unsubReports();
-        unsubPayouts(); unsubVentures(); unsubCvp();
+        unsubPayouts(); unsubVentures(); unsubCvp(); unsubOracle(); unsubLiq();
     };
   }, [user]);
 
@@ -108,9 +109,9 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
     try {
         const newBroadcast = await api.sendBroadcast(user, message);
         setBroadcasts(prev => [newBroadcast, ...prev]);
-        addToast('Message dispatched across the commons.', 'success');
+        addToast('Protocol broadcast dispatched successfully.', 'success');
     } catch (error) {
-        addToast('Dispatch failed. Authority levels insufficient?', 'error');
+        addToast('Transmission failed. Authority levels check failed.', 'error');
         throw error;
     }
   };
@@ -123,99 +124,86 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
     </button>
   );
 
-  const renderVersionsView = () => (
-    <div className="glass-card p-8 rounded-[2.5rem] animate-fade-in border border-white/5">
-        <div className="flex justify-between items-center mb-8">
-            <div>
-                <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Protocol Versions</h2>
-                <p className="text-gray-500 text-sm mt-1">Manage network stability and logic rollbacks.</p>
-            </div>
-            <div className="px-4 py-2 bg-green-950/30 border border-green-500/30 rounded-xl">
-                 <p className="text-[10px] font-black text-green-400 tracking-[0.2em] uppercase">Status: Optimal</p>
-            </div>
-        </div>
-
-        <div className="space-y-4">
-            <div className="p-6 bg-white/[0.02] border border-white/5 rounded-3xl flex justify-between items-center group hover:bg-white/[0.04] transition-all">
-                <div className="flex gap-4 items-center">
-                    <div className="w-12 h-12 bg-brand-gold/10 rounded-2xl flex items-center justify-center border border-brand-gold/20">
-                        <ClockIcon className="h-6 w-6 text-brand-gold" />
-                    </div>
-                    <div>
-                        <p className="text-white font-bold tracking-tight">v2.5.0-ALPHA (Current)</p>
-                        <p className="text-xs text-gray-500 font-mono">Build ID: 20250524-COMMONS</p>
-                    </div>
-                </div>
-                <span className="text-[10px] font-black text-gray-600 tracking-widest uppercase">Active Protocol</span>
-            </div>
-
-            <div className="p-6 bg-white/[0.01] border border-white/5 rounded-3xl flex justify-between items-center group hover:border-blue-500/50 transition-all cursor-pointer">
-                <div className="flex gap-4 items-center">
-                    <div className="w-12 h-12 bg-blue-500/10 rounded-2xl flex items-center justify-center border border-blue-500/20">
-                        <ClockIcon className="h-6 w-6 text-blue-400" />
-                    </div>
-                    <div>
-                        <p className="text-gray-300 font-bold tracking-tight">v2.4.8 (Stable Legacy)</p>
-                        <p className="text-xs text-gray-600 font-mono">Build ID: 20250518-STABLE</p>
-                    </div>
-                </div>
-                <button className="px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black rounded-xl uppercase tracking-widest shadow-lg transition-all opacity-0 group-hover:opacity-100">Restore</button>
-            </div>
-
-            <div className="p-6 bg-white/[0.01] border border-white/5 rounded-3xl flex justify-between items-center group hover:border-blue-500/50 transition-all cursor-pointer text-gray-700">
-                <div className="flex gap-4 items-center">
-                    <div className="w-12 h-12 bg-slate-700/10 rounded-2xl flex items-center justify-center border border-white/5">
-                        <ClockIcon className="h-6 w-6 text-slate-700" />
-                    </div>
-                    <div>
-                        <p className="font-bold tracking-tight text-slate-700">v2.4.0 (Archived)</p>
-                        <p className="text-xs font-mono text-slate-800">Build ID: 20250510-PROD</p>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div className="mt-8 p-4 bg-red-950/20 border border-red-900/30 rounded-2xl flex gap-4 items-start">
-             <AlertTriangleIcon className="h-5 w-5 text-red-500 mt-1 flex-shrink-0" />
-             <p className="text-xs text-red-200/70 leading-relaxed italic">
-                Rollback warning: This will revert core network logic. User data is persistent, but UI behaviors and state handling will shift to the previous version immediately.
-             </p>
-        </div>
-    </div>
+  const renderVersionControl = () => (
+      <div className="space-y-8 animate-fade-in">
+          <div className="glass-card p-10 rounded-[3rem] border-white/5 space-y-6">
+              <h2 className="text-3xl font-black text-white tracking-tighter uppercase gold-text leading-none">Temporal Ledger</h2>
+              <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.4em]">Rollback & State Recovery Protocols</p>
+              
+              <div className="space-y-4 pt-6">
+                  {[
+                      { v: "2.5.0", label: "Identity Vault & QR Logic", date: "Present", active: true },
+                      { v: "2.4.8", label: "Pulse Hub Implementation", date: "2 hours ago", active: false },
+                      { v: "2.4.0", label: "Venture Marketplace Alpha", date: "Yesterday", active: false },
+                      { v: "2.0.0", label: "Core Node Architecture", date: "3 days ago", active: false }
+                  ].map((ver) => (
+                      <div key={ver.v} className={`p-6 rounded-[2rem] border border-white/5 flex justify-between items-center transition-all ${ver.active ? 'bg-brand-gold/10 border-brand-gold/20' : 'bg-black/40 hover:bg-black/60'}`}>
+                          <div className="flex items-center gap-6">
+                              <span className={`font-mono text-xl font-black ${ver.active ? 'text-brand-gold' : 'text-gray-600'}`}>v{ver.v}</span>
+                              <div>
+                                  <p className="font-black text-white text-sm uppercase tracking-widest">{ver.label}</p>
+                                  <p className="text-[10px] text-gray-500 uppercase font-bold mt-1">Snapshot Anchored: {ver.date}</p>
+                              </div>
+                          </div>
+                          {!ver.active ? (
+                              <button 
+                                onClick={() => addToast(`Initiating rollback sequence to v${ver.v}...`, "info")}
+                                className="px-6 py-3 bg-white/5 hover:bg-red-500 hover:text-white border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all"
+                              >
+                                  Revert State
+                              </button>
+                          ) : (
+                              <div className="flex items-center gap-2 text-green-500">
+                                  <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                                  <span className="text-[10px] font-black uppercase tracking-widest">Active Node</span>
+                              </div>
+                          )}
+                      </div>
+                  ))}
+              </div>
+          </div>
+      </div>
   );
 
   const renderActiveView = () => {
     switch (view) {
         case 'dashboard': return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={handleSendBroadcast} />;
-        case 'versions': return renderVersionsView();
+        case 'oracle': return (
+            <div className="space-y-8">
+                <EcocashVerificationAdmin purchases={pendingPurchases} adminUser={user} />
+                <LiquidationOracleAdmin requests={sellRequests} adminUser={user} />
+            </div>
+        );
+        case 'versions': return renderVersionControl();
         case 'profile': return <AdminProfile user={user} onUpdateUser={onUpdateUser} />;
         case 'feed': return ( <> <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView /><PostsFeed user={user} feedType="all" isAdminView onViewProfile={onViewProfile} typeFilter={typeFilter} /></> );
-        default: return <div className="text-center py-20 text-gray-500">Module [ {view.toUpperCase()} ] loading...</div>;
+        default: return <div className="text-center py-20 text-gray-500 uppercase tracking-widest font-black opacity-50">Module [ {view.toUpperCase()} ] loading...</div>;
     }
   };
 
   return (
-    <div className="space-y-10 animate-fade-in max-w-7xl mx-auto px-4">
+    <div className="space-y-10 animate-fade-in max-w-7xl mx-auto px-4 bg-transparent pb-20">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
           <div>
-              <h1 className="text-4xl font-black text-white tracking-tighter uppercase leading-none">Command Center</h1>
-              <p className="text-brand-gold text-xs font-black uppercase tracking-[0.3em] mt-3">Ubuntium Administrator Protocol</p>
+              <h1 className="text-4xl font-black text-white tracking-tighter uppercase leading-none gold-text">Command Center</h1>
+              <p className="text-brand-gold text-[10px] font-black uppercase tracking-[0.4em] mt-3">Ubuntium Network Authority Node</p>
           </div>
-          <div className="border-b border-white/10 w-full md:w-auto">
-              <nav className="-mb-px flex space-x-6 sm:space-x-8 overflow-x-auto no-scrollbar" aria-label="Tabs">
+          <div className="border-b border-white/10 w-full md:w-auto overflow-x-auto no-scrollbar">
+              <nav className="-mb-px flex space-x-6 sm:space-x-8" aria-label="Tabs">
                   <TabButton label="Operations" icon={<LayoutDashboardIcon/>} isActive={view === 'dashboard'} onClick={() => setView('dashboard')} />
-                  <TabButton label="Versions" icon={<ClockIcon/>} isActive={view === 'versions'} onClick={() => setView('versions')} />
-                  <TabButton label="Global Feed" icon={<MessageSquareIcon/>} isActive={view === 'feed'} onClick={() => setView('feed')} />
-                  <TabButton label="System Profile" icon={<UserCircleIcon/>} isActive={view === 'profile'} onClick={() => setView('profile')} />
+                  <TabButton label="Financial Oracle" icon={<DollarSignIcon/>} isActive={view === 'oracle'} count={pendingPurchases.length + sellRequests.filter(r => r.status === 'PENDING').length} onClick={() => setView('oracle')} />
+                  <TabButton label="Snapshots" icon={<HistoryIcon/>} isActive={view === 'versions'} onClick={() => setView('versions')} />
+                  <TabButton label="Global Pulse" icon={<MessageSquareIcon/>} isActive={view === 'feed'} onClick={() => setView('feed')} />
+                  <TabButton label="System" icon={<UserCircleIcon/>} isActive={view === 'profile'} onClick={() => setView('profile')} />
               </nav>
           </div>
       </div>
 
       <div className="mt-6">
           {isInitialLoading ? (
-             <div className="flex flex-col items-center justify-center p-20 glass-card rounded-[3rem]">
+             <div className="flex flex-col items-center justify-center p-20 glass-card rounded-[3rem] border border-white/5 shadow-2xl">
                 <LoaderIcon className="h-12 w-12 text-brand-gold animate-spin mb-6" />
-                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.5em]">Synchronizing Network State...</p>
+                <p className="text-[10px] font-black text-gray-400 uppercase tracking-[0.5em] animate-pulse">Synchronizing Global Commons Node...</p>
              </div>
           ) : renderActiveView()}
       </div>

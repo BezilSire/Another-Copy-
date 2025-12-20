@@ -2,10 +2,9 @@
 // Service Worker for Global Commons Network
 // Caches app shell and critical CDN dependencies for offline access.
 
-const STATIC_CACHE_NAME = 'gcn-static-v7';
-const DYNAMIC_CACHE_NAME = 'gcn-dynamic-v7';
+const STATIC_CACHE_NAME = 'gcn-static-v8';
+const DYNAMIC_CACHE_NAME = 'gcn-dynamic-v8';
 
-// 1. Files from our own project structure
 const APP_SHELL = [
   '/',
   '/index.html',
@@ -15,7 +14,6 @@ const APP_SHELL = [
   '/index.js' 
 ];
 
-// 2. External Libraries (Must match index.html import map)
 const EXTERNAL_LIBS = [
   'https://rsms.me/inter/inter.css',
   'https://cdn.tailwindcss.com',
@@ -31,13 +29,11 @@ const EXTERNAL_LIBS = [
   'https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js',
   'https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging.js',
   'https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js',
-  'https://www.gstatic.com/firebasejs/10.12.5/',
-  'https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/+esm',
-  'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm',
-  'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/+esm'
+  'https://esm.sh/tweetnacl@1.0.3',
+  'https://esm.sh/qrcode@1.5.3',
+  'https://esm.sh/html5-qrcode@2.3.8'
 ];
 
-// Hosts to never cache (API endpoints, real-time data)
 const IGNORED_HOSTS = [
   'googleapis.com', 
   'firestore.googleapis.com',
@@ -47,9 +43,7 @@ const IGNORED_HOSTS = [
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(STATIC_CACHE_NAME).then(cache => {
-      console.log('[Service Worker] Pre-caching App Shell & External Libs');
-      // We combine both lists. 
-      // Note: If any single URL fails to fetch, the entire install fails.
+      console.log('[Service Worker] Pre-caching Static Assets');
       return cache.addAll([...APP_SHELL, ...EXTERNAL_LIBS]);
     })
   );
@@ -62,7 +56,6 @@ self.addEventListener('activate', event => {
       return Promise.all(
         keys.map(key => {
           if (key !== STATIC_CACHE_NAME && key !== DYNAMIC_CACHE_NAME) {
-            console.log('[Service Worker] Removing old cache:', key);
             return caches.delete(key);
           }
         })
@@ -75,12 +68,29 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // 1. Ignore API calls / Firestore real-time streams
-  if (IGNORED_HOSTS.some(host => url.hostname.includes(host))) {
+  if (IGNORED_HOSTS.some(host => url.hostname.includes(host)) || event.request.method !== 'GET') {
     return;
   }
 
-  // 2. Cache-First Strategy for Static Assets (Shell + Ext Libs)
-  if (APP_SHELL.includes(url.pathname) || EXTERNAL_LIBS.includes(event.request.url)) {
-    event.respondWith(
-      caches.match(event.request).
+  event.respondWith(
+    caches.match(event.request).then(cachedResponse => {
+      if (cachedResponse) {
+        return cachedResponse;
+      }
+      return fetch(event.request).then(networkResponse => {
+        if (!networkResponse || networkResponse.status !== 200 || networkResponse.type !== 'basic') {
+          return networkResponse;
+        }
+        const responseToCache = networkResponse.clone();
+        caches.open(DYNAMIC_CACHE_NAME).then(cache => {
+          cache.put(event.request, responseToCache);
+        });
+        return networkResponse;
+      }).catch(() => {
+        if (event.request.mode === 'navigate') {
+          return caches.match('/offline.html');
+        }
+      });
+    })
+  );
+});

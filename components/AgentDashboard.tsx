@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { Agent, Member, NewMember, Broadcast, User, NotificationItem, PublicUserProfile } from '../types';
+import { Agent, Member, NewMember, Broadcast, User, NotificationItem, PublicUserProfile, SellRequest } from '../types';
 import { RegisterMemberForm } from './RegisterMemberForm';
 import { MemberList } from './MemberList';
 import { AgentProfile } from './AgentProfile';
@@ -16,9 +17,12 @@ import { DownloadIcon } from './icons/DownloadIcon';
 import { NotificationsPage } from './NotificationsPage';
 import { KnowledgeBasePage } from './KnowledgeBasePage';
 import { WalletPage } from './WalletPage';
+import { LiquidationBountyBoard } from './LiquidationBountyBoard';
+// FIX: Added missing import for TrendingUpIcon
+import { TrendingUpIcon } from './icons/TrendingUpIcon';
 
 
-type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge' | 'wallet';
+type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge' | 'wallet' | 'bounties';
 
 interface AgentDashboardProps {
   user: Agent;
@@ -29,8 +33,8 @@ interface AgentDashboardProps {
   onViewProfile: (userId: string | null) => void;
 }
 
-const StatCard: React.FC<{ icon: React.ReactNode; title: string; value: string | number; description: string }> = ({ icon, title, value, description }) => (
-  <div className="bg-slate-800 p-6 rounded-lg shadow-lg flex items-start">
+const StatCard: React.FC<{ icon: React.ReactNode; title: string; value: string | number; description: string; onClick?: () => void }> = ({ icon, title, value, description, onClick }) => (
+  <div onClick={onClick} className={`bg-slate-800 p-6 rounded-lg shadow-lg flex items-start ${onClick ? 'cursor-pointer hover:bg-slate-700 transition-colors' : ''}`}>
     <div className="flex-shrink-0 bg-slate-700 rounded-md p-3">
       {icon}
     </div>
@@ -46,6 +50,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
   const [members, setMembers] = useState<Member[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
+  const [sellRequests, setSellRequests] = useState<SellRequest[]>([]);
   
   // State for member list view
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,25 +62,20 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
       try {
         setIsLoading(true);
         const agentMembers = await api.getAgentMembers(user);
-        
-        // Get UIDs of members who have an associated user account
         const memberUids = agentMembers.filter(m => m.uid).map(m => m.uid as string);
 
         if (memberUids.length > 0) {
-            // Fetch the corresponding public user profiles to get their status
             const userProfiles = await api.getPublicUserProfilesByUids(memberUids);
             const userStatusMap = new Map(userProfiles.map(u => [u.id, u.status]));
-
-            // Enrich member data with the user status
             const enrichedMembers = agentMembers.map(member => {
                 if (member.uid && userStatusMap.has(member.uid)) {
                     return { ...member, status: userStatusMap.get(member.uid) };
                 }
-                return member; // Return as-is if no user profile (account not activated)
+                return member;
             });
             setMembers(enrichedMembers);
         } else {
-            setMembers(agentMembers); // No members have activated accounts yet
+            setMembers(agentMembers);
         }
       } catch (error) {
         addToast('Could not load your members.', 'error');
@@ -83,7 +83,11 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
         setIsLoading(false);
       }
     };
+    
+    const unsubBounties = api.listenToSellRequests(setSellRequests);
+
     fetchMembers();
+    return () => { unsubBounties(); };
   }, [user, addToast]);
   
 
@@ -95,7 +99,6 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred.';
       addToast(`Registration failed: ${errorMessage}`, 'error');
-      // Re-throw to keep the form's loading state correct
       throw error;
     }
   };
@@ -105,7 +108,6 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
         addToast('There are no members to export.', 'info');
         return;
     }
-    // Omit welcome_message and agent_id as it's redundant for the agent's own export
     const dataToExport = members.map(({ welcome_message, agent_id, ...rest }) => rest);
     exportToCsv(`my-registered-members-${new Date().toISOString().split('T')[0]}.csv`, dataToExport);
     addToast('Your member data is being downloaded.', 'info');
@@ -128,19 +130,21 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
       .toFixed(2);
   }, [members]);
 
+  const availableBounties = sellRequests.filter(r => r.status === 'PENDING').length;
+
   const renderDashboardView = () => (
     <div className="space-y-8 animate-fade-in">
       <div>
-        <h1 className="text-3xl font-bold text-white">Welcome, {user.name}!</h1>
-        <p className="text-lg text-gray-400">Here's a summary of your activity.</p>
+        <h1 className="text-3xl font-bold text-white tracking-tight">Welcome, {user.name}!</h1>
+        <p className="text-lg text-gray-400">Agent Node {user.agent_code}</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         <StatCard 
             icon={<UsersIcon className="h-6 w-6 text-green-400" />}
             title="Total Members"
             value={totalMembers}
-            description="All members you have registered."
+            description="Active registrations."
         />
         <StatCard 
             icon={<DollarSignIcon className="h-6 w-6 text-green-400" />}
@@ -149,10 +153,17 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
             description="From completed payments."
         />
         <StatCard 
+            icon={<TrendingUpIcon className="h-6 w-6 text-blue-400" />}
+            title="Bounty Board"
+            value={availableBounties}
+            description="Available liquidations."
+            onClick={() => setActiveView('bounties')}
+        />
+        <StatCard 
             icon={<BriefcaseIcon className="h-6 w-6 text-green-400" />}
             title="Your Circle"
             value={user.circle}
-            description="Primary area of operation."
+            description="Operation area."
         />
       </div>
 
@@ -258,6 +269,8 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
         return renderDashboardView();
       case 'members':
         return renderMembersView();
+      case 'bounties':
+        return <LiquidationBountyBoard user={user} requests={sellRequests} />;
       case 'profile':
         return renderProfileView();
       case 'notifications':

@@ -1,37 +1,23 @@
 
-import React, { useState, useMemo } from 'react';
-import { Post, User, Comment } from '../types';
-import { api } from '../services/apiService';
-import { useToast } from '../contexts/ToastContext';
+import React, { useState } from 'react';
+import { Post, User } from '../types';
 import { formatTimeAgo } from '../utils';
 import { ThumbsUpIcon } from './icons/ThumbsUpIcon';
-import { TrashIcon } from './icons/TrashIcon';
-import { PencilIcon } from './icons/PencilIcon';
-import { EditPostModal } from './EditPostModal';
-import { FlagIcon } from './icons/FlagIcon';
-import { ReportPostModal } from './ReportPostModal';
-import { ConfirmationDialog } from './ConfirmationDialog';
-import { UserCircleIcon } from './icons/UserCircleIcon';
-import { SirenIcon } from './icons/SirenIcon';
-import { RepeatIcon } from './icons/RepeatIcon';
 import { ShareIcon } from './icons/ShareIcon';
-import { RepostModal } from './RepostModal';
-import { LightbulbIcon } from './icons/LightbulbIcon';
-import { BriefcaseIcon } from './icons/BriefcaseIcon';
-import { UsersIcon } from './icons/UsersIcon';
 import { MessageCircleIcon } from './icons/MessageCircleIcon';
-import { SendIcon } from './icons/SendIcon';
 import { PinIcon } from './icons/PinIcon';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { LogoIcon } from './icons/LogoIcon';
 import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon';
+import { UserCircleIcon } from './icons/UserCircleIcon';
 
-const ActionButton: React.FC<{ icon: React.ReactNode; count?: number; onClick: (e: React.MouseEvent) => void; isActive?: boolean; activeColor?: string; label: string }> = 
-({ icon, count, onClick, isActive, activeColor = 'text-green-400', label }) => (
-    <button onClick={onClick} className={`flex items-center gap-2 px-3 py-1.5 rounded-full transition-all duration-200 hover:bg-white/5 ${isActive ? activeColor : 'text-gray-500'}`}>
-        <span className="flex-shrink-0">{icon}</span>
-        {count !== undefined && <span className="text-xs font-bold font-mono">{count}</span>}
+const ModuleAction: React.FC<{ icon: React.ReactNode; count?: number; onClick: (e: React.MouseEvent) => void; isActive?: boolean; activeColor?: string; label: string }> = 
+({ icon, count, onClick, isActive, activeColor = 'text-brand-gold', label }) => (
+    <button onClick={onClick} className={`flex items-center gap-2.5 px-4 py-2 rounded-lg transition-all duration-300 hover:bg-white/5 ${isActive ? `${activeColor} bg-brand-gold/10` : 'text-gray-500'}`}>
+        <span className="flex-shrink-0 opacity-80">{icon}</span>
+        {count !== undefined && <span className="data-mono text-[10px] font-bold">{count}</span>}
+        <span className="label-caps !text-[7px] !tracking-[0.2em]">{label}</span>
     </button>
 );
 
@@ -51,91 +37,78 @@ export const PostItem: React.FC<{
 ({ post, currentUser, onUpvote, onDelete, onEdit, onReport, onViewProfile, onRepost, onShare, onTogglePin, isAdminView }) => {
     const isOwnPost = post.authorId === currentUser.id;
     const hasUpvoted = post.upvotes.includes(currentUser.id);
-    const isDistressPost = post.types === 'distress';
     const [menuOpen, setMenuOpen] = useState(false);
 
     return (
-        <div className="bg-slate-900/40 backdrop-blur-md border border-white/5 rounded-3xl p-5 sm:p-6 transition-all hover:bg-slate-900/60 animate-fade-in">
-            <div className="flex gap-4">
-                <button onClick={() => !isDistressPost && onViewProfile(post.authorId)} className="flex-shrink-0 pt-1">
-                     <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-950 flex items-center justify-center border border-white/10 group overflow-hidden">
-                        {post.authorRole === 'admin' ? <LogoIcon className="h-7 w-7 text-brand-gold animate-float" /> : <UserCircleIcon className="h-8 w-8 text-gray-600 group-hover:text-white transition-colors" />}
+        <div className="module-frame glass-module rounded-lg p-6 sm:p-8 transition-all hover:border-brand-gold/30 animate-fade-in group relative overflow-hidden">
+            <div className="corner-tl opacity-20"></div><div className="corner-tr opacity-20"></div><div className="corner-bl opacity-20"></div><div className="corner-br opacity-20"></div>
+            
+            <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none data-mono text-[8px] uppercase">
+                Block_Ref: {post.id.substring(0,12)}
+            </div>
+            
+            <div className="flex gap-6 relative z-10">
+                <button onClick={() => onViewProfile(post.authorId)} className="flex-shrink-0 pt-1">
+                     <div className="w-14 h-14 rounded-lg bg-black flex items-center justify-center border border-white/10 group-hover:border-brand-gold/40 transition-all duration-700 shadow-2xl overflow-hidden relative">
+                        <div className="absolute inset-0 bg-gradient-to-tr from-brand-gold/10 to-transparent"></div>
+                        {post.authorRole === 'admin' ? <LogoIcon className="h-8 w-8 text-brand-gold" /> : <UserCircleIcon className="h-10 w-10 text-gray-700 group-hover:text-brand-gold/60 transition-colors" />}
                      </div>
                 </button>
                 
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start">
-                        <div className="flex flex-col">
+                        <div>
                             <div className="flex items-center gap-2">
-                                <button onClick={() => !isDistressPost && onViewProfile(post.authorId)} className="font-black text-white hover:text-brand-gold transition-colors truncate">
+                                <button onClick={() => onViewProfile(post.authorId)} className="font-black text-white hover:text-brand-gold transition-colors truncate tracking-tighter uppercase text-sm">
                                     {post.authorName}
                                 </button>
-                                {post.authorRole === 'admin' && <ShieldCheckIcon className="h-3.5 w-3.5 text-blue-400" />}
-                                {post.isPinned && <PinIcon className="h-3 w-3 text-brand-gold/70" />}
+                                {post.authorRole === 'admin' && <ShieldCheckIcon className="h-3 w-3 text-blue-500" />}
+                                {post.isPinned && <PinIcon className="h-3 w-3 text-brand-gold" />}
                             </div>
-                            <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 uppercase tracking-widest">
-                                <span>{post.authorCircle}</span>
-                                <span>&bull;</span>
-                                <span>{formatTimeAgo(post.date)}</span>
+                            <div className="flex items-center gap-3 mt-1.5">
+                                <span className="label-caps !text-[7px] text-brand-gold/80">{post.authorCircle}</span>
+                                <span className="w-1 h-1 rounded-full bg-white/10"></span>
+                                <span className="label-caps !text-[7px]">{formatTimeAgo(post.date)}</span>
                             </div>
                         </div>
                         
                         <div className="relative">
-                            <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 text-gray-600 hover:text-white transition-colors">
-                                <MoreHorizontalIcon className="h-5 w-5" />
+                            <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 text-gray-700 hover:text-white transition-colors bg-white/5 rounded-lg border border-white/5">
+                                <MoreHorizontalIcon className="h-4 w-4" />
                             </button>
                             {menuOpen && (
-                                <div className="absolute right-0 top-10 w-40 glass-card rounded-2xl shadow-premium z-20 py-2 border border-white/10 overflow-hidden">
-                                    {isOwnPost && <button onClick={() => {onEdit(post); setMenuOpen(false)}} className="w-full text-left px-4 py-2 text-sm text-gray-300 hover:bg-white/5 transition-colors">Edit Plan</button>}
-                                    {(isOwnPost || isAdminView) && <button onClick={() => {onDelete(post); setMenuOpen(false)}} className="w-full text-left px-4 py-2 text-sm text-red-400 hover:bg-white/5 transition-colors">Delete Entry</button>}
-                                    {!isOwnPost && <button onClick={() => {onReport(post); setMenuOpen(false)}} className="w-full text-left px-4 py-2 text-sm text-yellow-500 hover:bg-white/5 transition-colors">Flag Entry</button>}
-                                    {isAdminView && <button onClick={() => {onTogglePin(post); setMenuOpen(false)}} className="w-full text-left px-4 py-2 text-sm text-brand-gold-light hover:bg-white/5 transition-colors">{post.isPinned ? 'Unpin' : 'Pin to Top'}</button>}
+                                <div className="absolute right-0 top-12 w-48 bg-black border border-brand-gold/20 rounded-lg shadow-2xl z-50 py-2 backdrop-blur-3xl data-mono">
+                                    {isOwnPost && <button onClick={() => {onEdit(post); setMenuOpen(false)}} className="w-full text-left px-4 py-3 text-[9px] font-black uppercase tracking-widest text-gray-400 hover:text-brand-gold hover:bg-white/5 transition-all">Update_Entry</button>}
+                                    {(isOwnPost || isAdminView) && <button onClick={() => {onDelete(post); setMenuOpen(false)}} className="w-full text-left px-4 py-3 text-[9px] font-black uppercase tracking-widest text-red-900 hover:text-red-500 hover:bg-red-500/5 transition-all">Revoke_Dispatch</button>}
+                                    {!isOwnPost && <button onClick={() => {onReport(post); setMenuOpen(false)}} className="w-full text-left px-4 py-3 text-[9px] font-black uppercase tracking-widest text-yellow-900 hover:text-yellow-500 hover:bg-yellow-500/5 transition-all">Flag_Anomoly</button>}
                                 </div>
                             )}
                         </div>
                     </div>
                     
-                    <div className="mt-4 text-slate-200 text-base leading-relaxed wysiwyg-content">
+                    <div className="mt-6 text-gray-400 text-sm leading-relaxed wysiwyg-content font-medium opacity-90 group-hover:opacity-100 transition-opacity">
                         <MarkdownRenderer content={post.content} />
                     </div>
 
-                    {post.repostedFrom && (
-                         <div className="mt-4 p-4 border border-white/5 bg-white/[0.02] rounded-2xl">
-                            <div className="flex items-center gap-2 mb-2 text-xs font-bold text-gray-500 uppercase tracking-tighter">
-                                <UserCircleIcon className="h-4 w-4" />
-                                <span className="text-gray-400">{post.repostedFrom.authorName}</span>
-                            </div>
-                            <div className="text-gray-400 text-sm line-clamp-3">
-                                 <MarkdownRenderer content={post.repostedFrom.content} />
-                            </div>
-                        </div>
-                    )}
-                    
-                    <div className="flex justify-between items-center mt-6 pt-2 border-t border-white/5">
+                    <div className="flex justify-between items-center mt-8 pt-6 border-t border-white/5">
                         <div className="flex items-center gap-1 sm:gap-4">
-                            <ActionButton 
-                                icon={<ThumbsUpIcon className={`h-5 w-5 ${hasUpvoted ? 'fill-current' : ''}`} />} 
+                            <ModuleAction 
+                                icon={<ThumbsUpIcon className={`h-4 w-4 ${hasUpvoted ? 'fill-brand-gold text-brand-gold' : ''}`} />} 
                                 count={post.upvotes.length} 
                                 onClick={(e) => { e.stopPropagation(); onUpvote(post.id); }} 
                                 isActive={hasUpvoted} 
-                                activeColor="text-pink-500 shadow-glow-pink"
-                                label="Like"
+                                activeColor="text-brand-gold"
+                                label="Sync"
                             />
-                            <ActionButton 
-                                icon={<MessageCircleIcon className="h-5 w-5" />} 
+                            <ModuleAction 
+                                icon={<MessageCircleIcon className="h-4 w-4" />} 
                                 count={post.commentCount} 
                                 onClick={(e) => { e.stopPropagation(); }} 
-                                label="Comment"
-                            />
-                            <ActionButton 
-                                icon={<RepeatIcon className="h-5 w-5" />} 
-                                count={post.repostCount} 
-                                onClick={(e) => { e.stopPropagation(); onRepost(post); }} 
-                                label="Repost"
+                                label="Comms"
                             />
                         </div>
-                        <button onClick={() => onShare(post)} className="p-2 text-gray-500 hover:text-blue-400 transition-colors">
-                            <ShareIcon className="h-5 w-5" />
+                        <button onClick={() => onShare(post)} className="p-3 bg-white/5 hover:bg-brand-gold/20 rounded-lg text-gray-700 hover:text-brand-gold transition-all duration-500 border border-white/5">
+                            <ShareIcon className="h-4 w-4" />
                         </button>
                     </div>
                 </div>

@@ -1,4 +1,6 @@
+
 import React, { useState } from 'react';
+import { XCircleIcon } from './icons/XCircleIcon';
 
 interface ForgotPasswordFormProps {
   onReset: (email: string) => Promise<void>;
@@ -18,46 +20,49 @@ export const ForgotPasswordForm: React.FC<ForgotPasswordFormProps> = ({ onReset,
   };
 
   return (
-    <div className="bg-slate-800 p-8 rounded-lg shadow-lg">
-      <h2 className="text-2xl font-bold text-center text-white mb-2">Reset Your Password</h2>
-      <p className="text-gray-400 text-center mt-1 mb-6">Enter your email and we'll send you a link to get back into your account.</p>
+    <div className="module-frame glass-module p-8 sm:p-12 rounded-lg border-white/10 relative overflow-hidden shadow-2xl animate-fade-in">
+      <div className="corner-tl"></div><div className="corner-tr"></div><div className="corner-bl"></div><div className="corner-br"></div>
+      <div className="absolute inset-0 blueprint-grid opacity-[0.08] pointer-events-none"></div>
 
-      <form onSubmit={handleSubmit}>
-        <div className="mb-4">
-          <label className="block text-gray-300 text-sm font-bold mb-2" htmlFor="reset-email">
-            Email Address
-          </label>
-          <input
-            id="reset-email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="your-email@example.com"
-            required
-            disabled={isProcessing}
-          />
-        </div>
-        <div className="flex items-center justify-end">
-          <button
-            type="submit"
-            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-slate-500"
-            disabled={isProcessing}
-          >
-            {isProcessing ? 'Sending...' : 'Send Reset Link'}
-          </button>
-        </div>
-      </form>
+      <div className="relative z-10">
+        <h2 className="text-3xl font-black text-center text-white tracking-tighter uppercase gold-text leading-none mb-4">State Recovery</h2>
+        <p className="text-slate-300 text-center text-sm font-medium leading-relaxed mb-10">Enter your identity address to receive a recovery anchor link.</p>
 
-      <div className="text-center mt-6 pt-4 border-t border-slate-700">
-        <button
-          type="button"
-          onClick={onBack}
-          disabled={isProcessing}
-          className="inline-block align-baseline font-bold text-sm text-green-500 hover:text-green-400 disabled:opacity-50"
-        >
-          Back to Login
-        </button>
+        <form onSubmit={handleSubmit} className="space-y-8">
+            <div className="space-y-1.5">
+            <label className="label-caps block pl-1 !text-white" htmlFor="reset-email">
+                Identity Address
+            </label>
+            <input
+                id="reset-email"
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-slate-950/90 border border-white/20 rounded-lg py-4 px-6 text-white text-base focus:outline-none focus:ring-1 focus:ring-brand-gold transition-all placeholder-slate-500 data-mono"
+                placeholder="USER@PROTOCOL.ORG"
+                required
+                disabled={isProcessing}
+            />
+            </div>
+            
+            <div className="flex flex-col gap-4">
+                <button
+                    type="submit"
+                    className="w-full py-5 bg-brand-gold hover:bg-brand-gold-light text-black font-black rounded-lg transition-all active:scale-[0.98] shadow-glow-gold disabled:opacity-50 uppercase tracking-[0.4em] text-[11px]"
+                    disabled={isProcessing}
+                >
+                    {isProcessing ? 'Dispatching Recovery...' : 'Initiate State Recovery'}
+                </button>
+                <button
+                    type="button"
+                    onClick={onBack}
+                    disabled={isProcessing}
+                    className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 hover:text-white transition-colors py-2"
+                >
+                    Back to Handshake
+                </button>
+            </div>
+        </form>
       </div>
     </div>
   );

@@ -44,7 +44,7 @@ import {
     User, Agent, Member, NewMember, MemberUser, Broadcast, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
-    Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction
+    Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, P2POffer, PendingUbtPurchase, SellRequest
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -62,6 +62,9 @@ const vouchersCollection = collection(db, 'sustenance_vouchers');
 const venturesCollection = collection(db, 'ventures');
 const globalsCollection = collection(db, 'globals');
 const ledgerCollection = collection(db, 'ledger');
+const p2pCollection = collection(db, 'p2p_offers');
+const pendingPurchasesCollection = collection(db, 'pending_ubt_purchases');
+const sellRequestsCollection = collection(db, 'sell_requests');
 
 const _deletePostAndSubcollections = async (postId: string) => {
     const postRef = doc(postsCollection, postId);
@@ -198,18 +201,22 @@ export const api = {
     // Follow/Unfollow
     followUser: async (follower: User, targetUserId: string) => {
         try {
-            await updateDoc(doc(usersCollection, follower.id), { following: arrayUnion(targetUserId) });
-            await updateDoc(doc(usersCollection, targetUserId), { followers: arrayUnion(follower.id) });
+            const batch = writeBatch(db);
+            batch.update(doc(usersCollection, follower.id), { following: arrayUnion(targetUserId) });
+            batch.update(doc(usersCollection, targetUserId), { followers: arrayUnion(follower.id) });
             const notificationRef = doc(collection(db, 'users', targetUserId, 'notifications'));
-            await setDoc(notificationRef, {
+            batch.set(notificationRef, {
                 userId: targetUserId, message: `${follower.name} started following you.`, link: follower.id, read: false, timestamp: serverTimestamp(), type: 'NEW_FOLLOWER', causerId: follower.id
             });
+            await batch.commit();
         } catch (e) { console.error("Follow failed", e); throw e; }
     },
     unfollowUser: async (followerId: string, targetUserId: string) => {
         try {
-            await updateDoc(doc(usersCollection, followerId), { following: arrayRemove(targetUserId) });
-            await updateDoc(doc(usersCollection, targetUserId), { followers: arrayRemove(followerId) });
+            const batch = writeBatch(db);
+            batch.update(doc(usersCollection, followerId), { following: arrayRemove(targetUserId) });
+            batch.update(doc(usersCollection, targetUserId), { followers: arrayRemove(followerId) });
+            await batch.commit();
         } catch (error) { console.error("Unfollow user failed:", error); throw error; }
     },
     
@@ -223,31 +230,376 @@ export const api = {
             if (!senderDoc.exists()) throw new Error("Sender not found.");
             const currentBalance = senderDoc.data().ubtBalance || 0;
             if (currentBalance < transaction.amount) throw new Error("Insufficient funds.");
+            
             t.update(senderRef, { ubtBalance: increment(-transaction.amount) });
             t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
+            
+            // Public Ledger Entry
             const ledgerRef = doc(collection(db, 'ledger'));
             t.set(ledgerRef, { ...transaction, timestamp: serverTimestamp() });
             
-            // Log local history for sender
+            // Sender Private History
             const senderHistoryRef = doc(collection(db, 'users', transaction.senderId, 'transactions'));
             t.set(senderHistoryRef, { type: 'p2p_sent', amount: transaction.amount, reason: 'Sent $UBT', timestamp: serverTimestamp(), actorId: transaction.senderId, txHash: transaction.id });
             
-            // Log local history for receiver
+            // Receiver Private History
             const receiverHistoryRef = doc(collection(db, 'users', transaction.receiverId, 'transactions'));
             t.set(receiverHistoryRef, { type: 'p2p_received', amount: transaction.amount, reason: 'Received $UBT', timestamp: serverTimestamp(), actorId: transaction.senderId, txHash: transaction.id });
         });
     },
     
     getPublicLedger: async (limitCount: number = 20): Promise<any[]> => {
-        const q = query(ledgerCollection, orderBy('timestamp', 'desc'), limit(limitCount));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        try {
+            const q = query(ledgerCollection, orderBy('timestamp', 'desc'), limit(limitCount));
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        } catch (e: any) {
+            console.warn("Ledger query failed. Attempting basic listing.", e);
+            const qFallback = query(ledgerCollection, limit(limitCount));
+            const snapshot = await getDocs(qFallback);
+            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        }
     },
 
     getRichList: async (limitCount: number = 10): Promise<PublicUserProfile[]> => {
-        const q = query(usersCollection, orderBy('ubtBalance', 'desc'), limit(limitCount));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile));
+        try {
+            const q = query(usersCollection, orderBy('ubtBalance', 'desc'), limit(limitCount));
+            const snapshot = await getDocs(q);
+            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile));
+        } catch (e: any) {
+            console.warn("Rich list query failed. Attempting basic listing.", e);
+            const qFallback = query(usersCollection, limit(limitCount));
+            const snapshot = await getDocs(qFallback);
+            return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile));
+        }
+    },
+
+    // --- PULSE HUB / EXCHANGE LOGIC ---
+
+    listenToP2POffers: (callback: (offers: P2POffer[]) => void, onError: (e: Error) => void) => {
+        const q = query(p2pCollection, where('status', 'in', ['OPEN', 'LOCKED']), orderBy('createdAt', 'desc'));
+        return onSnapshot(q, s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as P2POffer))), onError);
+    },
+
+    createP2POffer: async (user: User, data: Omit<P2POffer, 'id' | 'sellerId' | 'sellerName' | 'status' | 'createdAt'>) => {
+        if (data.type === 'SELL') {
+            return runTransaction(db, async (t) => {
+                const userRef = doc(usersCollection, user.id);
+                const userDoc = await t.get(userRef);
+                const bal = userDoc.data()?.ubtBalance || 0;
+                if (bal < data.amount) throw new Error("Insufficient funds to create offer.");
+
+                // Lock the funds
+                t.update(userRef, { ubtBalance: increment(-data.amount) });
+                
+                const offerRef = doc(p2pCollection);
+                t.set(offerRef, {
+                    ...data,
+                    sellerId: user.id,
+                    sellerName: user.name,
+                    status: 'OPEN',
+                    createdAt: serverTimestamp()
+                });
+            });
+        } else {
+            // BUY offers don't lock UBT immediately but might require a trust score or deposit
+            await addDoc(p2pCollection, {
+                ...data,
+                sellerId: user.id,
+                sellerName: user.name,
+                status: 'OPEN',
+                createdAt: serverTimestamp()
+            });
+        }
+    },
+
+    takeP2POffer: async (user: User, offerId: string) => {
+        return runTransaction(db, async (t) => {
+            const offerRef = doc(p2pCollection, offerId);
+            const offerDoc = await t.get(offerRef);
+            if (!offerDoc.exists()) throw new Error("Offer disappeared.");
+            const offer = offerDoc.data() as P2POffer;
+            if (offer.status !== 'OPEN') throw new Error("Offer already taken.");
+            if (offer.sellerId === user.id) throw new Error("Cannot take your own offer.");
+
+            t.update(offerRef, {
+                status: 'LOCKED',
+                buyerId: user.id,
+                buyerName: user.name,
+                lockedAt: serverTimestamp()
+            });
+
+            // Notify seller
+            const notifRef = doc(collection(db, 'users', offer.sellerId, 'notifications'));
+            t.set(notifRef, {
+                userId: offer.sellerId, message: `${user.name} locked your P2P offer. Awaiting payment.`, link: 'pulse-hub', read: false, timestamp: serverTimestamp(), type: 'P2P_LOCKED', causerId: user.id
+            });
+        });
+    },
+
+    cancelP2POffer: async (user: User, offerId: string) => {
+        return runTransaction(db, async (t) => {
+            const offerRef = doc(p2pCollection, offerId);
+            const offerDoc = await t.get(offerRef);
+            if (!offerDoc.exists()) throw new Error("Offer not found.");
+            const offer = offerDoc.data() as P2POffer;
+            if (offer.sellerId !== user.id) throw new Error("Unauthorized.");
+            if (offer.status !== 'OPEN') throw new Error("Cannot cancel a locked or completed offer.");
+
+            if (offer.type === 'SELL') {
+                const userRef = doc(usersCollection, user.id);
+                t.update(userRef, { ubtBalance: increment(offer.amount) });
+            }
+            t.update(offerRef, { status: 'CANCELLED' });
+        });
+    },
+
+    completeP2PTrade: async (user: User, offerId: string) => {
+        return runTransaction(db, async (t) => {
+            const offerRef = doc(p2pCollection, offerId);
+            const offerDoc = await t.get(offerRef);
+            const offer = offerDoc.data() as P2POffer;
+            if (offer.sellerId !== user.id) throw new Error("Only the seller can confirm receipt.");
+            if (offer.status !== 'LOCKED') throw new Error("Trade is not in locked state.");
+
+            const buyerRef = doc(usersCollection, offer.buyerId!);
+            
+            // Release the UBT to the buyer
+            t.update(buyerRef, { ubtBalance: increment(offer.amount) });
+            t.update(offerRef, { status: 'COMPLETED' });
+
+            // Ledger Entries
+            const ledgerRef = doc(collection(db, 'ledger'));
+            t.set(ledgerRef, {
+                id: `p2p-${offerId}`,
+                senderId: offer.sellerId,
+                receiverId: offer.buyerId,
+                amount: offer.amount,
+                timestamp: serverTimestamp(),
+                type: 'P2P_HUB_EXCHANGE'
+            });
+
+            // History logs
+            t.set(doc(collection(db, 'users', offer.sellerId, 'transactions')), { type: 'p2p_sent', amount: offer.amount, reason: `Sold $UBT via P2P Hub`, timestamp: serverTimestamp(), actorId: offer.sellerId, txHash: offerId });
+            t.set(doc(collection(db, 'users', offer.buyerId!, 'transactions')), { type: 'p2p_received', amount: offer.amount, reason: `Bought $UBT via P2P Hub`, timestamp: serverTimestamp(), actorId: offer.sellerId, txHash: offerId });
+        });
+    },
+
+    ammSwap: async (user: User, type: 'BUY' | 'SELL', ubtAmount: number, usdAmount: number) => {
+        return runTransaction(db, async (t) => {
+            const userRef = doc(usersCollection, user.id);
+            const cvpRef = doc(globalsCollection, 'cvp');
+            const econRef = doc(globalsCollection, 'economy');
+            
+            const userDoc = await t.get(userRef);
+            const cvpDoc = await t.get(cvpRef);
+            const econDoc = await t.get(econRef);
+
+            const currentPrice = econDoc.data()?.ubt_to_usd_rate || 1.0;
+            const priceImpact = 0.0000001; 
+            const newPrice = type === 'BUY' 
+                ? currentPrice + (ubtAmount * priceImpact)
+                : currentPrice - (ubtAmount * priceImpact);
+
+            if (type === 'BUY') {
+                // INTERNAL swap only. Ecocash flow uses different logic.
+                t.update(userRef, { ubtBalance: increment(ubtAmount) });
+                t.update(cvpRef, { total_usd_value: increment(usdAmount) });
+                t.update(econRef, { ubt_in_cvp: increment(-ubtAmount), ubt_to_usd_rate: Math.max(0.01, newPrice) });
+            } else {
+                const userBalUbt = userDoc.data()?.ubtBalance || 0;
+                if (userBalUbt < ubtAmount) throw new Error("Insufficient UBT balance.");
+                
+                t.update(userRef, { ubtBalance: increment(-ubtAmount) });
+                t.update(cvpRef, { total_usd_value: increment(-usdAmount) });
+                t.update(econRef, { ubt_in_cvp: increment(ubtAmount), ubt_to_usd_rate: Math.max(0.01, newPrice) });
+            }
+
+            // Private logs
+            t.set(doc(collection(db, 'users', user.id, 'transactions')), {
+                type: 'amm_swap', 
+                amount: ubtAmount, 
+                reason: `${type} $UBT via Pulse Swap`, 
+                timestamp: serverTimestamp(), 
+                actorId: 'SYSTEM',
+                balanceAfter: (userDoc.data()?.ubtBalance || 0) + (type === 'BUY' ? ubtAmount : -ubtAmount)
+            });
+        });
+    },
+
+    // --- ECOCASH PURCHASES ---
+
+    createPendingUbtPurchase: async (user: User, amountUsd: number, amountUbt: number, ecocashRef: string) => {
+        await addDoc(pendingPurchasesCollection, {
+            userId: user.id,
+            userName: user.name,
+            amountUsd,
+            amountUbt,
+            ecocashRef,
+            status: 'PENDING',
+            createdAt: serverTimestamp()
+        });
+    },
+
+    listenForPendingPurchases: (callback: (purchases: PendingUbtPurchase[]) => void) => {
+        const q = query(pendingPurchasesCollection, where('status', '==', 'PENDING'), orderBy('createdAt', 'desc'));
+        return onSnapshot(q, s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))));
+    },
+
+    approveUbtPurchase: async (admin: User, purchase: PendingUbtPurchase) => {
+        return runTransaction(db, async (t) => {
+            const purchaseRef = doc(pendingPurchasesCollection, purchase.id);
+            const userRef = doc(usersCollection, purchase.userId);
+            const cvpRef = doc(globalsCollection, 'cvp');
+            const econRef = doc(globalsCollection, 'economy');
+
+            t.update(purchaseRef, { status: 'VERIFIED', verifiedAt: serverTimestamp() });
+            t.update(userRef, { ubtBalance: increment(purchase.amountUbt) });
+            t.update(cvpRef, { total_usd_value: increment(purchase.amountUsd) });
+            t.update(econRef, { ubt_in_cvp: increment(-purchase.amountUbt) });
+
+            // Ledger
+            const ledgerRef = doc(collection(db, 'ledger'));
+            t.set(ledgerRef, {
+                senderId: 'TREASURY',
+                receiverId: purchase.userId,
+                amount: purchase.amountUbt,
+                type: 'ECOCASH_ACQUISITION',
+                timestamp: serverTimestamp(),
+                id: `ec-${purchase.id}`
+            });
+
+            // History
+            t.set(doc(collection(db, 'users', purchase.userId, 'transactions')), {
+                type: 'credit',
+                amount: purchase.amountUbt,
+                reason: 'UBT Acquired via Ecocash',
+                timestamp: serverTimestamp(),
+                actorId: admin.id,
+                txHash: purchase.id
+            });
+        });
+    },
+
+    rejectUbtPurchase: async (purchaseId: string) => {
+        await updateDoc(doc(pendingPurchasesCollection, purchaseId), { status: 'REJECTED' });
+    },
+
+    // --- SELL PROTOCOL / LIQUIDATION ---
+
+    createSellRequest: async (user: User, amountUbt: number, amountUsd: number) => {
+        return runTransaction(db, async (t) => {
+            const userRef = doc(usersCollection, user.id);
+            const userDoc = await t.get(userRef);
+            const bal = userDoc.data()?.ubtBalance || 0;
+            if (bal < amountUbt) throw new Error("Insufficient node assets for liquidation.");
+
+            // Deduct immediately (Escrow Lock)
+            t.update(userRef, { ubtBalance: increment(-amountUbt) });
+
+            const sellRef = doc(sellRequestsCollection);
+            t.set(sellRef, {
+                userId: user.id,
+                userName: user.name,
+                userPhone: user.phone || 'N/A',
+                amountUbt,
+                amountUsd,
+                status: 'PENDING',
+                createdAt: serverTimestamp()
+            });
+
+            // History
+            t.set(doc(collection(db, 'users', user.id, 'transactions')), {
+                type: 'liquidation_lock',
+                amount: amountUbt,
+                reason: 'Assets Locked for Liquidation Protocol',
+                timestamp: serverTimestamp(),
+                actorId: 'SYSTEM',
+                txHash: sellRef.id
+            });
+        });
+    },
+
+    listenToSellRequests: (callback: (requests: SellRequest[]) => void) => {
+        const q = query(sellRequestsCollection, where('status', 'in', ['PENDING', 'CLAIMED', 'DISPATCHED']), orderBy('createdAt', 'desc'));
+        return onSnapshot(q, s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest))));
+    },
+
+    claimSellRequest: async (user: User, requestId: string) => {
+        const ref = doc(sellRequestsCollection, requestId);
+        await updateDoc(ref, {
+            status: 'CLAIMED',
+            claimerId: user.id,
+            claimerName: user.name,
+            claimerRole: user.role,
+            claimedAt: serverTimestamp()
+        });
+    },
+
+    dispatchSellPayment: async (user: User, requestId: string, ecocashRef: string) => {
+        const ref = doc(sellRequestsCollection, requestId);
+        await updateDoc(ref, {
+            status: 'DISPATCHED',
+            ecocashRef,
+            dispatchedAt: serverTimestamp()
+        });
+    },
+
+    completeSellRequest: async (user: User, request: SellRequest) => {
+        return runTransaction(db, async (t) => {
+            const sellRef = doc(sellRequestsCollection, request.id);
+            const claimerRef = doc(usersCollection, request.claimerId!);
+            const cvpRef = doc(globalsCollection, 'cvp');
+            const econRef = doc(globalsCollection, 'economy');
+
+            t.update(sellRef, { status: 'COMPLETED', completedAt: serverTimestamp() });
+
+            // If it was an agent claiming, they get the UBT. 
+            // If admin, it's burned/returned to pool
+            if (request.claimerRole === 'agent') {
+                t.update(claimerRef, { ubtBalance: increment(request.amountUbt) });
+                // Agent log
+                t.set(doc(collection(db, 'users', request.claimerId!, 'transactions')), {
+                    type: 'credit', amount: request.amountUbt, reason: 'UBT Acquired via Liquidation Bounty', timestamp: serverTimestamp(), actorId: request.userId, txHash: request.id
+                });
+            } else {
+                // Return to treasury
+                t.update(cvpRef, { total_usd_value: increment(-request.amountUsd) });
+                t.update(econRef, { ubt_in_cvp: increment(request.amountUbt) });
+            }
+
+            // Ledger
+            t.set(doc(collection(db, 'ledger')), {
+                senderId: request.userId,
+                receiverId: request.claimerId || 'TREASURY',
+                amount: request.amountUbt,
+                type: 'LIQUIDATION_SETTLEMENT',
+                timestamp: serverTimestamp(),
+                id: `liq-${request.id}`
+            });
+
+            // Member final log
+            t.set(doc(collection(db, 'users', request.userId, 'transactions')), {
+                type: 'liquidation_settled',
+                amount: request.amountUbt,
+                reason: 'Liquidation Protocol Settled',
+                timestamp: serverTimestamp(),
+                actorId: request.claimerId || 'TREASURY',
+                txHash: request.id
+            });
+        });
+    },
+
+    cancelSellRequest: async (user: User, requestId: string) => {
+        return runTransaction(db, async (t) => {
+            const sellRef = doc(sellRequestsCollection, requestId);
+            const sellDoc = await t.get(sellRef);
+            const req = sellDoc.data() as SellRequest;
+            if (req.status !== 'PENDING') throw new Error("Cannot cancel a claimed protocol.");
+
+            t.update(sellRef, { status: 'CANCELLED' });
+            t.update(doc(usersCollection, user.id), { ubtBalance: increment(req.amountUbt) });
+        });
     },
 
     // Admin
@@ -290,7 +642,7 @@ export const api = {
     updateMemberProfile: (memberId: string, data: Partial<Member>) => updateDoc(doc(membersCollection, memberId), data),
     
     approveMemberAndCreditUbt: async (admin: User, member: Member) => {
-        if (!member.uid) throw new Error("Member has no account.");
+        if (!member.uid) throw new Error("Member profile inactive.");
         return runTransaction(db, async (t) => {
             const memberRef = doc(membersCollection, member.id);
             const userRef = doc(usersCollection, member.uid!);
@@ -330,7 +682,7 @@ export const api = {
         await batch.commit();
     },
     sendDistressPost: async (user: MemberUser, content: string) => {
-        if (user.distress_calls_available <= 0) throw new Error("No distress calls available.");
+        if (user.distress_calls_available <= 0) throw new Error("No distress quota remaining.");
         const postRef = doc(postsCollection);
         const newPost: Omit<Post, 'id'> = { authorId: user.id, authorName: `Anonymous Member`, authorCircle: user.circle, authorRole: user.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress' };
         await setDoc(postRef, newPost);
@@ -498,7 +850,7 @@ export const api = {
     },
     closeProposal: (user: User, proposalId: string, status: 'passed' | 'failed') => updateDoc(doc(proposalsCollection, proposalId), { status }),
     getCurrentRedemptionCycle: async (): Promise<RedemptionCycle | null> => { const q = query(redemptionCyclesCollection, orderBy('endDate', 'desc'), limit(1)); const snapshot = await getDocs(q); return snapshot.empty ? null : {id: snapshot.docs[0].id, ...snapshot.docs[0].data()} as RedemptionCycle; },
-    listenForUserPayouts: (userId: string, callback: (payouts: PayoutRequest[]) => void, onError: (error: Error) => void) => onSnapshot(query(payoutsCollection, where('userId', '==', userId)), (snapshot) => { callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest)).sort((a, b) => (a.requestedAt?.toMillis() || 0) - (b.requestedAt?.toMillis() || 0))); }, onError),
+    listenForUserPayouts: (userId: string, callback: (payouts: PayoutRequest[]) => void, onError: (error: Error) => void) => onSnapshot(query(payoutsCollection, where('userId', '==', userId)), (snapshot) => { callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest)).sort((a, b) => (a.requestedAt?.toMillis() || 0) - (a.requestedAt?.toMillis() || 0))); }, onError),
     requestPayout: (user: User, ecocashName: string, ecocashNumber: string, amount: number) => addDoc(payoutsCollection, { userId: user.id, userName: user.name, type: 'referral', amount, ecocashName, ecocashNumber, status: 'pending', requestedAt: serverTimestamp() }),
     claimBonusPayout: (payoutId: string, ecocashName: string, ecocashNumber: string) => updateDoc(doc(payoutsCollection, payoutId), { ecocashName, ecocashNumber }),
     requestCommissionPayout: (user: User, ecocashName: string, ecocashNumber: string, amount: number) => {
@@ -540,6 +892,7 @@ export const api = {
             if (!ventureDoc.exists()) throw new Error("Venture not found.");
             
             const ticker = ventureDoc.data().ticker || 'VEQ';
+            // Conversion logic for simulation
             const shares = Math.floor(ccapAmount * ccapRate * 100); 
             
             t.update(userRef, {
@@ -589,7 +942,7 @@ export const api = {
         });
     },
     getVentureMembers: async (count: number): Promise<{ users: PublicUserProfile[] }> => {
-        const q = query(usersCollection, where('role', '==', 'member'), orderBy('createdAt', 'desc'), limit(count > 500 ? 500 : count));
+        const q = query(usersCollection, where('role', '==', 'member'), limit(count > 500 ? 500 : count));
         const snapshot = await getDocs(q);
         const users = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile));
         return { users: users.filter(u => u.isLookingForPartners === true) };

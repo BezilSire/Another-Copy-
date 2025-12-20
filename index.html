@@ -4,11 +4,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Global Commons Network</title>
+  <title>Ubuntium | Sovereign Protocol</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/logo.svg" type="image/svg+xml" sizes="any">
   <link rel="apple-touch-icon" href="/logo.svg">
-  <meta name="theme-color" id="theme-color-meta" content="#020617"/>
+  <meta name="theme-color" id="theme-color-meta" content="#000000"/>
   <script type="importmap">
 {
   "imports": {
@@ -25,10 +25,9 @@
     "firebase/functions": "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js",
     "firebase/": "https://www.gstatic.com/firebasejs/10.12.5/",
     "react-dom/": "https://aistudiocdn.com/react-dom@19.2.0/",
-    "tweetnacl": "https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/+esm",
-    "tweetnacl-util": "https://cdn.jsdelivr.net/npm/tweetnacl-util@0.15.1/+esm",
-    "qrcode": "https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm",
-    "html5-qrcode": "https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/+esm"
+    "tweetnacl": "https://esm.sh/tweetnacl@1.0.3?bundle",
+    "qrcode": "https://esm.sh/qrcode@1.5.3?bundle",
+    "html5-qrcode": "https://esm.sh/html5-qrcode@2.3.8?bundle"
   }
 }
 </script>
@@ -41,65 +40,151 @@
         extend: {
           fontFamily: {
             sans: ['Inter', 'sans-serif'],
+            mono: ['JetBrains Mono', 'Menlo', 'monospace'],
           },
           colors: {
             brand: {
               gold: '#D4AF37',
               'gold-light': '#FFD76A',
-              navy: '#020617',
-              slate: '#0f172a'
+              navy: '#000000',
+              slate: '#0a0a0a',
+              matrix: '#10b981'
             }
           },
           backgroundImage: {
-            'gradient-radial': 'radial-gradient(var(--tw-gradient-stops))',
-            'glass': 'linear-gradient(135deg, rgba(255, 255, 255, 0.05), rgba(255, 255, 255, 0))',
+            'protocol-gradient': 'radial-gradient(circle at 50% 50%, rgba(10, 10, 10, 0.8) 0%, rgba(0, 0, 0, 1) 100%)',
           },
           boxShadow: {
-            'glow-green': '0 0 20px -5px rgba(34, 197, 94, 0.5)',
-            'glow-gold': '0 0 20px -5px rgba(212, 175, 55, 0.5)',
-            'premium': '0 25px 50px -12px rgba(0, 0, 0, 0.7)',
+            'glow-gold': '0 0 40px -10px rgba(212, 175, 55, 0.2)',
+            'glow-matrix': '0 0 20px -5px rgba(16, 185, 129, 0.3)',
           },
           animation: {
-            'fade-in': 'fade-in 0.5s ease-out forwards',
-            'slide-up': 'slide-up 0.4s ease-out forwards',
+            'glitch': 'glitch 0.2s linear infinite',
+            'terminal-cursor': 'blink 1s step-end infinite',
           },
           keyframes: {
-            'fade-in': { '0%': { opacity: '0', transform: 'translateY(10px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
-            'slide-up': { '0%': { opacity: '0', transform: 'translateY(20px)' }, '100%': { opacity: '1', transform: 'translateY(0)' } },
+            glitch: {
+              '0%': { transform: 'translate(0)' },
+              '20%': { transform: 'translate(-2px, 2px)' },
+              '40%': { transform: 'translate(-2px, -2px)' },
+              '60%': { transform: 'translate(2px, 2px)' },
+              '80%': { transform: 'translate(2px, -2px)' },
+              '100%': { transform: 'translate(0)' },
+            },
+            blink: {
+              'from, to': { opacity: 1 },
+              '50%': { opacity: 0 },
+            }
           }
         },
       },
     }
   </script>
   <style>
-    body { background-color: #020617; color: #f8fafc; font-feature-settings: "cv02", "cv03", "cv04", "cv11"; }
-    .glass-card {
-      background: rgba(15, 23, 42, 0.6);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;700;800&display=swap');
+
+    body { 
+      background: #000000; 
+      color: #f8fafc; 
+      overflow-x: hidden;
+      position: relative;
     }
-    .premium-input {
-      background: rgba(0, 0, 0, 0.2);
+    
+    #incision-layer {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      z-index: -1;
+      overflow: hidden;
+    }
+
+    .blueprint-grid {
+      position: absolute;
+      inset: 0;
+      background-image: 
+        linear-gradient(rgba(212, 175, 55, 0.05) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(212, 175, 55, 0.05) 1px, transparent 1px);
+      background-size: 40px 40px;
+    }
+
+    /* Viewfinder Brackets */
+    .module-frame {
+      position: relative;
       border: 1px solid rgba(255, 255, 255, 0.1);
-      transition: all 0.2s ease;
     }
-    .premium-input:focus {
-      border-color: #D4AF37;
-      box-shadow: 0 0 0 1px #D4AF37;
-      background: rgba(0, 0, 0, 0.4);
+    .module-frame::before, .module-frame::after,
+    .module-frame > .corner-tl, .module-frame > .corner-tr,
+    .module-frame > .corner-bl, .module-frame > .corner-br {
+      content: '';
+      position: absolute;
+      width: 12px;
+      height: 12px;
+      border-color: rgba(212, 175, 55, 0.6);
+      border-style: solid;
+      pointer-events: none;
     }
-    .no-scrollbar::-webkit-scrollbar { display: none; }
-    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-    .wysiwyg-content h1 { font-size: 1.75rem; font-weight: 900; color: white; margin: 1.5rem 0; letter-spacing: -0.025em; }
-    .wysiwyg-content p { color: #94a3b8; line-height: 1.7; margin-bottom: 1rem; }
-    .gold-glow-text {
-      text-shadow: 0 0 8px rgba(212, 175, 55, 0.4);
+    .corner-tl { top: -1px; left: -1px; border-width: 2px 0 0 2px; }
+    .corner-tr { top: -1px; right: -1px; border-width: 2px 2px 0 0; }
+    .corner-bl { bottom: -1px; left: -1px; border-width: 0 0 2px 2px; }
+    .corner-br { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; }
+
+    .glass-module {
+      background: rgba(10, 10, 10, 0.85) !important;
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+    }
+
+    .gold-text {
+      background: linear-gradient(to bottom, #FFD76A, #D4AF37);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      filter: drop-shadow(0 0 5px rgba(212, 175, 55, 0.3));
+    }
+
+    .matrix-text {
+      color: #34d399;
+      text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+    }
+
+    .label-caps {
+      text-transform: uppercase;
+      letter-spacing: 0.35em;
+      font-size: 0.65rem;
+      font-weight: 900;
+      color: #cbd5e1; /* Increased contrast from #64748b */
+    }
+
+    .data-mono {
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: #000000; }
+    ::-webkit-scrollbar-thumb { background: #334155; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #D4AF37; }
+
+    .scan-line {
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 1px;
+      background: rgba(212, 175, 55, 0.15);
+      box-shadow: 0 0 15px rgba(212, 175, 55, 0.3);
+      animation: scan-move 10s linear infinite;
+      z-index: 100;
+    }
+
+    @keyframes scan-move {
+      from { transform: translateY(-100%); }
+      to { transform: translateY(100vh); }
     }
   </style>
 </head>
-<body class="dark overflow-x-hidden antialiased">
+<body class="dark antialiased">
+  <div id="incision-layer">
+    <div class="blueprint-grid"></div>
+    <div class="scan-line"></div>
+    <div class="vignette" style="position: absolute; inset: 0; background: radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.9) 100%);"></div>
+  </div>
   <div id="root"></div>
   <script type="module" src="/index.js"></script>
 </body>

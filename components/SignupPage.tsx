@@ -1,10 +1,10 @@
+
 import React, { useState } from 'react';
 import { Agent } from '../types';
 import { LogoIcon } from './icons/LogoIcon';
 import { EyeIcon } from './icons/EyeIcon';
 import { EyeOffIcon } from './icons/EyeOffIcon';
 
-// FIX: Define a specific type for signup credentials as the Agent type doesn't contain a password.
 type SignupCredentials = Pick<Agent, 'name' | 'email' | 'circle'> & {
   password: string;
 };
@@ -24,107 +24,99 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, isProcessing, 
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSignup({ name, email, password, circle }).catch(() => {
-        // Errors are handled by the context
-    });
+    await onSignup({ name, email, password, circle }).catch(() => {});
   };
 
   return (
-    <div className="bg-slate-800 p-8 rounded-lg shadow-lg">
-      <div className="flex flex-col items-center mb-6">
-        <LogoIcon className="h-12 w-12 text-green-500" />
-        <h2 className="text-2xl font-bold text-center text-white mt-4">Create Agent Account 🇿🇼</h2>
+    <div className="module-frame glass-module p-8 sm:p-12 rounded-lg border-white/10 relative overflow-hidden shadow-2xl">
+      <div className="corner-tl"></div><div className="corner-tr"></div><div className="corner-bl"></div><div className="corner-br"></div>
+      <div className="absolute inset-0 blueprint-grid opacity-[0.08] pointer-events-none"></div>
+      
+      <div className="flex flex-col items-center mb-10 relative z-10">
+        <div className="w-20 h-20 bg-black rounded-2xl border border-brand-gold/40 flex items-center justify-center shadow-glow-gold mb-4">
+            <LogoIcon className="h-10 w-10 text-brand-gold" />
+        </div>
+        <h2 className="text-3xl font-black text-center text-white tracking-tighter uppercase gold-text leading-none">Registration</h2>
+        <p className="label-caps mt-3 !text-brand-gold text-center">New Agent Node Protocol</p>
       </div>
-      <form onSubmit={handleSubmit}>
-        <div className="mb-4">
-          <label className="block text-gray-300 text-sm font-bold mb-2" htmlFor="name">
-            Full Name
-          </label>
-          <input
-            id="name"
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
-            required
-            disabled={isProcessing}
+
+      <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
+        <div className="space-y-1.5">
+          <label className="label-caps block pl-1 !text-white" htmlFor="name">Full Designation</label>
+          <input 
+            id="name" 
+            type="text" 
+            value={name} 
+            onChange={(e) => setName(e.target.value)} 
+            className="w-full bg-slate-950/90 border border-white/20 rounded-lg py-3.5 px-6 text-white text-base focus:outline-none focus:ring-1 focus:ring-brand-gold transition-all placeholder-slate-500" 
+            placeholder="ENTER LEGAL NAME" 
+            required 
+            disabled={isProcessing} 
           />
         </div>
-        <div className="mb-4">
-          <label className="block text-gray-300 text-sm font-bold mb-2" htmlFor="email">
-            Email
-          </label>
-          <input
-            id="email"
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
-            required
-            disabled={isProcessing}
+
+        <div className="space-y-1.5">
+          <label className="label-caps block pl-1 !text-white" htmlFor="email">Comms Address</label>
+          <input 
+            id="email" 
+            type="email" 
+            value={email} 
+            onChange={(e) => setEmail(e.target.value)} 
+            className="w-full bg-slate-950/90 border border-white/20 rounded-lg py-3.5 px-6 text-white text-base focus:outline-none focus:ring-1 focus:ring-brand-gold transition-all placeholder-slate-500" 
+            placeholder="NODE@PROTOCOL.ORG" 
+            required 
+            disabled={isProcessing} 
           />
         </div>
-        <div className="mb-4">
-          <label className="block text-gray-300 text-sm font-bold mb-2" htmlFor="circle">
-            Circle (Area of Operation)
-          </label>
-          <input
-            id="circle"
-            type="text"
-            value={circle}
-            onChange={(e) => setCircle(e.target.value)}
-            className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
-            placeholder="e.g., Bulawayo"
-            required
-            disabled={isProcessing}
+
+        <div className="space-y-1.5">
+          <label className="label-caps block pl-1 !text-white" htmlFor="circle">Operational Circle</label>
+          <input 
+            id="circle" 
+            type="text" 
+            value={circle} 
+            onChange={(e) => setCircle(e.target.value)} 
+            className="w-full bg-slate-950/90 border border-white/20 rounded-lg py-3.5 px-6 text-white text-base focus:outline-none focus:ring-1 focus:ring-brand-gold transition-all placeholder-slate-500" 
+            placeholder="CITY / AREA NODES" 
+            required 
+            disabled={isProcessing} 
           />
         </div>
-        <div className="mb-6">
-          <label className="block text-gray-300 text-sm font-bold mb-2" htmlFor="password">
-            Password
-          </label>
+
+        <div className="space-y-1.5">
+          <label className="label-caps block pl-1 !text-white" htmlFor="password">Security Anchor</label>
           <div className="relative">
-            <input
-              id="password"
-              type={isPasswordVisible ? 'text' : 'password'}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              className="shadow appearance-none border border-slate-600 bg-slate-700 rounded w-full py-2 px-3 text-white pr-10 leading-tight focus:outline-none focus:ring-2 focus:ring-green-500"
-              required
-              minLength={6}
-              disabled={isProcessing}
+            <input 
+                id="password" 
+                type={isPasswordVisible ? 'text' : 'password'} 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
+                className="w-full bg-slate-950/90 border border-white/20 rounded-lg py-3.5 px-6 text-white text-base pr-12 focus:outline-none focus:ring-1 focus:ring-brand-gold transition-all placeholder-slate-500" 
+                placeholder="STRICT KEY REQUIRED"
+                required 
+                minLength={6} 
+                disabled={isProcessing} 
             />
-            <button
-              type="button"
-              onClick={() => setIsPasswordVisible((prev) => !prev)}
-              className="absolute inset-y-0 right-0 px-3 flex items-center text-gray-400 hover:text-gray-200"
-              aria-label={isPasswordVisible ? 'Hide password' : 'Show password'}
-            >
-              {isPasswordVisible ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
+            <button type="button" onClick={() => setIsPasswordVisible((prev) => !prev)} className="absolute inset-y-0 right-0 px-4 flex items-center text-slate-400 hover:text-brand-gold transition-colors">
+              {isPasswordVisible ? <EyeOffIcon className="h-4 w-4" /> : <EyeIcon className="h-4 w-4" />}
             </button>
           </div>
         </div>
-        <div className="text-xs text-gray-400 mb-6 p-3 bg-slate-900/50 rounded-md border border-slate-700">
-            <strong>Note:</strong> After signing up, you will be required to provide your Phone Number, ID Card Number, and Address for account verification and to receive commission payouts.
-        </div>
-        <div className="flex items-center justify-between">
-          <button
-            type="submit"
-            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline disabled:bg-slate-500"
-            disabled={isProcessing}
-          >
-            {isProcessing ? 'Creating Account...' : 'Sign Up'}
-          </button>
-          <button
-            type="button"
-            onClick={onSwitchToLogin}
-            disabled={isProcessing}
-            className="inline-block align-baseline font-bold text-sm text-green-500 hover:text-green-400 disabled:opacity-50"
-          >
-            Already have an account? Login
-          </button>
-        </div>
+
+        <button
+          type="submit"
+          className="w-full py-5 bg-brand-gold hover:bg-brand-gold-light text-black font-black rounded-lg transition-all active:scale-[0.98] shadow-glow-gold disabled:opacity-50 uppercase tracking-[0.4em] text-[11px] mt-4 flex justify-center items-center gap-3"
+          disabled={isProcessing}
+        >
+          {isProcessing ? "Deploying Node..." : "Initiate Deployment"}
+        </button>
       </form>
+
+      <div className="mt-10 text-center relative z-10 border-t border-white/10 pt-8">
+          <button type="button" onClick={onSwitchToLogin} className="text-[11px] font-black uppercase tracking-[0.3em] text-slate-400 hover:text-white transition-colors">
+            Existing Authority? Secure Login
+          </button>
+      </div>
     </div>
   );
 };

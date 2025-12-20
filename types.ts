@@ -1,3 +1,4 @@
+
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -380,11 +381,13 @@ export interface GlobalEconomy {
     ubtRedemptionWindowOpen?: boolean;
     ubtRedemptionWindowStartedAt?: Timestamp;
     ubtRedemptionWindowClosesAt?: Timestamp;
+    total_ubt_supply: number;
+    ubt_in_cvp: number;
 }
 
 export interface Transaction {
     id: string;
-    type: 'credit' | 'debit' | 'p2p_sent' | 'p2p_received';
+    type: 'credit' | 'debit' | 'p2p_sent' | 'p2p_received' | 'amm_swap' | 'liquidation_lock' | 'liquidation_settled';
     amount: number;
     reason: string;
     timestamp: Timestamp;
@@ -412,4 +415,52 @@ export interface UbtTransaction {
 export interface LedgerViewParams {
     type: 'tx' | 'address';
     value: string;
+}
+
+// Pulse Hub / Exchange Types
+export interface P2POffer {
+    id: string;
+    sellerId: string;
+    sellerName: string;
+    type: 'BUY' | 'SELL';
+    amount: number;
+    pricePerUnit: number; // in USD
+    totalPrice: number;
+    paymentMethod: string;
+    status: 'OPEN' | 'LOCKED' | 'COMPLETED' | 'CANCELLED';
+    buyerId?: string;
+    buyerName?: string;
+    createdAt: Timestamp;
+    lockedAt?: Timestamp;
+    escrowTxId?: string;
+}
+
+export interface PendingUbtPurchase {
+    id: string;
+    userId: string;
+    userName: string;
+    amountUsd: number;
+    amountUbt: number;
+    ecocashRef: string;
+    status: 'PENDING' | 'VERIFIED' | 'REJECTED';
+    createdAt: Timestamp;
+    verifiedAt?: Timestamp;
+}
+
+export interface SellRequest {
+    id: string;
+    userId: string;
+    userName: string;
+    userPhone: string;
+    amountUbt: number;
+    amountUsd: number;
+    status: 'PENDING' | 'CLAIMED' | 'DISPATCHED' | 'COMPLETED' | 'CANCELLED';
+    createdAt: Timestamp;
+    claimerId?: string;
+    claimerName?: string;
+    claimerRole?: UserRole;
+    ecocashRef?: string;
+    claimedAt?: Timestamp;
+    dispatchedAt?: Timestamp;
+    completedAt?: Timestamp;
 }

@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { Html5QrcodeScanner } from 'html5-qrcode';
@@ -9,6 +8,8 @@ import { useToast } from '../contexts/ToastContext';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
 import { QrCodeIcon } from './icons/QrCodeIcon';
+// FIX: Added missing import for UserCircleIcon
+import { UserCircleIcon } from './icons/UserCircleIcon';
 
 interface UBTScanProps {
     currentUser: User;
@@ -140,6 +141,7 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
             return;
         }
 
+        // FIX: Replaced non-existent setIsSending with defined setIsProcessing
         setIsProcessing(true);
         try {
             // 1. Construct Transaction Payload

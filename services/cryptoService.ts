@@ -1,27 +1,18 @@
 
 import * as tweetnacl from 'tweetnacl';
 
-// Robustly resolve the nacl object, checking for 'default' export or direct attachment
-// This handles different ESM environment behaviors
 const nacl = (tweetnacl as any).default || tweetnacl;
 
 const SIGN_SECRET_KEY_STORAGE = 'gcn_sign_secret_key';
 const SIGN_PUBLIC_KEY_STORAGE = 'gcn_sign_public_key';
 
 interface KeyPair {
-    publicKey: string; // Base64
-    secretKey: string; // Base64
+    publicKey: string;
+    secretKey: string;
 }
 
-// --- Native Helpers (Replaces tweetnacl-util) ---
-
-const encodeUTF8 = (s: string): Uint8Array => {
-    return new TextEncoder().encode(s);
-};
-
-const decodeUTF8 = (arr: Uint8Array): string => {
-    return new TextDecoder().decode(arr);
-};
+const encodeUTF8 = (s: string): Uint8Array => new TextEncoder().encode(s);
+const decodeUTF8 = (arr: Uint8Array): string => new TextDecoder().decode(arr);
 
 const encodeBase64 = (arr: Uint8Array): string => {
     let binary = '';
@@ -34,7 +25,6 @@ const encodeBase64 = (arr: Uint8Array): string => {
 
 const decodeBase64 = (s: string): Uint8Array => {
     try {
-        // Remove any whitespace
         const cleanString = s.replace(/\s/g, '');
         const binary_string = window.atob(cleanString);
         const len = binary_string.length;
@@ -44,17 +34,11 @@ const decodeBase64 = (s: string): Uint8Array => {
         }
         return bytes;
     } catch (e) {
-        console.error("Failed to decode Base64", e);
         return new Uint8Array(0);
     }
 };
 
-// --- Service Implementation ---
-
 export const cryptoService = {
-    /**
-     * Generates or retrieves a persistent signing key pair (Ed25519).
-     */
     getOrGenerateSigningKeys: (): KeyPair => {
         const storedSecret = localStorage.getItem(SIGN_SECRET_KEY_STORAGE);
         const storedPublic = localStorage.getItem(SIGN_PUBLIC_KEY_STORAGE);
@@ -63,9 +47,7 @@ export const cryptoService = {
             return { publicKey: storedPublic, secretKey: storedSecret };
         }
 
-        // Ensure nacl.sign exists before calling it
         if (!nacl || !nacl.sign) {
-            console.error("TweetNaCl library not loaded correctly.");
             throw new Error("Crypto library initialization failed.");
         }
 
@@ -80,54 +62,88 @@ export const cryptoService = {
     },
 
     getPublicKey: (): string | null => {
-        return localStorage.getItem(SIGN_PUBLIC_KEY_STORAGE);
+        const stored = localStorage.getItem(SIGN_PUBLIC_KEY_STORAGE);
+        if (stored) return stored;
+        try {
+            return cryptoService.getOrGenerateSigningKeys().publicKey;
+        } catch (e) {
+            return null;
+        }
     },
 
-    /**
-     * Signs a transaction payload string.
-     * Returns the signature in Base64.
-     */
+    importSecretKey: (secretKeyBase64: string): KeyPair => {
+        const secretKey = decodeBase64(secretKeyBase64);
+        const keyPair = nacl.sign.keyPair.fromSecretKey(secretKey);
+        const publicKeyBase64 = encodeBase64(keyPair.publicKey);
+        
+        localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, publicKeyBase64);
+        localStorage.setItem(SIGN_SECRET_KEY_STORAGE, secretKeyBase64);
+        
+        return { publicKey: publicKeyBase64, secretKey: secretKeyBase64 };
+    },
+
     signTransaction: (payload: string): string => {
         const keys = cryptoService.getOrGenerateSigningKeys();
         const secretKey = decodeBase64(keys.secretKey);
         const messageUint8 = encodeUTF8(payload);
-        
         const signature = nacl.sign.detached(messageUint8, secretKey);
         return encodeBase64(signature);
     },
 
-    /**
-     * Verifies a signature against a public key.
-     */
-    verifySignature: (payload: string, signatureBase64: string, publicKeyBase64: string): boolean => {
-        try {
-            const publicKey = decodeBase64(publicKeyBase64);
-            const signature = decodeBase64(signatureBase64);
-            const message = encodeUTF8(payload);
-            
-            return nacl.sign.detached.verify(message, signature, publicKey);
-        } catch (e) {
-            console.error("Verification error:", e);
-            return false;
-        }
-    },
-
-    /**
-     * Creates a unique nonce for transaction uniqueness
-     */
     generateNonce: (): string => {
         const array = new Uint8Array(12);
         window.crypto.getRandomValues(array);
         return encodeBase64(array);
     },
 
-    /**
-     * Resets the local wallet keys. 
-     * WARNING: This results in loss of control over the previous identity if not backed up.
-     */
-    resetKeys: (): KeyPair => {
-        localStorage.removeItem(SIGN_PUBLIC_KEY_STORAGE);
-        localStorage.removeItem(SIGN_SECRET_KEY_STORAGE);
-        return cryptoService.getOrGenerateSigningKeys();
+    hashData: async (data: string): Promise<string> => {
+        const msgUint8 = encodeUTF8(data);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    },
+
+    // Password-based Vault Encryption
+    encryptVault: async (password: string): Promise<string> => {
+        const keys = cryptoService.getOrGenerateSigningKeys();
+        const enc = new TextEncoder();
+        const pwHash = await crypto.subtle.importKey('raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']);
+        const salt = window.crypto.getRandomValues(new Uint8Array(16));
+        const key = await crypto.subtle.deriveKey(
+            { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+            pwHash,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt']
+        );
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(keys.secretKey));
+        
+        const vaultObj = {
+            v: 1,
+            iv: encodeBase64(iv),
+            salt: encodeBase64(salt),
+            data: encodeBase64(new Uint8Array(ciphertext))
+        };
+        return JSON.stringify(vaultObj);
+    },
+
+    decryptVault: async (vaultJson: string, password: string): Promise<string> => {
+        const vault = JSON.parse(vaultJson);
+        const enc = new TextEncoder();
+        const pwHash = await crypto.subtle.importKey('raw', enc.encode(password), { name: 'PBKDF2' }, false, ['deriveKey']);
+        const key = await crypto.subtle.deriveKey(
+            { name: 'PBKDF2', salt: decodeBase64(vault.salt), iterations: 100000, hash: 'SHA-256' },
+            pwHash,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['decrypt']
+        );
+        const decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: decodeBase64(vault.iv) },
+            key,
+            decodeBase64(vault.data)
+        );
+        return new TextDecoder().decode(decrypted);
     }
 };
