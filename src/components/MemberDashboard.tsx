@@ -1,5 +1,7 @@
+
+
 import React, { useState, useEffect } from 'react';
-import { MemberUser, Conversation, User, NotificationItem, FilterType } from '../types';
+import { MemberUser, Conversation, User, NotificationItem, FilterType, LedgerViewParams } from '../types';
 import { MemberBottomNav } from './MemberBottomNav';
 import { PostsFeed } from './PostsFeed';
 import { NewPostModal } from './NewPostModal';
@@ -18,8 +20,6 @@ import { SustenancePage } from './SustenancePage';
 import { NotificationsPage } from './NotificationsPage';
 import { EarnPage } from './EarnPage';
 import { ProjectLaunchpad } from './ProjectLaunchpad';
-import { MarkdownRenderer } from './MarkdownRenderer';
-import { formatTimeAgo } from '../utils';
 import { PostTypeFilter } from './PostTypeFilter';
 import { VerificationHub } from './VerificationHub';
 import { VerificationRedirectModal } from './VerificationRedirectModal';
@@ -27,8 +27,11 @@ import { WalletPage } from './WalletPage';
 import { ChatsPage } from './ChatsPage';
 import { MemberSearchModal } from './MemberSearchModal';
 import { CreateGroupModal } from './CreateGroupModal';
+import { LedgerPage } from './LedgerPage';
+import { CommunityHubSidebar } from './CommunityHubSidebar';
+import { RightSidebar } from './RightSidebar';
 
-type MemberView = 'home' | 'ventures' | 'community' | 'more' | 'profile' | 'knowledge' | 'pitch' | 'myinvestments' | 'sustenance' | 'earn' | 'notifications' | 'launchpad' | 'wallet' | 'chats';
+type MemberView = 'home' | 'ventures' | 'community' | 'more' | 'profile' | 'knowledge' | 'pitch' | 'myinvestments' | 'sustenance' | 'earn' | 'notifications' | 'launchpad' | 'wallet' | 'chats' | 'ledger';
 
 interface MemberDashboardProps {
   user: MemberUser;
@@ -36,9 +39,10 @@ interface MemberDashboardProps {
   unreadCount: number;
   onLogout: () => void;
   onViewProfile: (userId: string | null) => void;
+  initialLedgerTarget?: LedgerViewParams;
 }
 
-export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdateUser, unreadCount, onLogout, onViewProfile }) => {
+export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdateUser, unreadCount, onLogout, onViewProfile, initialLedgerTarget }) => {
   const [view, setView] = useState<MemberView>('home');
   const [isNewPostModalOpen, setIsNewPostModalOpen] = useState(false);
   const [isDistressModalOpen, setIsDistressModalOpen] = useState(false);
@@ -47,10 +51,19 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
   const [typeFilter, setTypeFilter] = useState<FilterType>('foryou');
   const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   
-  // Chat state for internal dashboard view
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isNewGroupModalOpen, setIsNewGroupModalOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<Conversation | null>(null);
+
+  // Local state for ledger nav
+  const [localLedgerTarget, setLocalLedgerTarget] = useState<LedgerViewParams | undefined>(initialLedgerTarget);
+
+  useEffect(() => {
+    if (initialLedgerTarget) {
+      setLocalLedgerTarget(initialLedgerTarget);
+      setView('ledger');
+    }
+  }, [initialLedgerTarget]);
 
   const handlePostCreated = (ccapAwarded: number) => {
     if (ccapAwarded > 0) {
@@ -66,7 +79,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
     try {
       await api.sendDistressPost(user, content);
       addToast('Distress call sent. Your circle has been notified.', 'success');
-      await onUpdateUser({}); // Trigger user refresh to update distress call count
+      await onUpdateUser({}); 
       setIsDistressModalOpen(false);
     } catch (error) {
       addToast(error instanceof Error ? error.message : 'Failed to send distress call.', 'error');
@@ -90,20 +103,23 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
     setIsNewChatModalOpen(false);
   };
 
-  const renderContent = () => {
+  const renderMainContent = () => {
     switch (view) {
       case 'home':
         return (
-            <>
+            <div className="space-y-6">
               {user.status !== 'active' && (
                 <VerificationHub 
                   onGetVerifiedClick={() => setIsVerificationModalOpen(true)}
                   onLearnMoreClick={() => setView('knowledge')}
                 />
               )}
-              <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} />
+              {/* Mobile Filter */}
+              <div className="md:hidden">
+                 <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} />
+              </div>
               <PostsFeed user={user} onViewProfile={onViewProfile as (userId: string) => void} typeFilter={typeFilter} />
-            </>
+            </div>
           );
       case 'chats':
         return (
@@ -121,6 +137,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
         );
       case 'wallet':
         return <WalletPage user={user} />;
+      case 'ledger': 
+        return <LedgerPage initialTarget={localLedgerTarget} />;
       case 'ventures':
         return <VenturesPage currentUser={user} onViewProfile={onViewProfile as (userId: string) => void} onNavigateToPitchAssistant={() => setView('pitch')} />;
       case 'pitch':
@@ -144,27 +162,57 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       case 'launchpad':
         return <ProjectLaunchpad />;
       default:
-        return (
-            <>
-              <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} />
-              <PostsFeed user={user} onViewProfile={onViewProfile as (userId: string) => void} typeFilter={typeFilter} />
-            </>
-        );
+        return null;
     }
   };
 
   return (
-    <>
-      <div className="pb-24"> 
-        {renderContent()}
+    <div className="min-h-screen bg-slate-900 pb-20 md:pb-0">
+      <div className="max-w-7xl mx-auto px-0 sm:px-4 lg:px-8">
+        <div className="grid grid-cols-1 md:grid-cols-12 gap-6 pt-6">
+            
+            {/* Left Sidebar (Desktop Only) */}
+            <div className="hidden md:block md:col-span-3 lg:col-span-3">
+                <div className="sticky top-24">
+                    <CommunityHubSidebar 
+                        activeView={view} 
+                        onChangeView={setView} 
+                        user={user} 
+                        currentFilter={typeFilter}
+                        onFilterChange={setTypeFilter}
+                    />
+                </div>
+            </div>
+
+            {/* Center Content */}
+            <div className="col-span-1 md:col-span-9 lg:col-span-6">
+                <div className="min-h-[80vh]">
+                     {renderMainContent()}
+                </div>
+            </div>
+
+            {/* Right Sidebar (Desktop Only) */}
+            <div className="hidden lg:block lg:col-span-3">
+                <div className="sticky top-24">
+                    <RightSidebar user={user} />
+                </div>
+            </div>
+        </div>
       </div>
-      <MemberBottomNav activeView={view as any} setActiveView={setView as any} unreadNotificationCount={unreadCount} />
+
+      {/* Mobile Nav */}
+      <div className="md:hidden">
+         <MemberBottomNav activeView={view as any} setActiveView={setView as any} unreadNotificationCount={unreadCount} />
+      </div>
+
+      {/* Floating Action (Mobile only usually, but good for quick access) */}
       <FloatingActionMenu
         onNewPostClick={() => setIsNewPostModalOpen(true)}
         onDistressClick={() => setIsDistressModalOpen(true)}
         user={user}
       />
       
+      {/* Modals */}
       {isNewChatModalOpen && (
         <MemberSearchModal 
             isOpen={isNewChatModalOpen} 
@@ -201,7 +249,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       <VerificationRedirectModal 
         isOpen={isVerificationModalOpen}
         onClose={() => setIsVerificationModalOpen(false)}
+        buyUrl="https://ubuntium.org/founder-id" // Pass the URL here
       />
-    </>
+    </div>
   );
 };

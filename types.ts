@@ -1,4 +1,3 @@
-
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -53,6 +52,7 @@ export interface User {
   ubtBalance?: number; // UBT Wallet Balance
   initialUbtStake?: number; // The initial UBT stake for verification
   fcmToken?: string; // Firebase Cloud Messaging Token
+  publicKey?: string; // Ed25519 Public Key
   
   // Social & Network
   followers?: string[]; // Array of User IDs
@@ -261,6 +261,8 @@ export interface PublicUserProfile extends Partial<User> {
     followers?: string[];
     following?: string[];
     socialLinks?: { title: string; url: string }[];
+    publicKey?: string;
+    ubtBalance?: number;
 }
 
 // Proposals
@@ -392,4 +394,22 @@ export interface Transaction {
     relatedUserName?: string;
     balanceBefore?: number;
     balanceAfter?: number;
+    txHash?: string;
+}
+
+export interface UbtTransaction {
+    id: string; // UUID
+    senderId: string;
+    receiverId: string;
+    amount: number;
+    timestamp: number;
+    nonce: string; // Random nonce to prevent replay
+    signature: string; // Base64 encoded signature
+    hash: string; // The data that was signed
+    status?: 'pending' | 'verified' | 'failed';
+}
+
+export interface LedgerViewParams {
+    type: 'tx' | 'address';
+    value: string;
 }

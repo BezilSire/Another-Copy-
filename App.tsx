@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -29,6 +28,7 @@ import { UbtVerificationPage } from './components/UbtVerificationPage';
 import { usePushNotifications } from './hooks/usePushNotifications';
 import { NotificationPermissionBanner } from './components/NotificationPermissionBanner';
 import { RadarModal } from './components/RadarModal';
+import { UBTScan } from './components/UBTScan';
 
 
 type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge' | 'wallet';
@@ -51,6 +51,7 @@ const App: React.FC = () => {
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isNewGroupModalOpen, setIsNewGroupModalOpen] = useState(false);
   const [isRadarOpen, setIsRadarOpen] = useState(false);
+  const [isScanOpen, setIsScanOpen] = useState(false);
 
   useProfileCompletionReminder(currentUser);
   const { permission, requestPermission } = usePushNotifications(currentUser);
@@ -334,6 +335,7 @@ const App: React.FC = () => {
         onViewProfile={handleViewProfile} 
         onChatClick={() => handleOpenChat('main')}
         onRadarClick={() => setIsRadarOpen(true)} 
+        onScanClick={() => setIsScanOpen(true)}
       />
       {renderContent()}
       
@@ -348,6 +350,14 @@ const App: React.FC = () => {
             currentUser={currentUser}
             onViewProfile={handleViewProfile}
             onStartChat={handleStartChatFromProfile}
+        />
+      )}
+
+      {currentUser && isScanOpen && (
+        <UBTScan
+            currentUser={currentUser}
+            onTransactionComplete={() => {}} // Listener handles update
+            onClose={() => setIsScanOpen(false)}
         />
       )}
 

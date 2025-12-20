@@ -9,6 +9,7 @@ import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { WifiOffIcon } from './icons/WifiOffIcon';
 import { ThemeToggle } from './ThemeToggle';
 import { GlobalSearch } from './GlobalSearch';
+import { QrCodeIcon } from './icons/QrCodeIcon';
 
 interface HeaderProps {
   user: User | null;
@@ -16,88 +17,69 @@ interface HeaderProps {
   onViewProfile: (userId: string) => void;
   onChatClick?: () => void;
   onRadarClick?: () => void;
+  onScanClick?: () => void;
 }
 
-const OfflineIndicator: React.FC = () => (
-    <div className="flex items-center space-x-2 bg-slate-200 dark:bg-slate-700 px-3 py-1 rounded-full text-xs font-medium text-slate-600 dark:text-gray-300">
-        <WifiOffIcon className="h-4 w-4 text-slate-500 dark:text-gray-400" />
-        <span className="hidden sm:inline">Offline</span>
-    </div>
-);
-
-export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, onChatClick, onRadarClick }) => {
+export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, onChatClick, onRadarClick, onScanClick }) => {
   const isOnline = useOnlineStatus();
 
   return (
-    <header className="bg-white dark:bg-slate-800 shadow-lg sticky top-0 z-30 border-b border-gray-200 dark:border-slate-700">
-      <div className="max-w-7xl mx-auto px-2 sm:px-6 lg:px-8">
-        <div className="flex justify-between items-center py-2 gap-2">
+    <header className="bg-slate-950/80 backdrop-blur-xl border-b border-white/5 sticky top-0 z-50">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between items-center h-16 gap-4">
           
-          {/* Logo Section */}
-          <div className="flex items-center space-x-2 flex-shrink-0">
-            <LogoIcon className="h-9 w-9 text-green-500" />
-            <div className="hidden lg:block">
-              <div className="flex items-center">
-                <h1 className="text-lg font-bold text-slate-900 dark:text-white">Commons</h1>
-                <span className="ml-2 px-1.5 py-0.5 bg-blue-600 text-white text-[10px] font-bold rounded-full uppercase">Beta</span>
-              </div>
+          <div className="flex items-center space-x-3 flex-shrink-0">
+            <div className="p-1 bg-white/5 rounded-xl border border-white/10 shadow-glow-gold">
+                <LogoIcon className="h-8 w-8 text-brand-gold" />
+            </div>
+            <div className="hidden sm:block">
+              <h1 className="text-lg font-black text-white tracking-tighter uppercase">Ubuntium</h1>
             </div>
           </div>
           
-          {/* Search Section */}
           {user && (
-            <div className="flex-1 max-w-lg mx-2">
+            <div className="flex-1 max-w-xl mx-2 hidden md:block">
                <GlobalSearch onViewProfile={onViewProfile} />
             </div>
           )}
 
-          {/* Actions Section */}
-          <div className="flex items-center space-x-2 flex-shrink-0">
-            
-            {/* FORCE VISIBLE: Radar Button */}
-            {user && onRadarClick && (
-                <button 
-                    onClick={onRadarClick}
-                    className="flex flex-col sm:flex-row items-center justify-center p-2 sm:px-3 sm:py-2 bg-slate-700 hover:bg-slate-600 text-green-400 rounded-md shadow-sm border border-slate-600 transition-all active:scale-95"
-                    title="Open Connection Radar"
-                >
-                    <TargetIcon className="h-5 w-5 sm:mr-1.5" />
-                    <span className="text-[10px] sm:text-sm font-bold">Radar</span>
-                </button>
-            )}
-
-            {/* FORCE VISIBLE: Chat Button */}
-            {user && onChatClick && (
-                <button 
-                    onClick={onChatClick}
-                    className="flex flex-col sm:flex-row items-center justify-center p-2 sm:px-3 sm:py-2 bg-green-600 hover:bg-green-700 text-white rounded-md shadow-sm border border-green-500 transition-all active:scale-95"
-                    title="Open Chats"
-                >
-                    <MessageSquareIcon className="h-5 w-5 sm:mr-1.5" />
-                    <span className="text-[10px] sm:text-sm font-bold">Chats</span>
-                </button>
-            )}
-
-            {!isOnline && <OfflineIndicator />}
-            
-            <div className="hidden sm:block">
-                <ThemeToggle />
-            </div>
-
-            {user ? (
-              <div className="flex items-center space-x-2 ml-1">
-                <div className="hidden md:flex items-center space-x-2">
-                  <UserCircleIcon className="h-8 w-8 text-slate-500 dark:text-gray-400" />
+          <div className="flex items-center space-x-3 flex-shrink-0">
+            {user && (
+                <div className="flex items-center bg-slate-900/50 p-1 rounded-2xl border border-white/5">
+                    {onScanClick && (
+                        <button onClick={onScanClick} className="p-2 text-gray-400 hover:text-green-400 hover:bg-white/5 rounded-xl transition-all active:scale-90" title="Scan">
+                            <QrCodeIcon className="h-5 w-5" />
+                        </button>
+                    )}
+                    {onRadarClick && (
+                        <button onClick={onRadarClick} className="p-2 text-gray-400 hover:text-brand-gold-light hover:bg-white/5 rounded-xl transition-all active:scale-90" title="Radar">
+                            <TargetIcon className="h-5 w-5" />
+                        </button>
+                    )}
+                    {onChatClick && (
+                        <button onClick={onChatClick} className="p-2 text-gray-400 hover:text-blue-400 hover:bg-white/5 rounded-xl transition-all active:scale-90" title="Chats">
+                            <MessageSquareIcon className="h-5 w-5" />
+                        </button>
+                    )}
                 </div>
-                <button
-                  onClick={onLogout}
-                  className="px-3 py-1.5 border border-slate-600 text-xs font-medium rounded-md text-white bg-slate-700 hover:bg-red-900 transition-colors"
-                >
-                  Logout
+            )}
+
+            {!isOnline && (
+                <div className="flex items-center space-x-1.5 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-full text-[10px] font-bold text-red-400 uppercase tracking-widest animate-pulse">
+                    <WifiOffIcon className="h-3 w-3" />
+                    <span>Offline</span>
+                </div>
+            )}
+
+            {user && (
+              <div className="flex items-center space-x-3 ml-2 pl-3 border-l border-white/10">
+                <button onClick={() => onViewProfile(user.id)} className="focus:outline-none ring-2 ring-transparent hover:ring-brand-gold/50 rounded-full transition-all">
+                    <UserCircleIcon className="h-8 w-8 text-gray-500 hover:text-white" />
+                </button>
+                <button onClick={onLogout} className="hidden lg:block text-[10px] font-bold text-gray-500 hover:text-white uppercase tracking-widest transition-colors">
+                  Exit
                 </button>
               </div>
-            ) : (
-                <div className="h-8"></div>
             )}
           </div>
         </div>

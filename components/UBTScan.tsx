@@ -1,0 +1,281 @@
+
+import React, { useState, useEffect, useRef } from 'react';
+import QRCode from 'qrcode';
+import { Html5QrcodeScanner } from 'html5-qrcode';
+import { User, UbtTransaction } from '../types';
+import { cryptoService } from '../services/cryptoService';
+import { api } from '../services/apiService';
+import { useToast } from '../contexts/ToastContext';
+import { LoaderIcon } from './icons/LoaderIcon';
+import { XCircleIcon } from './icons/XCircleIcon';
+import { QrCodeIcon } from './icons/QrCodeIcon';
+
+interface UBTScanProps {
+    currentUser: User;
+    onTransactionComplete: () => void;
+    onClose: () => void;
+}
+
+type Mode = 'show_code' | 'scan_code';
+
+export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComplete, onClose }) => {
+    const [mode, setMode] = useState<Mode>('show_code');
+    const [qrUrl, setQrUrl] = useState('');
+    const [scannedData, setScannedData] = useState<string | null>(null);
+    const [isProcessing, setIsProcessing] = useState(false);
+    const [sendAmount, setSendAmount] = useState('');
+    const { addToast } = useToast();
+    
+    // Ref for the scanner container
+    const scannerRef = useRef<HTMLDivElement>(null);
+    const scannerInstanceRef = useRef<any>(null);
+
+    // Generate My QR Code
+    useEffect(() => {
+        if (mode === 'show_code' && currentUser.publicKey) {
+            const payload = JSON.stringify({
+                id: currentUser.id,
+                name: currentUser.name,
+                key: currentUser.publicKey
+            });
+            
+            // Check if QRCode is loaded correctly
+            if (QRCode && QRCode.toDataURL) {
+                QRCode.toDataURL(payload, { 
+                    width: 300,
+                    margin: 2,
+                    color: {
+                        dark: '#0f172a',
+                        light: '#ffffff'
+                    }
+                })
+                .then(url => setQrUrl(url))
+                .catch(err => {
+                    console.error("QR Generation Error:", err);
+                    addToast("Failed to generate QR Code.", "error");
+                });
+            } else {
+                 console.error("QRCode library not loaded properly.");
+            }
+        }
+    }, [mode, currentUser, addToast]);
+
+    // Initialize Scanner
+    useEffect(() => {
+        if (mode === 'scan_code' && scannerRef.current) {
+            // Cleanup previous instance if exists
+            if (scannerInstanceRef.current) {
+                try {
+                    scannerInstanceRef.current.clear();
+                } catch (e) {
+                    console.error("Failed to clear scanner", e);
+                }
+            }
+
+            try {
+                const scanner = new Html5QrcodeScanner(
+                    "reader", 
+                    { fps: 10, qrbox: { width: 250, height: 250 } },
+                    false
+                );
+                
+                scanner.render(onScanSuccess, onScanFailure);
+                scannerInstanceRef.current = scanner;
+            } catch (err) {
+                console.error("Scanner initialization failed:", err);
+                addToast("Camera access failed or library error.", "error");
+            }
+
+            return () => {
+                try {
+                    scannerInstanceRef.current?.clear().catch((e: any) => console.error("Scanner clear error", e));
+                } catch (e) {
+                    // Ignore cleanup errors
+                }
+            };
+        }
+    }, [mode, addToast]);
+
+    const onScanSuccess = (decodedText: string) => {
+        try {
+            // Attempt to parse the scanned data
+            // Expected format: JSON { id, name, key }
+            const data = JSON.parse(decodedText);
+            if (data.id && data.key) {
+                setScannedData(decodedText); // Store raw JSON string
+                if (scannerInstanceRef.current) {
+                    scannerInstanceRef.current.pause(); // Pause scanning
+                }
+            } else {
+                 // Don't spam toast on invalid codes, just ignore or log
+                 console.warn("Invalid QR format");
+            }
+        } catch (e) {
+            console.error("Scan error", e);
+        }
+    };
+
+    const onScanFailure = (error: any) => {
+        // console.warn(`Code scan error = ${error}`);
+    };
+
+    const handleSend = async () => {
+        if (!scannedData || !sendAmount) return;
+        
+        const receiver = JSON.parse(scannedData);
+        const amount = parseFloat(sendAmount);
+        
+        if (isNaN(amount) || amount <= 0) {
+            addToast("Please enter a valid amount.", "error");
+            return;
+        }
+        
+        if (amount > (currentUser.ubtBalance || 0)) {
+            addToast("Insufficient funds.", "error");
+            return;
+        }
+
+        setIsProcessing(true);
+        try {
+            // 1. Construct Transaction Payload
+            const timestamp = Date.now();
+            const nonce = cryptoService.generateNonce();
+            
+            // This string is what gets signed. It MUST match the reconstruction on the server.
+            const payloadToSign = `${currentUser.id}:${receiver.id}:${amount}:${timestamp}:${nonce}`;
+            
+            // 2. Sign it offline (Client-side)
+            const signature = cryptoService.signTransaction(payloadToSign);
+            
+            // 3. Create Transaction Object
+            // Use a safer ID generation for compatibility
+            const txId = Date.now().toString(36) + Math.random().toString(36).substring(2);
+            
+            const transaction: UbtTransaction = {
+                id: txId, 
+                senderId: currentUser.id,
+                receiverId: receiver.id,
+                amount: amount,
+                timestamp: timestamp,
+                nonce: nonce,
+                signature: signature,
+                hash: payloadToSign // Send the payload string for verification
+            };
+
+            // 4. Sync to Server (The "Node")
+            await api.processUbtTransaction(transaction);
+            
+            addToast(`Sent ${amount} UBT to ${receiver.name}!`, "success");
+            onTransactionComplete();
+            onClose();
+
+        } catch (error) {
+            console.error(error);
+            const msg = error instanceof Error ? error.message : "Transaction failed";
+            addToast(msg, "error");
+            if (scannerInstanceRef.current) {
+                scannerInstanceRef.current.resume();
+            }
+        } finally {
+            setIsProcessing(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 z-50 bg-slate-900 flex flex-col animate-fade-in">
+            {/* Header */}
+            <div className="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800">
+                <div className="flex items-center gap-2">
+                    <QrCodeIcon className="h-6 w-6 text-green-400" />
+                    <h2 className="text-lg font-bold text-white">$UBT Scan</h2>
+                </div>
+                <button onClick={onClose} className="text-gray-400 hover:text-white">
+                    <XCircleIcon className="h-8 w-8" />
+                </button>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex p-2 bg-slate-800 gap-2">
+                <button 
+                    onClick={() => { setMode('show_code'); setScannedData(null); }}
+                    className={`flex-1 py-2 rounded-md text-sm font-semibold transition-colors ${mode === 'show_code' ? 'bg-green-600 text-white' : 'bg-slate-700 text-gray-300'}`}
+                >
+                    My Code
+                </button>
+                <button 
+                    onClick={() => { setMode('scan_code'); setScannedData(null); }}
+                    className={`flex-1 py-2 rounded-md text-sm font-semibold transition-colors ${mode === 'scan_code' ? 'bg-green-600 text-white' : 'bg-slate-700 text-gray-300'}`}
+                >
+                    Scan & Pay
+                </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 flex flex-col items-center justify-center p-6 overflow-y-auto">
+                {mode === 'show_code' ? (
+                    <div className="text-center w-full max-w-sm">
+                        <div className="bg-white p-4 rounded-xl shadow-lg mx-auto mb-6">
+                            {qrUrl ? (
+                                <img src={qrUrl} alt="My UBT QR Code" className="w-full h-auto" />
+                            ) : (
+                                <div className="h-64 flex items-center justify-center">
+                                    <LoaderIcon className="h-8 w-8 animate-spin text-slate-900" />
+                                </div>
+                            )}
+                        </div>
+                        <h3 className="text-xl font-bold text-white">{currentUser.name}</h3>
+                        <p className="text-green-400 font-mono text-sm mt-1 break-all">
+                            {currentUser.publicKey ? `${currentUser.publicKey.substring(0, 16)}...` : 'Generating Identity...'}
+                        </p>
+                        <p className="text-gray-400 text-sm mt-4">
+                            Show this code to receive $UBT securely.
+                        </p>
+                    </div>
+                ) : (
+                    <div className="w-full max-w-md">
+                        {!scannedData ? (
+                            <div id="reader" className="bg-slate-800 rounded-lg overflow-hidden border border-slate-600"></div>
+                        ) : (
+                            <div className="bg-slate-800 p-6 rounded-lg shadow-lg animate-fade-in">
+                                <h3 className="text-lg font-bold text-white mb-4">Payment Details</h3>
+                                <div className="mb-4 p-3 bg-slate-700 rounded-md">
+                                    <p className="text-xs text-gray-400">Receiver</p>
+                                    <p className="text-white font-semibold">{JSON.parse(scannedData).name}</p>
+                                    <p className="text-xs text-green-400 font-mono truncate">{JSON.parse(scannedData).key}</p>
+                                </div>
+                                
+                                <div className="mb-6">
+                                    <label className="block text-sm font-medium text-gray-300 mb-1">Amount ($UBT)</label>
+                                    <input 
+                                        type="number" 
+                                        value={sendAmount} 
+                                        onChange={e => setSendAmount(e.target.value)}
+                                        className="w-full bg-slate-900 border border-slate-600 rounded-md p-3 text-white text-lg focus:ring-green-500 focus:border-green-500"
+                                        placeholder="0.00"
+                                        autoFocus
+                                    />
+                                </div>
+                                
+                                <div className="flex gap-3">
+                                    <button 
+                                        onClick={() => { setScannedData(null); if(scannerInstanceRef.current) scannerInstanceRef.current.resume(); }}
+                                        className="flex-1 py-3 bg-slate-700 text-white rounded-md font-semibold hover:bg-slate-600"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        onClick={handleSend}
+                                        disabled={isProcessing || !sendAmount}
+                                        className="flex-1 py-3 bg-green-600 text-white rounded-md font-bold hover:bg-green-700 disabled:bg-slate-600 flex justify-center items-center"
+                                    >
+                                        {isProcessing ? <LoaderIcon className="h-5 w-5 animate-spin" /> : 'Sign & Send'}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+};

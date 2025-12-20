@@ -1,5 +1,6 @@
+
 import React, { useState, useMemo, useRef } from 'react';
-import { Admin, User, Member, Agent, Report, Broadcast, Activity, PayoutRequest, Venture, CommunityValuePool } from '../types';
+import { Admin, User, Member, Agent, Report, Broadcast, PayoutRequest, Venture, CommunityValuePool } from '../types';
 import { UsersIcon } from './icons/UsersIcon';
 import { BriefcaseIcon } from './icons/BriefcaseIcon';
 import { ClockIcon } from './icons/ClockIcon';
@@ -8,38 +9,36 @@ import { DonutChart } from './DonutChart';
 import { api } from '../services/apiService';
 import { LoaderIcon } from './icons/LoaderIcon';
 
+// Fix: Define DashboardProps interface
 interface DashboardProps {
-    user: Admin;
-    users: User[];
-    members: Member[];
-    agents: Agent[];
-    pendingMembers: Member[];
-    reports: Report[];
-    broadcasts: Broadcast[];
-    payouts: PayoutRequest[];
-    ventures: Venture[];
-    cvp: CommunityValuePool | null;
-    onSendBroadcast: (message: string) => Promise<void>;
+  user: Admin;
+  users: User[];
+  agents: Agent[];
+  members: Member[];
+  pendingMembers: Member[];
+  reports: Report[];
+  broadcasts: Broadcast[];
+  payouts: PayoutRequest[];
+  ventures: Venture[];
+  cvp: CommunityValuePool | null;
+  onSendBroadcast: (message: string) => Promise<void>;
 }
 
-const StatCard: React.FC<{ icon: React.ReactNode; title: string; value: string | number; description?: string; }> = ({ icon, title, value, description }) => (
-  <div className="bg-slate-800 p-6 rounded-lg shadow-lg flex items-start h-full">
-    <div className="flex-shrink-0 bg-slate-700 rounded-md p-3">{icon}</div>
-    <div className="ml-4">
-      <p className="text-sm font-medium text-gray-400 truncate">{title}</p>
-      <p className="text-3xl font-bold text-white">{value}</p>
-      {description && <p className="text-sm text-gray-500 mt-1">{description}</p>}
+const DashboardStat: React.FC<{ icon: React.ReactNode; title: string; value: string | number; color: string; glow: string }> = ({ icon, title, value, color, glow }) => (
+  <div className="bg-slate-900/40 backdrop-blur-md border border-white/10 p-6 rounded-3xl transition-all hover:scale-[1.02] duration-300">
+    <div className={`inline-flex p-3 rounded-2xl ${color} ${glow} mb-4 text-white`}>
+      {icon}
     </div>
+    <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 mb-1">{title}</p>
+    <p className="text-3xl font-black text-white font-mono tracking-tighter">{value}</p>
   </div>
 );
 
 export const Dashboard: React.FC<DashboardProps> = (props) => {
-    const { users, members, agents, pendingMembers, reports, cvp, onSendBroadcast } = props;
+    const { users, members, agents, pendingMembers, reports, onSendBroadcast } = props;
     const [broadcastMessage, setBroadcastMessage] = useState('');
     const [isSending, setIsSending] = useState(false);
     const editorRef = useRef<HTMLDivElement>(null);
-
-    const newReportsCount = useMemo(() => reports.filter(r => r.status === 'new').length, [reports]);
 
     const userStatusData = useMemo(() => {
         const counts = users.reduce((acc, user) => {
@@ -49,69 +48,63 @@ export const Dashboard: React.FC<DashboardProps> = (props) => {
         }, {} as Record<User['status'], number>);
         
         return [
-            { label: 'Active', value: counts.active || 0, color: '#22c55e' }, // green-500
-            { label: 'Pending', value: counts.pending || 0, color: '#facc15' }, // yellow-400
-            { label: 'Suspended', value: counts.suspended || 0, color: '#f97316' }, // orange-500
-            { label: 'Ousted', value: counts.ousted || 0, color: '#ef4444' }, // red-500
+            { label: 'Active', value: counts.active || 0, color: '#22c55e' },
+            { label: 'Pending', value: counts.pending || 0, color: '#facc15' },
+            { label: 'Alerts', value: (counts.suspended || 0) + (counts.ousted || 0), color: '#ef4444' },
         ];
     }, [users]);
-    
-    const handleSendBroadcast = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!editorRef.current?.textContent?.trim()) return;
-        setIsSending(true);
-        try {
-            await onSendBroadcast(broadcastMessage);
-            setBroadcastMessage('');
-            if (editorRef.current) editorRef.current.innerHTML = '';
-        } finally {
-            setIsSending(false);
-        }
-    };
-    
-     const handleBroadcastInput = (e: React.FormEvent<HTMLDivElement>) => {
-        setBroadcastMessage(e.currentTarget.innerHTML);
-    };
 
     return (
-        <div className="space-y-8">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                <StatCard icon={<UsersIcon className="h-6 w-6 text-green-400" />} title="Total Members" value={members.length} />
-                <StatCard icon={<BriefcaseIcon className="h-6 w-6 text-green-400" />} title="Total Agents & Creators" value={agents.length} />
-                <StatCard icon={<ClockIcon className="h-6 w-6 text-yellow-400" />} title="Pending Verification" value={pendingMembers.length} />
-                <StatCard icon={<AlertTriangleIcon className="h-6 w-6 text-red-400" />} title="New Reports" value={newReportsCount} />
+        <div className="space-y-8 animate-fade-in">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
+                <DashboardStat icon={<UsersIcon className="h-6 w-6"/>} title="Members" value={members.length} color="bg-green-600" glow="shadow-glow-green" />
+                <DashboardStat icon={<BriefcaseIcon className="h-6 w-6"/>} title="Agents" value={agents.length} color="bg-blue-600" glow="shadow-[0_0_15px_-3px_rgba(37,99,235,0.4)]" />
+                <DashboardStat icon={<ClockIcon className="h-6 w-6"/>} title="Pending" value={pendingMembers.length} color="bg-yellow-600" glow="shadow-[0_0_15px_-3px_rgba(202,138,4,0.4)]" />
+                <DashboardStat icon={<AlertTriangleIcon className="h-6 w-6"/>} title="Reports" value={reports.filter(r => r.status === 'new').length} color="bg-red-600" glow="shadow-[0_0_15px_-3px_rgba(220,38,38,0.4)]" />
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-                <div className="lg:col-span-2 bg-slate-800 p-6 rounded-lg shadow-lg">
-                    <h3 className="text-xl font-semibold text-white mb-4">Send Broadcast</h3>
-                    <form onSubmit={handleSendBroadcast}>
-                        <div className="border border-slate-700 rounded-md">
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
+                <div className="lg:col-span-2 bg-slate-900/40 backdrop-blur-md border border-white/10 p-6 sm:p-8 rounded-[2.5rem] shadow-premium">
+                    <h3 className="text-xl font-black text-white mb-6 uppercase tracking-tighter">Global Proclamation</h3>
+                    <form onSubmit={async (e) => {
+                        e.preventDefault();
+                        if (!editorRef.current?.textContent?.trim()) return;
+                        setIsSending(true);
+                        try {
+                            await onSendBroadcast(broadcastMessage);
+                            setBroadcastMessage('');
+                            if (editorRef.current) editorRef.current.innerHTML = '';
+                        } finally { setIsSending(false); }
+                    }}>
+                        <div className="bg-slate-950/50 rounded-2xl border border-white/5 overflow-hidden ring-1 ring-white/5 focus-within:ring-brand-gold/30 transition-all">
                             <div
                                 ref={editorRef}
                                 contentEditable="true"
-                                onInput={handleBroadcastInput}
-                                data-placeholder="Type your message to all users..."
-                                className="w-full bg-slate-700 p-3 text-white text-base focus:outline-none wysiwyg-editor"
-                                style={{minHeight: '120px', overflowY: 'auto'}}
+                                onInput={(e) => setBroadcastMessage(e.currentTarget.innerHTML)}
+                                data-placeholder="What must the commons know today?"
+                                className="w-full p-4 text-gray-200 text-lg focus:outline-none wysiwyg-editor min-h-[150px]"
                             />
                         </div>
-                        <button type="submit" disabled={isSending} className="mt-4 w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded disabled:bg-slate-500">
-                            {isSending ? "Sending..." : "Send to All"}
+                        <button type="submit" disabled={isSending} className="mt-6 w-full py-4 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-2xl transition-all active:scale-95 shadow-glow-gold disabled:opacity-50 uppercase tracking-widest text-xs">
+                            {isSending ? <LoaderIcon className="h-4 w-4 animate-spin mx-auto"/> : "Dispatch Message"}
                         </button>
                     </form>
                 </div>
-                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg flex flex-col items-center">
-                    <h3 className="text-xl font-semibold text-white mb-4">User Status</h3>
+                
+                 <div className="bg-slate-900/40 backdrop-blur-md border border-white/10 p-8 rounded-[2.5rem] flex flex-col items-center shadow-premium">
+                    <h3 className="text-sm font-black text-gray-500 mb-8 uppercase tracking-[0.3em]">Network Pulse</h3>
                     <DonutChart 
                         data={userStatusData}
-                        centerText={<><div className="text-3xl font-bold">{users.length}</div><div className="text-sm text-gray-400">Total Users</div></>}
+                        centerText={<><div className="text-4xl font-black text-white tracking-tighter">{users.length}</div><div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Citizens</div></>}
                     />
-                    <div className="mt-4 w-full space-y-2 text-sm">
+                    <div className="mt-10 w-full space-y-4">
                         {userStatusData.map(item => (
-                            <div key={item.label} className="flex justify-between items-center">
-                                <span className="flex items-center"><div className="w-3 h-3 rounded-full mr-2" style={{backgroundColor: item.color}}></div>{item.label}</span>
-                                <span className="font-semibold">{item.value}</span>
+                            <div key={item.label} className="flex justify-between items-center group">
+                                <span className="flex items-center text-xs font-bold text-gray-400 group-hover:text-white transition-colors">
+                                    <div className="w-2 h-2 rounded-full mr-3 shadow-sm" style={{backgroundColor: item.color}}></div>
+                                    {item.label}
+                                </span>
+                                <span className="font-mono font-bold text-white text-sm">{item.value}</span>
                             </div>
                         ))}
                     </div>

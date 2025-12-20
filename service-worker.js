@@ -1,98 +1,86 @@
 
-// A list of host suffixes that the service worker should completely ignore.
-// This is a safeguard to ensure that Firebase's real-time features are never intercepted.
-const IGNORED_HOST_SUFFIXES = [
-  'googleapis.com', // Covers Firestore, Identity Toolkit, etc.
-  'gstatic.com',    // Firebase JS SDK is served from here
-];
+// Service Worker for Global Commons Network
+// Caches app shell and critical CDN dependencies for offline access.
 
-const STATIC_CACHE_NAME = 'gcn-static-cache-v6'; // BUMPED VERSION TO FORCE UPDATE
-const DYNAMIC_CACHE_NAME = 'gcn-dynamic-cache-v6'; // BUMPED VERSION TO FORCE UPDATE
+const STATIC_CACHE_NAME = 'gcn-static-v7';
+const DYNAMIC_CACHE_NAME = 'gcn-dynamic-v7';
 
-// List all critical static assets that form the application shell.
-const APP_SHELL_ASSETS = [
+// 1. Files from our own project structure
+const APP_SHELL = [
   '/',
   '/index.html',
   '/offline.html',
   '/logo.svg',
   '/manifest.json',
-  'https://rsms.me/inter/inter.css'
+  '/index.js' 
+];
+
+// 2. External Libraries (Must match index.html import map)
+const EXTERNAL_LIBS = [
+  'https://rsms.me/inter/inter.css',
+  'https://cdn.tailwindcss.com',
+  'https://aistudiocdn.com/react@19.2.0',
+  'https://aistudiocdn.com/react@19.2.0/',
+  'https://aistudiocdn.com/react-dom@19.2.0/client.js',
+  'https://aistudiocdn.com/react-dom@19.2.0/',
+  'https://aistudiocdn.com/@google/genai@1.24.0',
+  'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js',
+  'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js',
+  'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js',
+  'https://www.gstatic.com/firebasejs/10.12.5/firebase-storage.js',
+  'https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js',
+  'https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging.js',
+  'https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js',
+  'https://www.gstatic.com/firebasejs/10.12.5/',
+  'https://cdn.jsdelivr.net/npm/tweetnacl@1.0.3/+esm',
+  'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/+esm',
+  'https://cdn.jsdelivr.net/npm/html5-qrcode@2.3.8/+esm'
+];
+
+// Hosts to never cache (API endpoints, real-time data)
+const IGNORED_HOSTS = [
+  'googleapis.com', 
+  'firestore.googleapis.com',
+  'identitytoolkit.googleapis.com'
 ];
 
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(STATIC_CACHE_NAME).then(cache => {
-      console.log('Service Worker: Pre-caching App Shell...');
-      return cache.addAll(APP_SHELL_ASSETS);
+      console.log('[Service Worker] Pre-caching App Shell & External Libs');
+      // We combine both lists. 
+      // Note: If any single URL fails to fetch, the entire install fails.
+      return cache.addAll([...APP_SHELL, ...EXTERNAL_LIBS]);
     })
   );
-  // Force the waiting service worker to become the active service worker.
   self.skipWaiting();
 });
 
 self.addEventListener('activate', event => {
   event.waitUntil(
-    caches.keys().then(cacheNames => {
+    caches.keys().then(keys => {
       return Promise.all(
-        cacheNames.map(cacheName => {
-          if (cacheName !== STATIC_CACHE_NAME && cacheName !== DYNAMIC_CACHE_NAME) {
-            console.log('Service Worker: Deleting old cache:', cacheName);
-            return caches.delete(cacheName);
+        keys.map(key => {
+          if (key !== STATIC_CACHE_NAME && key !== DYNAMIC_CACHE_NAME) {
+            console.log('[Service Worker] Removing old cache:', key);
+            return caches.delete(key);
           }
         })
       );
     })
   );
-  // Tell the active service worker to take control of the page immediately.
-  return self.clients.claim();
+  self.clients.claim();
 });
 
 self.addEventListener('fetch', event => {
-  const { request } = event;
-  const url = new URL(request.url);
+  const url = new URL(event.request.url);
 
-  // Safeguard: If the request is for any Google/Firebase API, let the browser handle it.
-  if (IGNORED_HOST_SUFFIXES.some(suffix => url.hostname.endsWith(suffix))) {
-    return; // Do not intercept.
-  }
-  
-  // For app shell assets, use a cache-first strategy for instant loading.
-  if (APP_SHELL_ASSETS.some(assetPath => url.pathname === assetPath || url.href === assetPath)) {
-      event.respondWith(caches.match(request));
-      return;
+  // 1. Ignore API calls / Firestore real-time streams
+  if (IGNORED_HOSTS.some(host => url.hostname.includes(host))) {
+    return;
   }
 
-  // "Network First, then Cache" strategy for dynamic content
-  event.respondWith(
-    fetch(request)
-      .then(networkResponse => {
-        // If the fetch is successful, update the dynamic cache.
-        if (networkResponse && networkResponse.status === 200) {
-          const responseToCache = networkResponse.clone();
-          caches.open(DYNAMIC_CACHE_NAME).then(cache => {
-            cache.put(request, responseToCache);
-          });
-        }
-        return networkResponse;
-      })
-      .catch(() => {
-        // If the network request fails (i.e., the user is offline),
-        // try to serve the response from the cache.
-        return caches.match(request).then(cachedResponse => {
-          if (cachedResponse) {
-            return cachedResponse;
-          }
-          // If the request is for a page and it's not in the cache, show the offline page.
-          if (request.mode === 'navigate') {
-            return caches.match('/offline.html');
-          }
-          // For other failed requests (like API calls not in cache), just fail.
-          return new Response(JSON.stringify({ error: 'offline' }), {
-            headers: { 'Content-Type': 'application/json' },
-            status: 503,
-            statusText: 'Service Unavailable'
-          });
-        });
-      })
-  );
-});
+  // 2. Cache-First Strategy for Static Assets (Shell + Ext Libs)
+  if (APP_SHELL.includes(url.pathname) || EXTERNAL_LIBS.includes(event.request.url)) {
+    event.respondWith(
+      caches.match(event.request).

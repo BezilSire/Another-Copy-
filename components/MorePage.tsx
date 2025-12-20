@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { User } from '../types';
 import { UserIcon } from './icons/UserIcon';
@@ -9,9 +10,9 @@ import { LogOutIcon } from './icons/LogOutIcon';
 import { ChevronRightIcon } from './icons/ChevronRightIcon';
 import { SparkleIcon } from './icons/SparkleIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
-import { DollarSignIcon } from './icons/DollarSignIcon';
+import { GlobeIcon } from './icons/GlobeIcon';
 
-type NavView = 'profile' | 'notifications' | 'sustenance' | 'myinvestments' | 'knowledge' | 'launchpad' | 'earn';
+type NavView = 'profile' | 'notifications' | 'sustenance' | 'myinvestments' | 'knowledge' | 'launchpad' | 'earn' | 'ledger';
 
 interface MorePageProps {
   user: User;
@@ -55,6 +56,7 @@ export const MorePage: React.FC<MorePageProps> = ({ user, onNavigate, onLogout, 
         <NavItem icon={<BellIcon className="h-5 w-5" />} label="Notifications" onClick={() => onNavigate('notifications')} badgeCount={notificationCount} />
         <NavItem icon={<DatabaseIcon className="h-5 w-5" />} label="Ways to Earn" onClick={() => onNavigate('earn')} />
         <NavItem icon={<TrendingUpIcon className="h-5 w-5" />} label="My Investments" onClick={() => onNavigate('myinvestments')} />
+        <NavItem icon={<GlobeIcon className="h-5 w-5" />} label="Public Ledger" onClick={() => onNavigate('ledger')} />
         <NavItem icon={<SparkleIcon className="h-5 w-5" />} label="Project Launchpad" onClick={() => onNavigate('launchpad')} />
         <NavItem icon={<HeartIcon className="h-5 w-5" />} label="Sustenance" onClick={() => onNavigate('sustenance')} />
         <NavItem icon={<BookOpenIcon className="h-5 w-5" />} label="Knowledge Base" onClick={() => onNavigate('knowledge')} />

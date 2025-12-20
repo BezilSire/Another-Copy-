@@ -1,6 +1,5 @@
 
 
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Member, User, Post, PublicUserProfile, VentureEquityHolding, MemberUser, FilterType } from '../types';
 import { api } from '../services/apiService';
@@ -22,6 +21,7 @@ import { UserCircleIcon } from './icons/UserCircleIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { PlusIcon } from './icons/PlusIcon';
+import { FollowListModal } from './FollowListModal';
 
 const LOOKING_FOR_LIST = ['Co-founder', 'Business Partner', 'Investor', 'Mentor', 'Advisor', 'Employee', 'Freelancer'];
 
@@ -58,6 +58,9 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
     const [activeTab, setActiveTab] = useState<'profile' | 'activity'>('profile');
     const [typeFilter, setTypeFilter] = useState<FilterType>('all');
     const [isCopied, setIsCopied] = useState(false);
+    
+    // Modal State
+    const [followListType, setFollowListType] = useState<'followers' | 'following' | null>(null);
 
     // Initial state for editing
     const [editData, setEditData] = useState({
@@ -291,17 +294,23 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
     const renderProfileView = () => (
          <div className="mt-6 space-y-8">
             <div className="flex justify-between items-center text-sm text-gray-400 bg-slate-900/50 p-4 rounded-lg">
-                <div className="text-center">
+                <button 
+                    onClick={() => setFollowListType('followers')}
+                    className="text-center hover:bg-slate-800 p-2 rounded-md transition-colors w-1/3"
+                >
                     <span className="block font-bold text-white text-lg">{currentUser.followers?.length || 0}</span>
                     <span>Followers</span>
-                </div>
+                </button>
                 <div className="h-8 w-px bg-slate-700"></div>
-                <div className="text-center">
+                <button 
+                    onClick={() => setFollowListType('following')}
+                    className="text-center hover:bg-slate-800 p-2 rounded-md transition-colors w-1/3"
+                >
                     <span className="block font-bold text-white text-lg">{currentUser.following?.length || 0}</span>
                     <span>Following</span>
-                </div>
+                </button>
                 <div className="h-8 w-px bg-slate-700"></div>
-                <div className="text-center">
+                <div className="text-center w-1/3">
                     <span className="block font-bold text-white text-lg">{currentUser.credibility_score}</span>
                     <span>Score</span>
                 </div>
@@ -420,6 +429,19 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
                 </div>
             )}
         </div>
+
+        {/* Follow/Following Modal */}
+        {followListType && (
+            <FollowListModal 
+                isOpen={!!followListType}
+                onClose={() => setFollowListType(null)}
+                title={followListType === 'followers' ? 'Followers' : 'Following'}
+                userIds={followListType === 'followers' ? (currentUser.followers || []) : (currentUser.following || [])}
+                currentUser={currentUser}
+                onViewProfile={onViewProfile}
+                canManage={followListType === 'following'}
+            />
+        )}
     </div>
   );
 };

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, Transaction, GlobalEconomy, PayoutRequest } from '../types';
 import { api } from '../services/apiService';
@@ -11,257 +12,167 @@ import { RedeemUbtModal } from './RedeemUbtModal';
 import { ClockIcon } from './icons/ClockIcon';
 import { InfoIcon } from './icons/InfoIcon';
 import { WithdrawOnchainModal } from './WithdrawOnchainModal';
+import { QrCodeIcon } from './icons/QrCodeIcon';
+import { UBTScan } from './UBTScan';
+import { ClipboardIcon } from './icons/ClipboardIcon';
+import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
+import { SendIcon } from './icons/SendIcon';
+import { SendUbtModal } from './SendUbtModal';
+import { KeyIcon } from './icons/KeyIcon';
 
 interface WalletPageProps {
   user: User;
+  onNavigateToLedger?: (type: 'tx' | 'address', value: string) => void;
 }
 
 const PayoutStatusBadge: React.FC<{ status: PayoutRequest['status'] }> = ({ status }) => {
-    const baseClasses = 'inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize';
+    const baseClasses = 'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider';
     switch (status) {
-        case 'pending': return <span className={`${baseClasses} bg-yellow-800 text-yellow-300`}>Pending</span>;
-        case 'completed': return <span className={`${baseClasses} bg-green-800 text-green-300`}>Completed</span>;
-        case 'rejected': return <span className={`${baseClasses} bg-red-800 text-red-300`}>Rejected</span>;
+        case 'pending': return <span className={`${baseClasses} bg-yellow-900/30 text-yellow-500 border border-yellow-800`}>Pending</span>;
+        case 'completed': return <span className={`${baseClasses} bg-green-900/30 text-green-500 border border-green-800`}>Completed</span>;
+        case 'rejected': return <span className={`${baseClasses} bg-red-900/30 text-red-500 border border-red-800`}>Rejected</span>;
         default: return null;
     }
 };
 
-
-const PayoutRequestItem: React.FC<{ payout: PayoutRequest }> = ({ payout }) => {
-    const getTitleAndAmount = () => {
-        switch (payout.type) {
-            case 'onchain_withdrawal':
-                return { title: 'On-chain Withdrawal', amount: `${payout.amount.toFixed(2)} $UBT` };
-            case 'ubt_redemption':
-                return { title: 'Ecocash Redemption', amount: `$${payout.amount.toFixed(2)}` };
-            case 'referral':
-                return { title: 'Referral Payout', amount: `$${payout.amount.toFixed(2)}` };
-            case 'commission':
-                 return { title: 'Commission Payout', amount: `$${payout.amount.toFixed(2)}` };
-            default:
-                 return { title: 'Payout Request', amount: `$${payout.amount.toFixed(2)}` };
-        }
-    }
-
-    const { title, amount } = getTitleAndAmount();
-
-    return (
-        <li className="p-3">
-            <div className="flex items-center justify-between">
-                <div>
-                    <p className="font-semibold text-white">{title}</p>
-                    <p className="text-xs text-gray-400">Requested {formatTimeAgo(payout.requestedAt.toDate().toISOString())}</p>
-                </div>
-                <div className="text-right">
-                    <p className="font-semibold text-lg font-mono text-white">{amount}</p>
-                    <PayoutStatusBadge status={payout.status} />
-                </div>
-            </div>
-            {payout.status === 'completed' && payout.completedAt && (
-                <p className="text-xs text-green-400 mt-1">Completed {formatTimeAgo(payout.completedAt.toDate().toISOString())}</p>
-            )}
-             {payout.status === 'rejected' && (
-                <p className="text-xs text-red-400 mt-1">This request was rejected by an admin.</p>
-            )}
-        </li>
-    );
-};
-
-const TransactionItem: React.FC<{ tx: Transaction, currentUserId: string }> = ({ tx, currentUserId }) => {
+const TransactionItem: React.FC<{ tx: Transaction, onNavigate?: (hash: string) => void }> = ({ tx, onNavigate }) => {
     const isSent = tx.type === 'debit' || tx.type === 'p2p_sent';
-    const amountColor = isSent ? 'text-red-400' : 'text-green-400';
-    const icon = isSent ? <ArrowUpRightIcon className="h-5 w-5" /> : <ArrowDownLeftIcon className="h-5 w-5" />;
+    const amountColor = isSent ? 'text-white' : 'text-green-400';
+    const icon = isSent ? <ArrowUpRightIcon className="h-4 w-4" /> : <ArrowDownLeftIcon className="h-4 w-4" />;
+    const iconBg = isSent ? 'bg-slate-700 text-gray-400' : 'bg-green-900/30 text-green-400';
 
     return (
-        <li className="flex items-center justify-between p-3">
-            <div className="flex items-center space-x-3">
-                <div className={`p-2 rounded-full ${isSent ? 'bg-red-900/50' : 'bg-green-900/50'}`}>
-                    <div className={amountColor}>{icon}</div>
+        <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl hover:bg-slate-800/80 transition-colors border border-slate-800/50">
+            <div className="flex items-center space-x-4">
+                <div className={`p-2.5 rounded-full ${iconBg}`}>
+                    {icon}
                 </div>
                 <div>
-                    <p className="font-semibold text-white">{tx.reason}</p>
-                    <p className="text-xs text-gray-400">{formatTimeAgo(tx.timestamp.toDate().toISOString())}</p>
+                    <p className="font-semibold text-white text-sm">{tx.reason}</p>
+                    <div className="flex items-center gap-2 mt-0.5">
+                         <p className="text-xs text-gray-500 font-mono">{formatTimeAgo(tx.timestamp.toDate().toISOString())}</p>
+                         {tx.txHash && onNavigate && (
+                             <button onClick={() => onNavigate(tx.txHash!)} className="text-[10px] text-blue-500 hover:text-blue-400 font-medium">
+                                 EXPLORE
+                             </button>
+                         )}
+                    </div>
                 </div>
             </div>
-            <div className={`font-semibold text-lg font-mono ${amountColor}`}>
+            <div className={`font-mono font-bold ${amountColor}`}>
                 {isSent ? '-' : '+'} {tx.amount.toFixed(2)}
             </div>
-        </li>
+        </div>
     );
 };
 
-export const WalletPage: React.FC<WalletPageProps> = ({ user }) => {
+export const WalletPage: React.FC<WalletPageProps> = ({ user, onNavigateToLedger }) => {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
     const [economy, setEconomy] = useState<GlobalEconomy | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const { addToast } = useToast();
     const [isRedeemModalOpen, setIsRedeemModalOpen] = useState(false);
     const [isWithdrawModalOpen, setIsWithdrawModalOpen] = useState(false);
-    const [redemptionTimeLeft, setRedemptionTimeLeft] = useState('');
+    const [isScanOpen, setIsScanOpen] = useState(false);
+    const [isSendOpen, setIsSendOpen] = useState(false);
+    const [isCopied, setIsCopied] = useState(false);
     
     const ubtBalance = user.ubtBalance || 0;
     const usdValue = ubtBalance * (economy?.ubt_to_usd_rate || 0);
-    const isRedemptionOpen = economy?.ubtRedemptionWindowOpen === true;
+    const walletAddress = user.publicKey || "Generating...";
 
     useEffect(() => {
-        let isMounted = true;
-        const unsubscribers: (() => void)[] = [];
+        setIsLoading(true);
+        const unsubTx = api.listenForUserTransactions(user.id, setTransactions, console.error);
+        const unsubEcon = api.listenForGlobalEconomy(setEconomy, console.error);
+        setIsLoading(false);
+        return () => { unsubTx(); unsubEcon(); };
+    }, [user.id]);
 
-        const loadData = () => {
-            setIsLoading(true);
-            
-            const unsubTx = api.listenForUserTransactions(user.id, (txs) => {
-                if(isMounted) setTransactions(txs);
-            }, (err) => {
-                if(isMounted) { console.error("Error fetching transactions:", err); addToast("Could not load transaction history.", 'error'); }
-            });
-            unsubscribers.push(unsubTx);
-            
-            const unsubPayouts = api.listenForUserPayouts(user.id, (payouts) => {
-                if(isMounted) setPayouts(payouts);
-            }, (err) => {
-                 if(isMounted) { console.error("Error fetching payout requests:", err); addToast("Could not load payout requests.", 'error'); }
-            });
-            unsubscribers.push(unsubPayouts);
-
-            const unsubEconomy = api.listenForGlobalEconomy((econ) => {
-                if(isMounted) setEconomy(econ);
-            }, (err) => {
-                if(isMounted) { console.error("Error fetching economy data:", err); addToast("Could not load UBT price.", 'error'); }
-            });
-            unsubscribers.push(unsubEconomy);
-            
-            if(isMounted) setIsLoading(false);
-        };
-
-        loadData();
-
-        return () => {
-            isMounted = false;
-            unsubscribers.forEach(unsub => unsub());
-        };
-    }, [user.id, addToast]);
-
-     useEffect(() => {
-        let timer: number | undefined;
-        const calculateTime = () => {
-            if (economy?.ubtRedemptionWindowOpen && economy?.ubtRedemptionWindowClosesAt) {
-                const timeLeftMs = economy.ubtRedemptionWindowClosesAt.toDate().getTime() - new Date().getTime();
-                if (timeLeftMs <= 0) {
-                    setRedemptionTimeLeft('Window Closed');
-                    clearInterval(timer);
-                } else {
-                    const days = Math.floor(timeLeftMs / (1000 * 60 * 60 * 24));
-                    const hours = Math.floor((timeLeftMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-                    setRedemptionTimeLeft(`${days}d ${hours}h left`);
-                }
-            } else if (economy?.ubtRedemptionWindowStartedAt) {
-                const nextWindowDate = new Date(economy.ubtRedemptionWindowStartedAt.toDate());
-                nextWindowDate.setDate(nextWindowDate.getDate() + 60);
-                const timeLeftMs = nextWindowDate.getTime() - new Date().getTime();
-                if (timeLeftMs > 0) {
-                    const days = Math.floor(timeLeftMs / (1000 * 60 * 60 * 24));
-                    setRedemptionTimeLeft(`Opens in ~${days} day(s)`);
-                } else {
-                    setRedemptionTimeLeft('Next window soon');
-                }
-            } else {
-                setRedemptionTimeLeft('Window Closed');
-            }
-        };
-
-        calculateTime(); // Initial call
-        if(economy?.ubtRedemptionWindowOpen) {
-            timer = setInterval(calculateTime, 1000 * 60); // Update every minute
-        }
-
-        return () => clearInterval(timer);
-    }, [economy]);
+    const handleCopyAddress = () => {
+        navigator.clipboard.writeText(walletAddress).then(() => {
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
+        });
+    }
 
     return (
-        <>
-            <div className="max-w-4xl mx-auto space-y-6 animate-fade-in">
-                <div className="bg-slate-800 p-6 rounded-lg shadow-lg text-center">
-                    <WalletIcon className="h-10 w-10 mx-auto text-green-400 mb-2"/>
-                    <p className="text-sm font-medium text-gray-400">Your $UBT Balance</p>
-                    <p className="text-5xl font-bold text-white my-1">{ubtBalance.toFixed(2)}</p>
-                    <p className="font-semibold text-gray-300">≈ ${usdValue.toFixed(2)} USD</p>
-                    <div className="mt-6 flex justify-center gap-2 sm:gap-4">
-                        <button 
-                            onClick={() => setIsRedeemModalOpen(true)} 
-                            disabled={!isRedemptionOpen || user.status !== 'active'} 
-                            className="flex-1 sm:flex-initial inline-flex items-center justify-center px-6 py-3 bg-slate-700 text-white rounded-md hover:bg-slate-600 font-semibold disabled:bg-slate-800 disabled:text-gray-500 disabled:cursor-not-allowed"
-                            title={user.status !== 'active' ? 'Your account must be verified to redeem.' : !isRedemptionOpen ? "Redemption is only open for 5 days every 2 months." : "Redeem your earned UBT value"}
-                        >
-                            Redeem
-                        </button>
-                        <button 
-                            onClick={() => setIsWithdrawModalOpen(true)} 
-                            disabled={ubtBalance <= 0 || user.status !== 'active'}
-                            className="flex-1 sm:flex-initial inline-flex items-center justify-center px-6 py-3 bg-slate-700 text-white rounded-md hover:bg-slate-600 font-semibold disabled:bg-slate-800 disabled:text-gray-500 disabled:cursor-not-allowed"
-                            title={user.status !== 'active' ? 'Your account must be verified to withdraw.' : "Withdraw your UBT to a personal Solana wallet"}
-                        >
-                            Withdraw
-                        </button>
+        <div className="max-w-5xl mx-auto space-y-6 animate-fade-in pb-10">
+            {isScanOpen && <UBTScan currentUser={user} onTransactionComplete={() => {}} onClose={() => setIsScanOpen(false)} />}
+            {isSendOpen && <SendUbtModal isOpen={isSendOpen} onClose={() => setIsSendOpen(false)} currentUser={user} onTransactionComplete={() => {}} />}
+            
+            {/* Main Balance Card */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-slate-900 to-slate-800 border border-slate-700 shadow-2xl p-6 sm:p-8">
+                 {/* Decorative background elements */}
+                 <div className="absolute top-0 right-0 -mr-16 -mt-16 w-64 h-64 rounded-full bg-green-500/10 blur-3xl"></div>
+                 <div className="absolute bottom-0 left-0 -ml-16 -mb-16 w-64 h-64 rounded-full bg-blue-500/10 blur-3xl"></div>
+
+                 <div className="relative z-10 flex flex-col md:flex-row justify-between items-start md:items-center gap-8">
+                    <div className="space-y-1">
+                        <div className="flex items-center gap-2 text-gray-400 mb-2">
+                             <WalletIcon className="h-5 w-5" />
+                             <span className="text-sm font-medium uppercase tracking-widest">Total Balance</span>
+                        </div>
+                        <h1 className="text-5xl sm:text-6xl font-bold text-white tracking-tight">{ubtBalance.toLocaleString()} <span className="text-3xl text-gray-500 font-light">UBT</span></h1>
+                        <p className="text-lg text-green-400 font-mono">≈ ${usdValue.toFixed(2)} USD</p>
                     </div>
-                     <div className="mt-4 text-center space-y-1">
-                        <p className={`text-sm font-semibold flex items-center justify-center gap-2 ${isRedemptionOpen ? 'text-green-400' : 'text-yellow-400'}`}>
-                            <ClockIcon className="h-4 w-4" />
-                            Ecocash Redemption Window: {isRedemptionOpen ? `OPEN (${redemptionTimeLeft})` : `CLOSED (${redemptionTimeLeft})`}
-                        </p>
-                        <p className="text-xs text-gray-400">On-chain withdrawals to a Solana wallet are always available.</p>
+
+                    <div className="w-full md:w-auto flex flex-col gap-3">
+                         {/* Address Pill */}
+                        <div className="bg-black/30 backdrop-blur-md rounded-xl p-3 border border-white/10 flex items-center gap-3 cursor-pointer hover:bg-black/40 transition-colors group" onClick={handleCopyAddress}>
+                            <div className="p-2 bg-slate-800 rounded-lg group-hover:bg-slate-700 transition-colors">
+                                <QrCodeIcon className="h-5 w-5 text-white" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <p className="text-[10px] text-gray-500 uppercase font-bold">Wallet Address</p>
+                                <p className="text-xs font-mono text-green-400 truncate max-w-[180px] sm:max-w-[200px]">{walletAddress}</p>
+                            </div>
+                            <div className="text-gray-500 group-hover:text-white transition-colors">
+                                {isCopied ? <ClipboardCheckIcon className="h-4 w-4 text-green-500" /> : <ClipboardIcon className="h-4 w-4" />}
+                            </div>
+                        </div>
                     </div>
-                </div>
+                 </div>
 
-                <div className="bg-slate-800 p-6 rounded-lg shadow-lg">
-                    <h3 className="text-lg font-semibold text-white flex items-center mb-3">
-                        <InfoIcon className="h-5 w-5 mr-3 text-blue-400" />
-                        How Your Wallet Works
-                    </h3>
-                    <ul className="space-y-3 text-sm text-gray-300 list-disc list-inside">
-                         <li>
-                            <strong>Initial Stake:</strong> Your initial stake is required for certain commons features like Ecocash redemption. This portion of your balance cannot be redeemed for cash via Ecocash.
-                        </li>
-                        <li>
-                            <strong>Redeem for Cash:</strong> You can redeem any value above your initial stake to Ecocash. This is only available during the bi-monthly redemption window.
-                        </li>
-                        <li>
-                            <strong>Withdraw On-chain:</strong> You can withdraw your entire $UBT balance, including your initial stake, to a personal Solana wallet at any time for full self-custody of your assets.
-                        </li>
-                    </ul>
-                </div>
+                 {/* Action Buttons */}
+                 <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-4 mt-8">
+                    <ActionButton onClick={() => setIsSendOpen(true)} icon={<SendIcon className="h-6 w-6" />} label="Send" color="bg-blue-600 hover:bg-blue-500" />
+                    <ActionButton onClick={() => setIsScanOpen(true)} icon={<QrCodeIcon className="h-6 w-6" />} label="Scan" color="bg-green-600 hover:bg-green-500" />
+                    <ActionButton onClick={() => setIsRedeemModalOpen(true)} icon={<ArrowUpRightIcon className="h-6 w-6" />} label="Cash Out" color="bg-slate-700 hover:bg-slate-600" />
+                    <ActionButton onClick={() => setIsWithdrawModalOpen(true)} icon={<KeyIcon className="h-6 w-6" />} label="Self Custody" color="bg-slate-700 hover:bg-slate-600" />
+                 </div>
+            </div>
 
-                <div className="bg-slate-800 p-4 rounded-lg shadow-lg">
-                    <h3 className="text-lg font-semibold text-white px-3 mb-2">Redemption & Withdrawal Requests</h3>
+            {/* Transaction History */}
+            <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+                <div className="p-6 border-b border-slate-800 flex justify-between items-center">
+                    <h3 className="text-lg font-bold text-white">Recent Activity</h3>
+                    <button className="text-sm text-green-400 hover:text-green-300 font-medium">View All</button>
+                </div>
+                <div className="p-4 space-y-2">
                     {isLoading ? (
-                        <div className="flex justify-center items-center py-10"><LoaderIcon className="h-8 w-8 animate-spin text-green-500" /></div>
-                    ) : payouts.length > 0 ? (
-                        <ul className="divide-y divide-slate-700">
-                            {payouts.map(payout => <PayoutRequestItem key={payout.id} payout={payout} />)}
-                        </ul>
-                    ) : (
-                        <p className="text-center text-gray-500 py-10">No requests found.</p>
-                    )}
-                </div>
-
-                <div className="bg-slate-800 p-4 rounded-lg shadow-lg">
-                    <h3 className="text-lg font-semibold text-white px-3 mb-2">Transaction History</h3>
-                    {isLoading ? (
-                        <div className="flex justify-center items-center py-10"><LoaderIcon className="h-8 w-8 animate-spin text-green-500" /></div>
+                        <div className="flex justify-center py-12"><LoaderIcon className="h-8 w-8 animate-spin text-green-500" /></div>
                     ) : transactions.length > 0 ? (
-                        <ul className="divide-y divide-slate-700">
-                            {transactions.map(tx => <TransactionItem key={tx.id} tx={tx} currentUserId={user.id} />)}
-                        </ul>
+                        transactions.map(tx => <TransactionItem key={tx.id} tx={tx} onNavigate={(hash) => onNavigateToLedger && onNavigateToLedger('tx', hash)} />)
                     ) : (
-                        <p className="text-center text-gray-500 py-10">No transactions yet.</p>
+                        <div className="text-center py-12 text-gray-500">
+                            <InfoIcon className="h-10 w-10 mx-auto mb-3 opacity-20" />
+                            <p>No transactions found.</p>
+                        </div>
                     )}
                 </div>
             </div>
 
+            {/* Modals */}
             <RedeemUbtModal isOpen={isRedeemModalOpen} onClose={() => setIsRedeemModalOpen(false)} currentUser={user} economy={economy} onTransactionComplete={() => {}} />
-
             <WithdrawOnchainModal isOpen={isWithdrawModalOpen} onClose={() => setIsWithdrawModalOpen(false)} currentUser={user} onTransactionComplete={() => {}} />
-        </>
+        </div>
     );
 };
+
+const ActionButton: React.FC<{ onClick: () => void; icon: React.ReactNode; label: string; color: string }> = ({ onClick, icon, label, color }) => (
+    <button onClick={onClick} className={`${color} p-4 rounded-xl flex flex-col items-center justify-center gap-2 transition-all hover:scale-105 active:scale-95 shadow-lg group`}>
+        <div className="text-white opacity-90 group-hover:opacity-100">{icon}</div>
+        <span className="text-sm font-bold text-white">{label}</span>
+    </button>
+);

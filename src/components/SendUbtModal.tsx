@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, PublicUserProfile, UbtTransaction } from '../types';
 import { api } from '../services/apiService';
@@ -41,8 +42,7 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
             setIsLoading(true);
             api.searchUsers(debouncedSearch, currentUser)
                 .then(results => {
-                    // Only show users who have a public key generated
-                    setSearchResults(results.filter(u => u.publicKey));
+                    setSearchResults(results);
                 })
                 .catch(console.error)
                 .finally(() => setIsLoading(false));
@@ -58,8 +58,8 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
     };
 
     const handleSend = async () => {
-        if (!selectedUser || !selectedUser.publicKey) {
-            addToast("Recipient invalid or missing wallet address.", "error");
+        if (!selectedUser) {
+            addToast("Recipient invalid.", "error");
             return;
         }
         
@@ -78,21 +78,14 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
         try {
             const timestamp = Date.now();
             const nonce = cryptoService.generateNonce();
-            const receiverId = selectedUser.id;
-            
-            // Payload string to sign
-            const payloadToSign = `${currentUser.id}:${receiverId}:${sendAmount}:${timestamp}:${nonce}`;
+            const payloadToSign = `${currentUser.id}:${selectedUser.id}:${sendAmount}:${timestamp}:${nonce}`;
             const signature = cryptoService.signTransaction(payloadToSign);
+            const txId = Date.now().toString(36) + Math.random().toString(36).substring(2);
             
-            // Generate ID safely
-            const txId = typeof crypto.randomUUID === 'function' 
-                ? crypto.randomUUID() 
-                : Date.now().toString(36) + Math.random().toString(36).substring(2);
-
             const transaction: UbtTransaction = {
                 id: txId,
                 senderId: currentUser.id,
-                receiverId: receiverId,
+                receiverId: selectedUser.id,
                 amount: sendAmount,
                 timestamp: timestamp,
                 nonce: nonce,
@@ -101,6 +94,7 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
             };
 
             await api.processUbtTransaction(transaction);
+            
             addToast(`Sent ${sendAmount} UBT to ${selectedUser.name}!`, "success");
             onTransactionComplete();
             onClose();
@@ -174,7 +168,7 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
                                         <UserCircleIcon className="h-10 w-10 text-gray-300" />
                                         <div>
                                             <p className="font-bold text-white">{selectedUser.name}</p>
-                                            <p className="text-xs text-green-400 font-mono truncate max-w-[150px]">{selectedUser.publicKey?.substring(0, 16)}...</p>
+                                            <p className="text-xs text-green-400 font-mono truncate max-w-[150px]">{selectedUser.circle}</p>
                                         </div>
                                     </div>
                                     <button onClick={() => setSelectedUser(null)} className="text-sm text-gray-400 hover:text-white">Change</button>
@@ -206,7 +200,7 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
                                     disabled={isSending || !amount}
                                     className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg disabled:bg-slate-600 disabled:cursor-not-allowed flex justify-center items-center"
                                 >
-                                    {isSending ? <LoaderIcon className="h-5 w-5 animate-spin" /> : 'Sign & Send Transaction'}
+                                    {isSending ? <LoaderIcon className="h-5 w-5 animate-spin" /> : 'Confirm Send'}
                                 </button>
                             </div>
                         )}

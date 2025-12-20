@@ -39,9 +39,11 @@ service cloud.firestore {
       // 1. Owner can update their own profile.
       // 2. Admin can update anything (roles, status).
       // 3. Any user can update 'followers' (to follow someone).
+      // 4. Allow updating 'publicKey' if it's the owner (for crypto identity)
       allow update: if isOwner(userId) 
                     || isAdmin()
-                    || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers']));
+                    || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['followers']))
+                    || (isOwner(userId) && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['publicKey']));
       
       // Only Admin can delete users (soft delete preferred usually, but this is allowed)
       allow delete: if isAdmin();
@@ -188,6 +190,12 @@ service cloud.firestore {
     match /price_verifications/{docId} {
         allow read: if isAdmin();
         allow create: if isSignedIn();
+    }
+
+    // 14. Public Ledger ($UBT Transactions)
+    match /ledger/{docId} {
+        allow read: if isSignedIn();
+        allow create: if isSignedIn(); // Allow creation for client-side transaction simulation
     }
   }
 }

@@ -1,15 +1,12 @@
 
 import {
-  createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
   signOut,
   sendPasswordResetEmail,
   sendEmailVerification,
-  onAuthStateChanged,
   User as FirebaseUser,
 } from 'firebase/auth';
 import {
-  getFirestore,
   collection,
   addDoc,
   getDocs,
@@ -33,27 +30,22 @@ import {
   runTransaction,
   DocumentSnapshot,
   DocumentData,
-  collectionGroup,
 } from 'firebase/firestore';
 import {
-    getDatabase,
     ref,
     onValue,
     set,
     onDisconnect,
     serverTimestamp as rtdbServerTimestamp
 } from 'firebase/database';
-import { auth, db, rtdb, functions } from './firebase';
-import { httpsCallable } from 'firebase/functions';
-import { generateAgentCode, generateReferralCode } from '../utils';
+import { auth, db, rtdb } from './firebase';
 import { generateWelcomeMessage } from './geminiService';
 import { 
     User, Agent, Member, NewMember, MemberUser, Broadcast, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
-    Proposal, NewPublicMemberData, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
-    Distribution, Transaction, GlobalEconomy, Admin
+    Proposal, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
+    Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction
 } from '../types';
-
 
 const usersCollection = collection(db, 'users');
 const membersCollection = collection(db, 'members');
@@ -69,6 +61,7 @@ const sustenanceCollection = collection(db, 'sustenance_cycles');
 const vouchersCollection = collection(db, 'sustenance_vouchers');
 const venturesCollection = collection(db, 'ventures');
 const globalsCollection = collection(db, 'globals');
+const ledgerCollection = collection(db, 'ledger');
 
 const _deletePostAndSubcollections = async (postId: string) => {
     const postRef = doc(postsCollection, postId);
@@ -128,22 +121,15 @@ export const api = {
     updateUser: (uid: string, data: Partial<User>) => updateDoc(doc(db, 'users', uid), data),
     updateMemberAndUserProfile: async (userId: string, memberId: string, userUpdateData: Partial<User>, memberUpdateData: Partial<Member>) => {
         const batch = writeBatch(db);
-        const cleanData = (data: any) => {
-            const cleaned: any = {};
-            Object.keys(data).forEach(key => { if (data[key] !== undefined) cleaned[key] = data[key]; });
-            return cleaned;
-        };
         const userRef = doc(usersCollection, userId);
-        batch.update(userRef, cleanData(userUpdateData));
+        batch.update(userRef, userUpdateData);
         const memberRef = doc(membersCollection, memberId);
-        batch.update(memberRef, cleanData(memberUpdateData));
+        batch.update(memberRef, memberUpdateData);
         try {
             await batch.commit();
         } catch (error: any) {
             console.error("Atomic profile update failed:", error);
-            const newError = new Error("Failed to save profile. Ensure you have permission to update all fields.");
-            (newError as any).code = error.code;
-            throw newError;
+            throw new Error("Failed to save profile. Ensure you have permission to update all fields.");
         }
     },
     getPublicUserProfile: async (uid: string): Promise<PublicUserProfile | null> => {
@@ -154,7 +140,7 @@ export const api = {
             id: userDoc.id, name: d.name, email: d.email, role: d.role, circle: d.circle, status: d.status, bio: d.bio, profession: d.profession,
             skills: d.skills, interests: d.interests, businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners,
             lookingFor: d.lookingFor, credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
-            pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides,
+            pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides, publicKey: d.publicKey,
             followers: d.followers || [], following: d.following || [], socialLinks: d.socialLinks || []
         };
     },
@@ -199,7 +185,7 @@ export const api = {
                         skills: Array.isArray(d.skills) ? d.skills : [], interests: Array.isArray(d.interests) ? d.interests : [],
                         businessIdea: d.businessIdea, isLookingForPartners: d.isLookingForPartners, lookingFor: d.lookingFor,
                         credibility_score: d.credibility_score, ccap: d.ccap, createdAt: d.createdAt,
-                        pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides,
+                        pitchDeckTitle: d.pitchDeckTitle, pitchDeckSlides: d.pitchDeckSlides, publicKey: d.publicKey,
                         followers: d.followers || [], following: d.following || [], socialLinks: d.socialLinks || []
                     } as PublicUserProfile;
                 });
@@ -211,35 +197,57 @@ export const api = {
     },
     // Follow/Unfollow
     followUser: async (follower: User, targetUserId: string) => {
-        const batch = writeBatch(db);
-        const followerRef = doc(usersCollection, follower.id);
-        const targetRef = doc(usersCollection, targetUserId);
-        const notificationRef = doc(collection(db, 'users', targetUserId, 'notifications'));
-
-        batch.update(followerRef, { following: arrayUnion(targetUserId) });
-        batch.update(targetRef, { followers: arrayUnion(follower.id) });
-        
-        batch.set(notificationRef, {
-            userId: targetUserId,
-            message: `${follower.name} started following you.`,
-            link: follower.id,
-            read: false,
-            timestamp: serverTimestamp(),
-            type: 'NEW_FOLLOWER',
-            causerId: follower.id
-        });
-
-        await batch.commit();
+        try {
+            await updateDoc(doc(usersCollection, follower.id), { following: arrayUnion(targetUserId) });
+            await updateDoc(doc(usersCollection, targetUserId), { followers: arrayUnion(follower.id) });
+            const notificationRef = doc(collection(db, 'users', targetUserId, 'notifications'));
+            await setDoc(notificationRef, {
+                userId: targetUserId, message: `${follower.name} started following you.`, link: follower.id, read: false, timestamp: serverTimestamp(), type: 'NEW_FOLLOWER', causerId: follower.id
+            });
+        } catch (e) { console.error("Follow failed", e); throw e; }
     },
     unfollowUser: async (followerId: string, targetUserId: string) => {
-        const batch = writeBatch(db);
-        const followerRef = doc(usersCollection, followerId);
-        const targetRef = doc(usersCollection, targetUserId);
+        try {
+            await updateDoc(doc(usersCollection, followerId), { following: arrayRemove(targetUserId) });
+            await updateDoc(doc(usersCollection, targetUserId), { followers: arrayRemove(followerId) });
+        } catch (error) { console.error("Unfollow user failed:", error); throw error; }
+    },
+    
+    // --- WALLET & P2P TRANSACTIONS ---
 
-        batch.update(followerRef, { following: arrayRemove(targetUserId) });
-        batch.update(targetRef, { followers: arrayRemove(followerId) });
+    processUbtTransaction: async (transaction: UbtTransaction) => {
+        return runTransaction(db, async (t) => {
+            const senderRef = doc(usersCollection, transaction.senderId);
+            const receiverRef = doc(usersCollection, transaction.receiverId);
+            const senderDoc = await t.get(senderRef);
+            if (!senderDoc.exists()) throw new Error("Sender not found.");
+            const currentBalance = senderDoc.data().ubtBalance || 0;
+            if (currentBalance < transaction.amount) throw new Error("Insufficient funds.");
+            t.update(senderRef, { ubtBalance: increment(-transaction.amount) });
+            t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
+            const ledgerRef = doc(collection(db, 'ledger'));
+            t.set(ledgerRef, { ...transaction, timestamp: serverTimestamp() });
+            
+            // Log local history for sender
+            const senderHistoryRef = doc(collection(db, 'users', transaction.senderId, 'transactions'));
+            t.set(senderHistoryRef, { type: 'p2p_sent', amount: transaction.amount, reason: 'Sent $UBT', timestamp: serverTimestamp(), actorId: transaction.senderId, txHash: transaction.id });
+            
+            // Log local history for receiver
+            const receiverHistoryRef = doc(collection(db, 'users', transaction.receiverId, 'transactions'));
+            t.set(receiverHistoryRef, { type: 'p2p_received', amount: transaction.amount, reason: 'Received $UBT', timestamp: serverTimestamp(), actorId: transaction.senderId, txHash: transaction.id });
+        });
+    },
+    
+    getPublicLedger: async (limitCount: number = 20): Promise<any[]> => {
+        const q = query(ledgerCollection, orderBy('timestamp', 'desc'), limit(limitCount));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+    },
 
-        await batch.commit();
+    getRichList: async (limitCount: number = 10): Promise<PublicUserProfile[]> => {
+        const q = query(usersCollection, orderBy('ubtBalance', 'desc'), limit(limitCount));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile));
     },
 
     // Admin
@@ -280,6 +288,7 @@ export const api = {
         }, onError);
     },
     updateMemberProfile: (memberId: string, data: Partial<Member>) => updateDoc(doc(membersCollection, memberId), data),
+    
     approveMemberAndCreditUbt: async (admin: User, member: Member) => {
         if (!member.uid) throw new Error("Member has no account.");
         return runTransaction(db, async (t) => {
@@ -289,6 +298,7 @@ export const api = {
             t.update(userRef, { status: 'active', ubtBalance: increment(100), initialUbtStake: 100 });
         });
     },
+
     rejectMember: (admin: User, member: Member) => updateDoc(doc(membersCollection, member.id), { payment_status: 'rejected' }),
     updatePaymentStatus: (admin: User, memberId: string, status: Member['payment_status']) => updateDoc(doc(membersCollection, memberId), { payment_status: status }),
     resetDistressQuota: (admin: User, userId: string) => updateDoc(doc(usersCollection, userId), { distress_calls_available: 1 }),
@@ -308,17 +318,6 @@ export const api = {
         const postRef = doc(collection(db, 'posts'));
         const newPost: Omit<Post, 'id'> = { authorId: user.id, authorName: user.name, authorCircle: user.circle, authorRole: user.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: requiredSkills };
         batch.set(postRef, newPost);
-
-        if (type === 'opportunity' && requiredSkills.length > 0) {
-            const skillsToQuery = requiredSkills.slice(0, 10).map(s => s.toLowerCase());
-            const q = query(usersCollection, where('skills_lowercase', 'array-contains-any', skillsToQuery), limit(50));
-            const snapshot = await getDocs(q);
-            snapshot.docs.forEach(userDoc => {
-                if (userDoc.id === user.id) return;
-                const notifRef = doc(collection(db, 'users', userDoc.id, 'notifications'));
-                batch.set(notifRef, { userId: userDoc.id, message: `New opportunity matches your skills: ${content.substring(0, 50)}...`, link: user.id, read: false, timestamp: serverTimestamp(), type: 'NEW_POST_OPPORTUNITY', causerId: user.id });
-            });
-        }
         await batch.commit();
     },
     repostPost: async (originalPost: Post, user: User, comment: string) => {
@@ -371,12 +370,10 @@ export const api = {
             if (start) constraints.push(startAfter(start));
             finalQuery = query(postsCollection, ...constraints);
         } else if (filter === 'following' && currentUser && currentUser.following && currentUser.following.length > 0) {
-            const followingSlice = currentUser.following.slice(0, 10); 
-            const constraints: any[] = [ where('authorId', 'in', followingSlice), orderBy('date', 'desc'), limit(count) ];
+            const constraints: any[] = [ where('authorId', 'in', currentUser.following.slice(0, 10)), orderBy('date', 'desc'), limit(count) ];
             if (start) constraints.push(startAfter(start));
             finalQuery = query(postsCollection, ...constraints);
         } else if (filter === 'following') {
-             // User follows no one, return empty
              return { posts: [], lastVisible: null };
         } else {
              const constraints: any[] = [ where('types', '==', filter), orderBy('date', 'desc'), limit(count) ];
@@ -389,7 +386,7 @@ export const api = {
         return { posts, lastVisible };
     },
     listenForPostsByAuthor: (authorId: string, callback: (posts: Post[]) => void, onError: (error: Error) => void) => {
-        const q = query(postsCollection, where('authorId', '==', authorId), where('types', 'in', ['general', 'proposal', 'offer', 'opportunity']), orderBy('date', 'desc'));
+        const q = query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc'));
         return onSnapshot(q, s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), onError);
     },
     togglePinPost: (admin: User, postId: string, pin: boolean) => updateDoc(doc(postsCollection, postId), { isPinned: pin }),
@@ -430,52 +427,38 @@ export const api = {
                 callback(conversations);
             }, onError),
     
-    // --- SIMPLE MESSAGING (NO CRYPTO) ---
     startChat: async (currentUser: User, targetUser: PublicUserProfile): Promise<Conversation> => {
-        const convoId = [currentUser.id, targetUser.id].sort().join('_');
+        const currentUserId = currentUser.id;
+        const targetUserId = targetUser.id;
+        const q = query(conversationsCollection, where('members', 'array-contains', currentUserId));
+        const querySnapshot = await getDocs(q);
+        const existingConvoDoc = querySnapshot.docs.find(doc => {
+            const data = doc.data();
+            return data.isGroup === false && data.members.includes(targetUserId);
+        });
+        if (existingConvoDoc) return { id: existingConvoDoc.id, ...existingConvoDoc.data() } as Conversation;
+        const convoId = [currentUserId, targetUserId].sort().join('_');
         const convoRef = doc(conversationsCollection, convoId);
-        const existing = await getDoc(convoRef);
-        if (existing.exists()) return { id: existing.id, ...existing.data() } as Conversation;
-        
-        const newConvoData = { 
-            members: [currentUser.id, targetUser.id], 
-            memberNames: { [currentUser.id]: currentUser.name, [targetUser.id]: targetUser.name }, 
-            lastMessage: "Conversation started", 
-            lastMessageTimestamp: Timestamp.now(), 
-            lastMessageSenderId: currentUser.id, 
-            readBy: [currentUser.id], 
-            isGroup: false 
+        const newConvoData = {
+            members: [currentUserId, targetUserId], memberNames: { [currentUserId]: currentUser.name, [targetUserId]: targetUser.name }, 
+            lastMessage: "Conversation started", lastMessageTimestamp: Timestamp.now(), lastMessageSenderId: currentUserId, 
+            readBy: [currentUserId], isGroup: false
         };
         await setDoc(convoRef, newConvoData);
-        return { id: convoId, ...newConvoData };
+        return { id: convoId, ...newConvoData } as Conversation;
     },
     createGroupChat: async (name: string, memberIds: string[], memberNames: {[key: string]: string}) => {
         await addDoc(conversationsCollection, { name, members: memberIds, memberNames, lastMessage: "Group created", lastMessageTimestamp: Timestamp.now(), lastMessageSenderId: memberIds[0], readBy: [memberIds[0]], isGroup: true });
     },
     listenForMessages: (convoId: string, currentUser: User, callback: (messages: Message[]) => void, onError: (error: Error) => void) => {
         return onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), (snapshot) => {
-            const processedMessages = snapshot.docs.map(d => {
-                const data = d.data();
-                return { id: d.id, ...data } as Message;
-            });
-            callback(processedMessages);
+            callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Message)));
         }, onError);
     },
     sendMessage: async (convoId: string, message: Omit<Message, 'id' | 'timestamp'>, convo: Conversation) => {
         const batch = writeBatch(db);
-        
-        batch.set(doc(collection(db, 'conversations', convoId, 'messages')), { 
-            ...message, 
-            timestamp: serverTimestamp() 
-        });
-        
-        batch.update(doc(conversationsCollection, convoId), { 
-            lastMessage: message.text, 
-            lastMessageTimestamp: serverTimestamp(), 
-            lastMessageSenderId: message.senderId, 
-            readBy: [message.senderId] 
-        });
-        
+        batch.set(doc(collection(db, 'conversations', convoId, 'messages')), { ...message, timestamp: serverTimestamp() });
+        batch.update(doc(conversationsCollection, convoId), { lastMessage: message.text, lastMessageTimestamp: serverTimestamp(), lastMessageSenderId: message.senderId, readBy: [message.senderId] });
         await batch.commit();
     },
     markConversationAsRead: (convoId: string, userId: string) => updateDoc(doc(conversationsCollection, convoId), { readBy: arrayUnion(userId) }),
@@ -539,9 +522,42 @@ export const api = {
             }
         });
     },
-    redeemCcapForCash: (user: User, ecocashName: string, ecocashNumber: string, usdtValue: number, ccapToRedeem: number, ccap_to_usd_rate: number) => Promise.resolve(),
-    stakeCcapForNextCycle: (user: MemberUser) => Promise.resolve(),
-    convertCcapToVeq: (user: MemberUser, venture: Venture, ccapAmount: number, ccapRate: number) => Promise.resolve(),
+    // Economy CCAP Actions
+    redeemCcapForCash: (user: User, ecocashName: string, ecocashNumber: string, usdtValue: number, ccapToRedeem: number, ccap_to_usd_rate: number) => {
+        return addDoc(collection(db, 'payouts'), {
+            userId: user.id, userName: user.name, type: 'ccap_redemption', amount: usdtValue, status: 'pending', requestedAt: serverTimestamp(), ecocashName, ecocashNumber,
+            meta: { ccapAmount: ccapToRedeem, ccapToUsdRate: ccap_to_usd_rate }
+        });
+    },
+    stakeCcapForNextCycle: (user: MemberUser) => {
+        return updateDoc(doc(db, 'users', user.id), { lastCycleChoice: 'staked' });
+    },
+    convertCcapToVeq: (user: MemberUser, venture: Venture, ccapAmount: number, ccapRate: number) => {
+        return runTransaction(db, async (t) => {
+            const userRef = doc(db, 'users', user.id);
+            const ventureRef = doc(db, 'ventures', venture.id);
+            const ventureDoc = await t.get(ventureRef);
+            if (!ventureDoc.exists()) throw new Error("Venture not found.");
+            
+            const ticker = ventureDoc.data().ticker || 'VEQ';
+            const shares = Math.floor(ccapAmount * ccapRate * 100); 
+            
+            t.update(userRef, {
+                lastCycleChoice: 'invested',
+                ventureEquity: arrayUnion({
+                    ventureId: venture.id,
+                    ventureName: venture.name,
+                    ventureTicker: ticker,
+                    shares: shares
+                })
+            });
+            
+            t.update(ventureRef, {
+                fundingRaisedCcap: increment(ccapAmount),
+                backers: arrayUnion(user.id)
+            });
+        });
+    },
     getSustenanceFund: async (): Promise<SustenanceCycle | null> => { const docSnap = await getDoc(doc(sustenanceCollection, 'current')); return docSnap.exists() ? docSnap.data() as SustenanceCycle : null; },
     getAllSustenanceVouchers: async (): Promise<SustenanceVoucher[]> => { const snapshot = await getDocs(query(vouchersCollection, orderBy('issuedAt', 'desc'), limit(100))); return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as SustenanceVoucher)); },
     initializeSustenanceFund: (admin: User, balance: number, cost: number) => setDoc(doc(sustenanceCollection, 'current'), { slf_balance: balance, hamper_cost: cost, last_run: serverTimestamp(), next_run: serverTimestamp() }),
@@ -629,36 +645,42 @@ export const api = {
             const transactionLogRef = doc(collection(db, 'users', userId, 'transactions'));
             const userDoc = await transaction.get(userRef);
             if (!userDoc.exists()) throw new Error(`User profile for ID ${userId} not found.`);
-            const currentBalance = parseFloat(userDoc.data().ubtBalance as any) || 0;
+            const currentBalance = userDoc.data().ubtBalance || 0;
             const newBalance = currentBalance + amount;
             if (newBalance < 0) throw new Error(`Insufficient balance.`);
             transaction.update(userRef, { ubtBalance: newBalance });
-            transaction.set(transactionLogRef, { type: amount > 0 ? 'credit' : 'debit', amount: Math.abs(amount), reason: reason, timestamp: serverTimestamp(), actorId: adminUser.id, actorName: adminUser.name, balanceBefore: currentBalance, balanceAfter: newBalance });
+            transaction.set(transactionLogRef, {
+                type: amount > 0 ? 'credit' : 'debit',
+                amount: Math.abs(amount),
+                reason: reason,
+                timestamp: serverTimestamp(),
+                actorId: adminUser.id,
+                actorName: adminUser.name,
+                balanceBefore: currentBalance,
+                balanceAfter: newBalance,
+            });
         });
     },
     requestUbtRedemption: (user: User, ubtAmount: number, usdValue: number, ecocashName: string, ecocashNumber: string) => {
         return runTransaction(db, async (t) => {
+            const payoutRef = doc(collection(db, 'payouts'));
             const userRef = doc(usersCollection, user.id);
-            const userDoc = await t.get(userRef);
-            if (!userDoc.exists()) throw new Error("User not found.");
-            const currentBalance = userDoc.data()?.ubtBalance || 0;
-            const initialStake = userDoc.data()?.initialUbtStake || 0;
-            if (ubtAmount > Math.max(0, currentBalance - initialStake)) throw new Error("Amount exceeds redeemable balance.");
-            t.set(doc(collection(db, 'payouts')), { userId: user.id, userName: user.name, type: 'ubt_redemption', amount: usdValue, status: 'pending', requestedAt: serverTimestamp(), ecocashName, ecocashNumber, meta: { ubtAmount: ubtAmount, ubtToUsdRate: ubtAmount > 0 ? usdValue / ubtAmount : 0 } });
+            const txRef = doc(collection(db, 'users', user.id, 'transactions'));
+            
+            t.set(payoutRef, { userId: user.id, userName: user.name, type: 'ubt_redemption', amount: usdValue, status: 'pending', requestedAt: serverTimestamp(), ecocashName, ecocashNumber, meta: { ubtAmount: ubtAmount, ubtToUsdRate: ubtAmount > 0 ? usdValue / ubtAmount : 0 } });
             t.update(userRef, { ubtBalance: increment(-ubtAmount) });
-            t.set(doc(collection(db, 'users', user.id, 'transactions')), { type: 'debit', amount: ubtAmount, reason: 'UBT redemption request', timestamp: serverTimestamp(), actorId: user.id, actorName: user.name });
+            t.set(txRef, { type: 'debit', amount: ubtAmount, reason: 'UBT redemption request', timestamp: serverTimestamp(), actorId: user.id, actorName: user.name });
         });
     },
     requestOnchainWithdrawal: (user: User, ubtAmount: number, solanaAddress: string) => {
         return runTransaction(db, async (t) => {
-            const userRef = doc(usersCollection, user.id);
-            const userDoc = await t.get(userRef);
-            if (!userDoc.exists()) throw new Error("User profile not found.");
-            const currentBalance = userDoc.data()?.ubtBalance || 0;
-            if (ubtAmount > currentBalance) throw new Error("Amount exceeds available balance.");
-            t.set(doc(collection(db, 'payouts')), { userId: user.id, userName: user.name, type: 'onchain_withdrawal', amount: ubtAmount, status: 'pending', requestedAt: serverTimestamp(), ecocashName: 'N/A', ecocashNumber: 'N/A', meta: { solanaAddress: solanaAddress } });
+             const payoutRef = doc(collection(db, 'payouts'));
+             const userRef = doc(usersCollection, user.id);
+             const txRef = doc(collection(db, 'users', user.id, 'transactions'));
+             
+            t.set(payoutRef, { userId: user.id, userName: user.name, type: 'onchain_withdrawal', amount: ubtAmount, status: 'pending', requestedAt: serverTimestamp(), ecocashName: 'N/A', ecocashNumber: 'N/A', meta: { solanaAddress: solanaAddress } });
             t.update(userRef, { ubtBalance: increment(-ubtAmount) });
-            t.set(doc(collection(db, 'users', user.id, 'transactions')), { type: 'debit', amount: ubtAmount, reason: 'On-chain withdrawal request', timestamp: serverTimestamp(), actorId: user.id, actorName: user.name });
+            t.set(txRef, { type: 'debit', amount: ubtAmount, reason: 'On-chain withdrawal request', timestamp: serverTimestamp(), actorId: user.id, actorName: user.name });
         });
     },
 };

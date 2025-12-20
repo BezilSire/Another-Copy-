@@ -4,7 +4,7 @@ import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPasswor
 import { doc, onSnapshot, setDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
 import { useToast } from './ToastContext';
 import { api } from '../services/apiService';
-// import { cryptoService } from '../services/cryptoService'; // Disabled
+import { cryptoService } from '../services/cryptoService';
 import { auth, db } from '../services/firebase';
 import { User, Agent, NewPublicMemberData, MemberUser } from '../types';
 import { generateReferralCode, generateAgentCode } from '../utils';
@@ -69,14 +69,17 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             } else {
               setCurrentUser(userData);
               
-              // E2EE Key Initialization (Disabled)
-              /*
-              const keys = cryptoService.getOrGenerateKeyPair();
-              if (userData.publicKey !== keys.publicKey) {
-                  console.log("Publishing public key for E2EE...");
-                  await api.updateUser(user.uid, { publicKey: keys.publicKey });
+              // Initialize $UBT Crypto Identity
+              try {
+                  const keys = cryptoService.getOrGenerateSigningKeys();
+                  // Only update Firestore if the key is missing or different
+                  if (userData.publicKey !== keys.publicKey) {
+                      console.log("Publishing public key for $UBT Scan...");
+                      await api.updateUser(user.uid, { publicKey: keys.publicKey });
+                  }
+              } catch (e) {
+                  console.error("Failed to initialize crypto identity", e);
               }
-              */
             }
           } else {
             if (!isProcessingAuthRef.current) {
@@ -143,7 +146,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
       const { user } = userCredential;
 
-      // const keys = cryptoService.getOrGenerateKeyPair(); // Disabled
+      const keys = cryptoService.getOrGenerateSigningKeys();
 
       const newAgent: Omit<Agent, 'id'> = {
         name: credentials.name,
@@ -160,7 +163,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         hasCompletedInduction: true,
         commissionBalance: 0,
         referralEarnings: 0,
-        // publicKey: keys.publicKey, // Disabled
+        publicKey: keys.publicKey,
       };
 
       await setDoc(doc(db, 'users', user.uid), newAgent);
@@ -212,7 +215,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         };
         batch.set(memberRef, newMemberDoc);
 
-        // const keys = cryptoService.getOrGenerateKeyPair(); // Disabled
+        const keys = cryptoService.getOrGenerateSigningKeys();
 
         const userRef = doc(db, 'users', user.uid);
         const newUserDoc: Omit<MemberUser, 'id' | 'createdAt' | 'lastSeen'> = {
@@ -235,7 +238,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             id_card_number: '',
             ubtBalance: 0,
             initialUbtStake: 0,
-            // publicKey: keys.publicKey, // Disabled
+            publicKey: keys.publicKey,
         };
         batch.set(userRef, {...newUserDoc, createdAt: serverTimestamp(), lastSeen: serverTimestamp()});
 
