@@ -271,27 +271,33 @@ export const api = {
 
     initializeTreasury: async (admin: Admin) => {
         const TOTAL_SUPPLY = 15000000;
-        const vaults: Omit<TreasuryVault, 'id'>[] = [
-            { name: 'Genesis Mother Node', type: 'GENESIS', description: 'Primary protocol anchor.', balance: TOTAL_SUPPLY, publicKey: 'GENESIS_PROTOCOL_ADDR', isLocked: true },
-            { name: 'Sustenance Vault', type: 'SUSTENANCE', description: 'Locked for food hamper drops.', balance: 0, publicKey: 'VAULT_SUSTENANCE_ADDR', isLocked: true },
-            { name: 'Distress Reserve', type: 'DISTRESS', description: 'Emergency community aid.', balance: 0, publicKey: 'VAULT_DISTRESS_ADDR', isLocked: true },
-            { name: 'Venture Seed Fund', type: 'VENTURE', description: 'Capital for member ideas.', balance: 0, publicKey: 'VAULT_VENTURE_ADDR', isLocked: true },
-            { name: 'Liquid System Float', type: 'FLOAT', description: 'Rewards & referrals pool.', balance: 0, publicKey: 'VAULT_LIQUID_FLOAT_ADDR', isLocked: false },
+        const vaults: TreasuryVault[] = [
+            { id: 'GENESIS', name: 'Genesis Mother Node', type: 'GENESIS', description: 'Primary protocol anchor.', balance: TOTAL_SUPPLY, publicKey: 'GENESIS_PROTOCOL_ADDR', isLocked: true },
+            { id: 'SUSTENANCE', name: 'Sustenance Vault', type: 'SUSTENANCE', description: 'Locked for food hamper drops.', balance: 0, publicKey: 'VAULT_SUSTENANCE_ADDR', isLocked: true },
+            { id: 'DISTRESS', name: 'Distress Reserve', type: 'DISTRESS', description: 'Emergency community aid.', balance: 0, publicKey: 'VAULT_DISTRESS_ADDR', isLocked: true },
+            { id: 'VENTURE', name: 'Venture Seed Fund', type: 'VENTURE', description: 'Capital for member ideas.', balance: 0, publicKey: 'VAULT_VENTURE_ADDR', isLocked: true },
+            { id: 'FLOAT', name: 'Liquid System Float', type: 'FLOAT', description: 'Rewards & referrals pool.', balance: 0, publicKey: 'VAULT_LIQUID_FLOAT_ADDR', isLocked: false },
         ];
 
         return runTransaction(db, async (t) => {
+            // Check if already initialized to prevent duplicates
             const econRef = doc(globalsCollection, 'economy');
+            const econDoc = await t.get(econRef);
+            if (econDoc.exists() && econDoc.data().total_ubt_supply > 0) {
+                 throw new Error("Treasury protocol already established.");
+            }
+
             t.set(econRef, { total_ubt_supply: TOTAL_SUPPLY, ubt_in_cvp: 0, ubt_to_usd_rate: 1.0 }, { merge: true });
 
             for (const vault of vaults) {
-                const vaultRef = doc(vaultsCollection, vault.type);
+                const vaultRef = doc(vaultsCollection, vault.id);
                 t.set(vaultRef, vault);
             }
 
             // Genesis Mint Event
-            const ledgerRef = doc(collection(db, 'ledger'));
+            const ledgerRef = doc(collection(db, 'ledger'), `genesis-mint-${Date.now()}`);
             t.set(ledgerRef, {
-                id: `genesis-mint-${Date.now()}`,
+                id: ledgerRef.id,
                 senderId: 'PROTOCOL_ORIGIN',
                 receiverId: 'GENESIS',
                 amount: TOTAL_SUPPLY,
@@ -300,9 +306,17 @@ export const api = {
                 type: 'SYSTEM_MINT',
                 hash: 'PROTOCOL_GENESIS_EVENT',
                 signature: 'SYSTEM_SIGNED',
-                senderPublicKey: 'TREASURY'
+                senderPublicKey: 'TREASURY_AUTHORITY'
             });
+            
+            // Also credit the admin node with a working balance for manual locks/sends
+            const adminRef = doc(usersCollection, admin.id);
+            t.update(adminRef, { ubtBalance: increment(1000) });
         });
+    },
+
+    toggleVaultLock: async (vaultId: string, isLocked: boolean) => {
+        return updateDoc(doc(vaultsCollection, vaultId), { isLocked });
     },
 
     syncInternalVaults: async (admin: Admin, fromVault: TreasuryVault, toVault: TreasuryVault, amount: number, reason: string) => {
@@ -311,8 +325,10 @@ export const api = {
             const toRef = doc(vaultsCollection, toVault.id);
             
             const fromDoc = await t.get(fromRef);
+            if (!fromDoc.exists()) throw new Error("Source vault node missing.");
+            
             const currentBal = fromDoc.data()?.balance || 0;
-            if (currentBal < amount) throw new Error("Vault liquidity insufficient.");
+            if (currentBal < amount) throw new Error("Vault liquidity insufficient for this quantum move.");
 
             t.update(fromRef, { balance: increment(-amount) });
             t.update(toRef, { balance: increment(amount) });
@@ -358,16 +374,16 @@ export const api = {
             const userRef = doc(usersCollection, admin.id);
             t.update(userRef, { ubtBalance: increment(amount) });
             
-            const ledgerRef = doc(collection(db, 'ledger'));
+            const ledgerRef = doc(collection(db, 'ledger'), `mint-${Date.now()}`);
             t.set(ledgerRef, { 
-                id: `mint-${Date.now()}`,
+                id: ledgerRef.id,
                 senderId: 'GENESIS',
                 receiverId: admin.id,
                 amount: amount,
                 timestamp: Date.now(),
                 serverTimestamp: serverTimestamp(),
                 type: 'SYSTEM_MINT',
-                hash: 'GENESIS_MINT_EVENT',
+                hash: `MINT_EVENT_${ledgerRef.id}`,
                 signature: 'SYSTEM_SIGNED',
                 senderPublicKey: 'TREASURY'
             });
@@ -595,7 +611,7 @@ export const api = {
             t.update(econRef, { ubt_in_cvp: increment(-purchase.amountUbt) });
 
             // Store the Truth (The Signed Log)
-            const ledgerRef = doc(collection(db, 'ledger'));
+            const ledgerRef = doc(collection(db, 'ledger'), `ec-${purchase.id}`);
             t.set(ledgerRef, {
                 senderId: 'TREASURY',
                 receiverId: purchase.userId,
@@ -603,7 +619,7 @@ export const api = {
                 type: 'ECOCASH_ACQUISITION',
                 timestamp: Date.now(),
                 serverTimestamp: serverTimestamp(),
-                id: `ec-${purchase.id}`,
+                id: ledgerRef.id,
                 hash: `ECOCASH_REF_${purchase.ecocashRef}`,
                 signature: 'TREASURY_SYNCED',
                 senderPublicKey: 'SYSTEM_ORACLE'
@@ -746,7 +762,7 @@ export const api = {
         });
     },
 
-    // Admin
+    // Admin Methods
     listenForAllUsers: (adminUser: User, callback: (users: User[]) => void, onError: (error: Error) => void) => onSnapshot(query(usersCollection, orderBy('createdAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), onError),
     listenForAllMembers: (adminUser: User, callback: (members: Member[]) => void, onError: (error: Error) => void) => onSnapshot(query(membersCollection, orderBy('date_registered', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), onError),
     listenForAllAgents: (adminUser: User, callback: (agents: Agent[]) => void, onError: (error: Error) => void) => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => {
