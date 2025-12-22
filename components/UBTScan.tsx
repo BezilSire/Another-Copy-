@@ -149,7 +149,7 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
             const signature = cryptoService.signTransaction(payloadToSign);
             const txId = Date.now().toString(36) + Math.random().toString(36).substring(2);
             
-            // FIX: Added missing properties senderPublicKey and parentHash to comply with UbtTransaction type
+            // FIX: Added missing protocol_mode and other required properties
             const transaction: UbtTransaction = {
                 id: txId, 
                 senderId: currentUser.id,
@@ -160,7 +160,8 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
                 signature: signature,
                 hash: payloadToSign,
                 senderPublicKey: currentUser.publicKey || cryptoService.getPublicKey() || "",
-                parentHash: 'GENESIS_SCAN'
+                parentHash: 'GENESIS_SCAN',
+                protocol_mode: 'MAINNET'
             };
 
             await api.processUbtTransaction(transaction);

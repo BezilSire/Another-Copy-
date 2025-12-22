@@ -18,7 +18,8 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({ user, onLogout
   const handleResend = async () => {
     setIsSending(true);
     try {
-      await api.sendVerificationEmail();
+      // FIX: Changed sendVerificationEmail to sendEmailVerification to match the apiService implementation
+      await api.sendEmailVerification();
       addToast('A new verification email has been sent. Please check your inbox (and spam folder).', 'success');
     } catch (error) {
       addToast('Failed to send verification email. Please try again later.', 'error');

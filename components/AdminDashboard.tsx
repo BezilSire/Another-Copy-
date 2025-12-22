@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Admin, Agent, Member, Broadcast, Report, User, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PendingUbtPurchase, SellRequest } from '../types';
 import { api } from '../services/apiService';
@@ -18,18 +17,18 @@ import { EcocashVerificationAdmin } from './EcocashVerificationAdmin';
 import { LiquidationOracleAdmin } from './LiquidationOracleAdmin';
 import { TreasuryManager } from './TreasuryManager';
 import { LockIcon } from './icons/LockIcon';
+import { SendIcon } from './icons/SendIcon';
+import { AdminDispatchTerminal } from './AdminDispatchTerminal';
 
-type AdminView = 'dashboard' | 'feed' | 'profile' | 'wallet' | 'oracle' | 'simulation' | 'treasury';
+type AdminView = 'dashboard' | 'feed' | 'profile' | 'wallet' | 'oracle' | 'simulation' | 'treasury' | 'dispatch';
 
-interface AdminDashboardProps {
+export const AdminDashboard: React.FC<{
   user: Admin;
   onUpdateUser: (updatedUser: Partial<User>) => Promise<void>;
   unreadCount: number;
   onOpenChat: () => void;
   onViewProfile: (userId: string | null) => void;
-}
-
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUser, unreadCount, onOpenChat, onViewProfile }) => {
+}> = ({ user, onUpdateUser, unreadCount, onOpenChat, onViewProfile }) => {
   const [view, setView] = useState<AdminView>('dashboard');
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -42,12 +41,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [pendingPurchases, setPendingPurchases] = useState<PendingUbtPurchase[]>([]);
   const [sellRequests, setSellRequests] = useState<SellRequest[]>([]);
-  
   const [isMinting, setIsMinting] = useState(false);
   const [typeFilter, setTypeFilter] = useState<PostFilterType>('all');
   const { addToast } = useToast();
 
-  // Unified Protocol Listeners
   useEffect(() => {
     const unsubUsers = api.listenForAllUsers(user, setAllUsers, console.error);
     const unsubMembers = api.listenForAllMembers(user, setMembers, console.error);
@@ -71,7 +68,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
     setIsMinting(true);
     try {
         await api.mintTestUbt(user, 10000);
-        addToast("Genesis Simulation Successful. 10,000 UBT minted to Admin node.", "success");
+        addToast("Genesis Simulation Successful. Assets indexed on TESTNET ledger.", "success");
     } catch (e) {
         addToast("Simulation fault.", "error");
     } finally {
@@ -80,10 +77,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
   }
 
   const TabButton: React.FC<{label: string, count?: number, isActive: boolean, onClick: () => void, icon: React.ReactNode}> = ({ label, count, isActive, onClick, icon }) => (
-    <button onClick={onClick} className={`${isActive ? 'border-brand-gold text-brand-gold gold-glow-text' : 'border-transparent text-gray-500 hover:text-gray-300'} group inline-flex items-center whitespace-nowrap py-4 px-1 border-b-2 font-black text-[10px] sm:text-xs uppercase tracking-widest transition-all`}>
-        <span className="mr-2 h-4 w-4 hidden sm:inline-block">{icon}</span>
+    <button onClick={onClick} className={`${isActive ? 'border-brand-gold text-brand-gold gold-glow-text' : 'border-transparent text-gray-500 hover:text-gray-300'} group inline-flex items-center whitespace-nowrap py-4 px-1 border-b-2 font-black text-[10px] uppercase tracking-widest transition-all`}>
+        <span className="mr-2 h-4 w-4">{icon}</span>
         {label}
-        {count !== undefined && count > 0 && <span className="ml-2 bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full shadow-lg">{count}</span>}
+        {count !== undefined && count > 0 && <span className="ml-2 bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">{count}</span>}
     </button>
   );
 
@@ -93,6 +90,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
             return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={api.sendBroadcast} />;
         case 'treasury':
             return <TreasuryManager admin={user} />;
+        case 'dispatch':
+            return <AdminDispatchTerminal admin={user} />;
         case 'oracle': 
             return (
                 <div className="space-y-8 animate-fade-in">
@@ -102,32 +101,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
             );
         case 'simulation': 
             return (
-                <div className="space-y-8 animate-fade-in">
-                    <div className="glass-card p-10 rounded-[3rem] border-white/5 space-y-8">
-                        <div className="flex items-center gap-4">
-                            <div className="p-4 bg-brand-gold/10 rounded-2xl text-brand-gold border border-brand-gold/20 shadow-glow-gold">
-                                <ShieldCheckIcon className="h-8 w-8" />
+                <div className="space-y-8 animate-fade-in max-w-4xl mx-auto">
+                    <div className="glass-card p-12 rounded-[4rem] border-brand-gold/20 space-y-10 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 w-64 h-64 bg-brand-gold/5 blur-3xl pointer-events-none"></div>
+                        <div className="flex items-center gap-6">
+                            <div className="p-5 bg-brand-gold/10 rounded-[2rem] text-brand-gold border border-brand-gold/20 shadow-glow-gold">
+                                <ShieldCheckIcon className="h-10 w-10" />
                             </div>
                             <div>
-                                <h2 className="text-3xl font-black text-white tracking-tighter uppercase gold-text leading-none font-sans">Genesis Bench</h2>
-                                <p className="text-gray-500 text-[10px] font-black uppercase tracking-[0.4em] mt-2">Ledger Testnet Environment</p>
+                                <h2 className="text-4xl font-black text-white tracking-tighter uppercase gold-text leading-none">Simulation Bench</h2>
+                                <p className="label-caps !text-[9px] !tracking-[0.5em] mt-3 !text-gray-500">Node Testnet Environment</p>
                             </div>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mt-10">
-                            <div className="p-8 bg-slate-950/60 rounded-[2rem] border border-white/5 space-y-6">
-                                <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em]">Asset Minting</h3>
-                                <div className="flex items-baseline gap-2">
-                                    <p className="text-4xl font-mono font-black text-white">{(user.ubtBalance || 0).toLocaleString()}</p>
-                                    <p className="text-xs text-brand-gold font-bold">Liquid UBT</p>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                            <div className="p-10 bg-slate-950/60 rounded-[3rem] border border-white/5 space-y-8">
+                                <p className="label-caps !text-[9px] text-gray-600">Synthetic Assets</p>
+                                <div className="space-y-2">
+                                    <p className="text-5xl font-mono font-black text-white">{(user.ubtBalance || 0).toLocaleString()}</p>
+                                    <p className="label-caps !text-[9px] text-brand-gold opacity-60">Provisioned UBT</p>
                                 </div>
-                                <button onClick={handleMintSimulation} disabled={isMinting} className="w-full py-4 bg-brand-gold text-slate-950 font-black rounded-xl uppercase tracking-widest text-xs shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-2">
-                                    {isMinting ? <LoaderIcon className="h-4 w-4 animate-spin"/> : "Simulate Genesis Mint (10k UBT)"}
+                                <button onClick={handleMintSimulation} disabled={isMinting} className="w-full py-5 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.3em] text-[10px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-3">
+                                    {isMinting ? <LoaderIcon className="h-5 w-5 animate-spin" /> : <>Generate 10k Testnet UBT <DatabaseIcon className="h-4 w-4"/></>}
                                 </button>
                             </div>
-                            <div className="p-8 bg-slate-950/60 rounded-[2rem] border border-white/5 space-y-6">
-                                 <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em]">Ledger Probe</h3>
-                                 <p className="text-xs text-gray-500 uppercase font-black leading-loose">Monitor all Quantum Syncs across the network state in real-time.</p>
-                                 <button onClick={() => setView('wallet')} className="w-full py-4 bg-slate-900 border border-white/10 text-white font-black rounded-xl uppercase tracking-widest text-xs hover:bg-slate-800 transition-all">Open Ledger Auditor</button>
+                            <div className="p-10 bg-slate-950/60 rounded-[3rem] border border-white/5 space-y-6 flex flex-col justify-center">
+                                 <p className="label-caps !text-[9px] text-gray-600">Testnet Logic</p>
+                                 <p className="text-[11px] text-gray-500 uppercase font-black leading-loose opacity-70">Simulation assets are isolated from the production chain. They will not appear on the Public Explorer or count towards global liquidity metrics.</p>
+                                 <button onClick={() => setView('wallet')} className="mt-4 py-4 bg-white/5 border border-white/10 text-white font-black rounded-xl uppercase tracking-widest text-[9px] hover:bg-white/10 transition-all">Audit Global Chain</button>
                             </div>
                         </div>
                     </div>
@@ -136,30 +137,34 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
         case 'wallet': return <LedgerPage />;
         case 'profile': return <AdminProfile user={user} onUpdateUser={onUpdateUser} />;
         case 'feed': return ( <> <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView /><PostsFeed user={user} feedType="all" isAdminView onViewProfile={onViewProfile} typeFilter={typeFilter} /></> );
-        default: return <div className="flex flex-col items-center justify-center p-20 opacity-50"><LoaderIcon className="h-10 w-10 text-brand-gold animate-spin mb-4" /><p className="label-caps">Syncing Protocol...</p></div>;
+        default: return null;
     }
   };
 
   return (
-    <div className="space-y-10 animate-fade-in max-w-7xl mx-auto px-4 bg-transparent pb-20">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-          <div className="animate-slide-up">
-              <h1 className="text-4xl font-black text-white tracking-tighter uppercase leading-none gold-text font-sans">Command Center</h1>
-              <p className="text-brand-gold text-[10px] font-black uppercase tracking-[0.4em] mt-3">Ubuntium Network Authority Node</p>
+    <div className="space-y-12 animate-fade-in max-w-[100vw] px-4 sm:px-10 lg:px-20 pb-20">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-10">
+          <div className="space-y-4">
+              <h1 className="text-6xl font-black text-white tracking-tighter uppercase leading-none gold-text">Authority HUD</h1>
+              <div className="flex items-center gap-4">
+                   <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shadow-glow-matrix"></div>
+                   <p className="label-caps !text-[10px] !tracking-[0.5em] !text-gray-500">Root Node Identity Verified</p>
+              </div>
           </div>
-          <div className="border-b border-white/10 w-full md:w-auto overflow-x-auto no-scrollbar">
-              <nav className="-mb-px flex space-x-6 sm:space-x-8" aria-label="Tabs">
+          <div className="border-b border-white/10 w-full xl:w-auto overflow-x-auto no-scrollbar">
+              <nav className="-mb-px flex space-x-10" aria-label="Tabs">
                   <TabButton label="Operations" icon={<LayoutDashboardIcon/>} isActive={view === 'dashboard'} onClick={() => setView('dashboard')} />
                   <TabButton label="Treasury" icon={<LockIcon/>} isActive={view === 'treasury'} onClick={() => setView('treasury')} />
+                  <TabButton label="Dispatch" icon={<SendIcon/>} isActive={view === 'dispatch'} onClick={() => setView('dispatch')} />
                   <TabButton label="Simulation" icon={<ShieldCheckIcon/>} isActive={view === 'simulation'} onClick={() => setView('simulation')} />
                   <TabButton label="Oracle" icon={<DollarSignIcon/>} isActive={view === 'oracle'} count={pendingPurchases.length + sellRequests.filter(r => r.status === 'PENDING').length} onClick={() => setView('oracle')} />
-                  <TabButton label="Public Ledger" icon={<DatabaseIcon/>} isActive={view === 'wallet'} onClick={() => setView('wallet')} />
-                  <TabButton label="System" icon={<UserCircleIcon/>} isActive={view === 'profile'} onClick={() => setView('profile')} />
+                  <TabButton label="Explorer" icon={<DatabaseIcon/>} isActive={view === 'wallet'} onClick={() => setView('wallet')} />
+                  <TabButton label="Identity" icon={<UserCircleIcon/>} isActive={view === 'profile'} onClick={() => setView('profile')} />
               </nav>
           </div>
       </div>
 
-      <div className="mt-6 min-h-[60vh]">
+      <div className="mt-10 min-h-[60vh]">
           {renderActiveView()}
       </div>
     </div>

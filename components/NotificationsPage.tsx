@@ -56,37 +56,27 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ user, onNa
       notifsLoaded = true;
       checkLoadingDone();
     }, (error) => {
-        addToast("Could not load notifications due to a permissions issue.", "error");
-        console.error("Notifications listener error:", error);
+        console.error("Notifications listener permission error:", error);
         notifsLoaded = true;
         checkLoadingDone();
     });
     
-    let unsubActivities = () => {};
-    // Only fetch community activity if the user is an admin, to prevent permission errors for other roles.
-    if (user.role === 'admin') {
-        unsubActivities = api.listenForActivity(user.circle, (acts) => {
-          setActivities(acts);
-          activityLoaded = true;
-          checkLoadingDone();
-        }, (error) => {
-          addToast("Could not load community activity.", "error");
-          console.error("Activity listener error:", error);
-          activityLoaded = true;
-          checkLoadingDone();
-        });
-    } else {
-        // For non-admins, we just mark this as "loaded" so the loader doesn't spin forever.
-        activityLoaded = true;
-        checkLoadingDone();
-    }
-
+    // Circle activity is now accessible to all members for community engagement per updated rules
+    const unsubActivities = api.listenForActivity(user.circle, (acts) => {
+      setActivities(acts);
+      activityLoaded = true;
+      checkLoadingDone();
+    }, (error) => {
+      console.error("Activity listener permission error:", error);
+      activityLoaded = true;
+      checkLoadingDone();
+    });
 
     return () => {
       unsubNotifications();
       unsubActivities();
     };
-  }, [user.id, user.circle, user.role, addToast]);
+  }, [user.id, user.circle, addToast]);
 
   const mergedItems = useMemo((): NotificationItem[] => {
     const personal: NotificationItem[] = notifications.map(n => ({ ...n, itemType: 'notification' }));
@@ -99,13 +89,11 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ user, onNa
 
   const handleItemClick = (item: NotificationItem) => {
     if (item.itemType === 'notification' && !(item as Notification).read) {
-      // FIX: `markNotificationAsRead` expects `userId` as the first argument.
       api.markNotificationAsRead(user.id, item.id).catch(err => console.error("Failed to mark as read:", err));
     }
-    // If onViewProfile is provided and it's a profile link, use it. Otherwise, use onNavigate.
     if (onViewProfile && (item.type === 'NEW_MEMBER' || item.type === 'POST_LIKE' || item.type === 'NEW_FOLLOWER')) {
         const targetId = item.itemType === 'notification' ? item.causerId : item.link;
-        onViewProfile(targetId);
+        if (targetId) onViewProfile(targetId);
     } else {
         onNavigate(item);
     }
@@ -138,8 +126,6 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ user, onNa
       ) : mergedItems.length > 0 ? (
         <ul className="space-y-2">
           {mergedItems.map((item) => {
-              // FIX: Explicitly cast `item` to `Notification` to access the 'read' property,
-              // resolving ambiguity in the `NotificationItem` union type.
               const isUnread = item.itemType === 'notification' && !(item as Notification).read;
               const isRecentActivity = item.itemType === 'activity' && (Date.now() - item.timestamp.toMillis()) < 24 * 60 * 60 * 1000;
 

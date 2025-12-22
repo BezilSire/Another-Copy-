@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, P2POffer, GlobalEconomy, CommunityValuePool, SellRequest } from '../types';
 import { api } from '../services/apiService';
@@ -16,13 +15,23 @@ import { PhoneIcon } from './icons/PhoneIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { ArrowUpRightIcon } from './icons/ArrowUpRightIcon';
 import { formatTimeAgo } from '../utils';
-import { onSnapshot, query, collection, where, orderBy } from 'firebase/firestore';
+import { onSnapshot, query, collection, where, Timestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { ConfirmationDialog } from './ConfirmationDialog';
 
 interface PulseHubProps {
     user: User;
 }
+
+const getMillis = (val: any): number => {
+    if (!val) return 0;
+    if (typeof val.toMillis === 'function') return val.toMillis();
+    if (val instanceof Timestamp) return val.toMillis();
+    if (val instanceof Date) return val.getTime();
+    if (val.seconds !== undefined) return val.seconds * 1000;
+    const date = new Date(val);
+    return isNaN(date.getTime()) ? 0 : date.getTime();
+};
 
 const PulseChart: React.FC = () => (
     <div className="w-full h-32 relative overflow-hidden mt-4">
@@ -56,22 +65,18 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
     const [isLoading, setIsLoading] = useState(true);
     const { addToast } = useToast();
 
-    // AMM / Swap State
     const [swapType, setSwapType] = useState<'BUY' | 'SELL'>('BUY');
     const [swapAmount, setSwapAmount] = useState('');
     const [isSwapping, setIsSwapping] = useState(false);
     
-    // Ecocash Acquisition State
     const [showEcocashBridge, setShowEcocashBridge] = useState(false);
     const [ecocashRef, setEcocashRef] = useState('');
     const [isCopied, setIsCopied] = useState(false);
 
-    // Liquidation / Sell State
     const [showSellConfirmation, setShowSellConfirmation] = useState(false);
     const [mySellRequests, setMySellRequests] = useState<SellRequest[]>([]);
     const [requestToConfirmReceipt, setRequestToConfirmReceipt] = useState<SellRequest | null>(null);
 
-    // P2P State
     const [isListingOffer, setIsListingOffer] = useState(false);
     const [newOffer, setNewOffer] = useState({ type: 'SELL' as const, amount: '', price: '', method: 'Ecocash' });
     const [offerToTake, setOfferToTake] = useState<P2POffer | null>(null);
@@ -82,8 +87,11 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
         const unsubEcon = api.listenForGlobalEconomy(setEconomy, console.error);
         const unsubCvp = api.listenForCVP(user, setCvp, console.error);
         
-        const unsubSell = onSnapshot(query(collection(db, 'sell_requests'), where('userId', '==', user.id), orderBy('createdAt', 'desc')), s => {
-            setMySellRequests(s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest)));
+        // Simplified query to bypass composite index error
+        const unsubSell = onSnapshot(query(collection(db, 'sell_requests'), where('userId', '==', user.id)), s => {
+            const data = s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest));
+            data.sort((a, b) => getMillis(b.createdAt) - getMillis(a.createdAt));
+            setMySellRequests(data);
         });
 
         setIsLoading(false);
@@ -92,8 +100,6 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
 
     const ubtPrice = economy?.ubt_to_usd_rate || 1.0;
     const estTotal = (parseFloat(swapAmount) || 0) * ubtPrice;
-
-    // USSD Constructor: *151*2*2*031068*AMOUNT#
     const ussdCommand = `*151*2*2*031068*${Math.round(estTotal)}#`;
 
     const handleSwapInitiate = async () => {
@@ -211,7 +217,6 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
 
     return (
         <div className="max-w-6xl mx-auto space-y-8 animate-fade-in pb-20 px-4">
-            {/* Market Intelligence Dashboard */}
             <div className="glass-card p-8 rounded-[3rem] border-white/5 relative overflow-hidden flex flex-col lg:flex-row justify-between items-center gap-12 group">
                 <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-br from-brand-gold/5 via-transparent to-transparent pointer-events-none"></div>
                 <div className="space-y-4 text-center lg:text-left z-10 w-full lg:w-1/2">
@@ -235,7 +240,6 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                 </div>
             </div>
 
-            {/* Navigation Spectrum */}
             <div className="flex bg-slate-950/80 p-2 rounded-[2.5rem] gap-2 border border-white/5 shadow-2xl">
                 <button 
                     onClick={() => setView('swap')} 
@@ -253,7 +257,6 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
 
             {view === 'swap' ? (
                 <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-                    {/* Swap Interface */}
                     <div className="lg:col-span-8 glass-card p-10 rounded-[3.5rem] border-white/5 space-y-10 shadow-premium relative">
                         <div className="flex justify-between items-center">
                             <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Liquid Exchange</h2>
@@ -308,7 +311,6 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                         </button>
                     </div>
 
-                    {/* Pending Liquidation Track */}
                     <div className="lg:col-span-4 space-y-6">
                         <div className="glass-card p-8 rounded-[3rem] border-white/5 bg-slate-900/40">
                             <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em] mb-8">Active Protocols</h3>
@@ -337,12 +339,6 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                                         )}
                                     </div>
                                 ))}
-                                {mySellRequests.length === 0 && (
-                                    <div className="py-12 text-center">
-                                        <LoaderIcon className="h-6 w-6 text-gray-800 mx-auto mb-4 opacity-20" />
-                                        <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.4em]">No Active Liquidations</p>
-                                    </div>
-                                )}
                             </div>
                         </div>
                     </div>
@@ -411,17 +407,10 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                                 </div>
                             );
                         })}
-                        {offers.length === 0 && (
-                            <div className="col-span-full py-32 text-center glass-card rounded-[3.5rem] border-white/5 flex flex-col items-center justify-center gap-4">
-                                <DatabaseIcon className="h-16 w-16 text-gray-800 opacity-20" />
-                                <p className="text-[11px] font-black text-gray-700 uppercase tracking-[0.5em]">No Global Offers Indexed</p>
-                            </div>
-                        )}
                     </div>
                 </div>
             )}
 
-            {/* Bridge Modal */}
             {showEcocashBridge && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/95 backdrop-blur-2xl" onClick={() => setShowEcocashBridge(false)}></div>
@@ -469,9 +458,6 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                                         className="w-full bg-slate-950 border border-white/10 p-5 rounded-2xl text-white font-mono text-xl focus:outline-none focus:ring-1 focus:ring-brand-gold/30 uppercase"
                                     />
                                 </div>
-                                <p className="text-[10px] text-gray-600 leading-loose uppercase font-bold italic">
-                                    Dial the protocol above. Once successful, paste the transaction reference from your Ecocash SMS to anchor your UBT in the ledger.
-                                </p>
                             </div>
                         </div>
 
@@ -486,7 +472,6 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                 </div>
             )}
 
-            {/* Confirmation Dialogs */}
             <ConfirmationDialog 
                 isOpen={!!offerToTake}
                 onClose={() => setOfferToTake(null)}
@@ -513,108 +498,6 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                 message={`Verify that you have received $${requestToConfirmReceipt?.amountUsd.toFixed(2)} in your Ecocash account. This will complete the liquidation protocol and settle the ledger entries.`}
                 confirmButtonText="Confirm Receipt"
             />
-
-            {/* Sell Confirmation Modal */}
-            {showSellConfirmation && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/95 backdrop-blur-2xl" onClick={() => setShowSellConfirmation(false)}></div>
-                    <div className="glass-card w-full max-w-lg p-10 rounded-[3.5rem] border-red-500/30 z-10 relative space-y-10 animate-fade-in">
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <h3 className="text-2xl font-black text-white uppercase tracking-tighter leading-tight text-red-500">Quantum Dissolution</h3>
-                                <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mt-1">UBT Liquidation Protocol</p>
-                            </div>
-                            <button onClick={() => setShowSellConfirmation(false)} className="p-3 bg-white/5 rounded-full text-gray-500 hover:text-white transition-all"><XCircleIcon className="h-8 w-8" /></button>
-                        </div>
-
-                        <div className="space-y-6">
-                            <div className="bg-slate-950/80 p-8 rounded-[2.5rem] border border-red-500/20 text-center">
-                                 <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em] mb-4">Escrow Value</p>
-                                 <p className="text-6xl font-black text-white font-mono tracking-tighter">${estTotal.toFixed(2)}</p>
-                                 <p className="text-lg font-black text-gray-600 font-mono tracking-tighter uppercase mt-2">({swapAmount} UBT)</p>
-                            </div>
-
-                            <div className="p-5 bg-red-950/30 border border-red-900/50 rounded-3xl flex gap-4 items-start">
-                                <AlertTriangleIcon className="h-6 w-6 text-red-500 flex-shrink-0" />
-                                <div className="space-y-2">
-                                    <p className="text-[11px] text-red-200 font-black uppercase tracking-tight">Escrow Agreement</p>
-                                    <p className="text-[10px] text-red-400 leading-relaxed uppercase font-medium">
-                                        Your {swapAmount} $UBT will be moved to a secure System Escrow. This request will be dispatched to verified agents or the central treasury for Ecocash payout. Do not confirm receipt until funds are in your account.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-
-                        <button 
-                            onClick={handleFinalSell}
-                            disabled={isSwapping}
-                            className="w-full py-6 bg-red-600 hover:bg-red-500 text-white font-black rounded-3xl uppercase tracking-[0.4em] text-xs shadow-xl active:scale-95 transition-all flex justify-center items-center gap-2"
-                        >
-                            {isSwapping ? <LoaderIcon className="h-5 w-5 animate-spin" /> : "Initiate Dissolution"}
-                        </button>
-                    </div>
-                </div>
-            )}
-
-            {/* List Offer Modal */}
-            {isListingOffer && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-                    <div className="absolute inset-0 bg-black/90 backdrop-blur-2xl" onClick={() => setIsListingOffer(false)}></div>
-                    <div className="glass-card w-full max-w-lg p-10 rounded-[3.5rem] border-brand-gold/30 z-10 relative space-y-10 animate-fade-in shadow-[0_0_100px_-20px_rgba(212,175,55,0.4)]">
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <h3 className="text-2xl font-black text-white uppercase tracking-tighter gold-text leading-tight">Index Bazaar Offer</h3>
-                                <p className="text-[9px] font-black text-gray-500 uppercase tracking-widest mt-1">Network Entry Registration</p>
-                            </div>
-                            <button onClick={() => setIsListingOffer(false)} className="p-3 bg-white/5 rounded-full text-gray-500 hover:text-white transition-all"><XCircleIcon className="h-8 w-8" /></button>
-                        </div>
-
-                        <div className="space-y-8">
-                            <div className="flex bg-slate-950/80 p-2 rounded-3xl border border-white/10">
-                                <button onClick={() => setNewOffer(o => ({...o, type: 'SELL'}))} className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${newOffer.type === 'SELL' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-600'}`}>Sell UBT</button>
-                                <button onClick={() => setNewOffer(o => ({...o, type: 'BUY'}))} className={`flex-1 py-4 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${newOffer.type === 'BUY' ? 'bg-green-600 text-white shadow-lg' : 'text-gray-600'}`}>Buy UBT</button>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-6">
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Quantum Amount</label>
-                                    <input type="number" value={newOffer.amount} onChange={e => setNewOffer(o => ({...o, amount: e.target.value}))} className="w-full bg-slate-950 border border-white/10 p-5 rounded-2xl text-white font-mono text-xl focus:outline-none focus:ring-1 focus:ring-brand-gold/30" placeholder="0.00" />
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Price / Unit (USD)</label>
-                                    <input type="number" value={newOffer.price} onChange={e => setNewOffer(o => ({...o, price: e.target.value}))} className="w-full bg-slate-950 border border-white/10 p-5 rounded-2xl text-white font-mono text-xl focus:outline-none focus:ring-1 focus:ring-brand-gold/30" placeholder="1.00" />
-                                </div>
-                            </div>
-                            
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest px-1">Payment Protocol</label>
-                                <input type="text" value={newOffer.method} onChange={e => setNewOffer(o => ({...o, method: e.target.value}))} className="w-full bg-slate-950 border border-white/10 p-5 rounded-2xl text-white font-bold text-sm focus:outline-none focus:ring-1 focus:ring-brand-gold/30 uppercase tracking-widest" placeholder="Ecocash / Cash / Transfer" />
-                            </div>
-                        </div>
-
-                        <button onClick={handleCreateOffer} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-xs shadow-glow-gold active:scale-95 transition-all">Submit Protocol Index</button>
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
-
-const ArrowLeftRightIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-  <svg
-    xmlns="http://www.w3.org/2000/svg"
-    width="24"
-    height="24"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="3"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    {...props}
-  >
-    <path d="M7 10L3 14L7 18" />
-    <path d="M3 14H21" />
-    <path d="M17 14L21 10L17 6" />
-  </svg>
-);
