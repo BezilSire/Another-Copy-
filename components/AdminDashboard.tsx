@@ -16,8 +16,10 @@ import { PostsFeed } from './PostsFeed';
 import { PostTypeFilter } from './PostTypeFilter';
 import { EcocashVerificationAdmin } from './EcocashVerificationAdmin';
 import { LiquidationOracleAdmin } from './LiquidationOracleAdmin';
+import { TreasuryManager } from './TreasuryManager';
+import { LockIcon } from './icons/LockIcon';
 
-type AdminView = 'dashboard' | 'feed' | 'profile' | 'wallet' | 'oracle' | 'simulation';
+type AdminView = 'dashboard' | 'feed' | 'profile' | 'wallet' | 'oracle' | 'simulation' | 'treasury';
 
 interface AdminDashboardProps {
   user: Admin;
@@ -45,7 +47,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
   const [typeFilter, setTypeFilter] = useState<PostFilterType>('all');
   const { addToast } = useToast();
 
-  // Unified Protocol Listeners - Components react to data as it arrives
+  // Unified Protocol Listeners
   useEffect(() => {
     const unsubUsers = api.listenForAllUsers(user, setAllUsers, console.error);
     const unsubMembers = api.listenForAllMembers(user, setMembers, console.error);
@@ -55,7 +57,6 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
     const unsubPayouts = api.listenForPayoutRequests(user, setPayouts, console.error);
     const unsubVentures = api.listenForVentures(user, setVentures, console.error);
     const unsubCvp = api.listenForCVP(user, setCvp, console.error);
-    // FIX: Added missing error callbacks for oracle and liquidation listeners to resolve build errors
     const unsubOracle = api.listenForPendingPurchases(setPendingPurchases, console.error);
     const unsubLiq = api.listenToSellRequests(setSellRequests, console.error);
     api.getBroadcasts().then(setBroadcasts).catch(console.error);
@@ -90,6 +91,8 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
     switch (view) {
         case 'dashboard': 
             return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={api.sendBroadcast} />;
+        case 'treasury':
+            return <TreasuryManager admin={user} />;
         case 'oracle': 
             return (
                 <div className="space-y-8 animate-fade-in">
@@ -147,6 +150,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
           <div className="border-b border-white/10 w-full md:w-auto overflow-x-auto no-scrollbar">
               <nav className="-mb-px flex space-x-6 sm:space-x-8" aria-label="Tabs">
                   <TabButton label="Operations" icon={<LayoutDashboardIcon/>} isActive={view === 'dashboard'} onClick={() => setView('dashboard')} />
+                  <TabButton label="Treasury" icon={<LockIcon/>} isActive={view === 'treasury'} onClick={() => setView('treasury')} />
                   <TabButton label="Simulation" icon={<ShieldCheckIcon/>} isActive={view === 'simulation'} onClick={() => setView('simulation')} />
                   <TabButton label="Oracle" icon={<DollarSignIcon/>} isActive={view === 'oracle'} count={pendingPurchases.length + sellRequests.filter(r => r.status === 'PENDING').length} onClick={() => setView('oracle')} />
                   <TabButton label="Public Ledger" icon={<DatabaseIcon/>} isActive={view === 'wallet'} onClick={() => setView('wallet')} />

@@ -6,11 +6,14 @@ import { DatabaseIcon } from './icons/DatabaseIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
+import { LockIcon } from './icons/LockIcon';
 import { formatTimeAgo } from '../utils';
+import { TreasuryVault } from '../types';
 
 export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', value: string } }> = ({ initialTarget }) => {
     const [transactions, setTransactions] = useState<any[]>([]);
     const [richList, setRichList] = useState<any[]>([]);
+    const [vaults, setVaults] = useState<TreasuryVault[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -27,6 +30,9 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                 ]);
                 setTransactions(txs);
                 setRichList(topHolders);
+                
+                // Fetch vaults for proof of reserve
+                api.listenToVaults(setVaults, console.error);
             } catch (error) {
                 console.error("Failed to load ledger", error);
                 setError("Network state temporarily unavailable. Please check your node connection.");
@@ -44,7 +50,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     };
 
     return (
-        <div className="max-w-6xl mx-auto space-y-8 animate-fade-in pb-20 px-4">
+        <div className="max-w-6xl mx-auto space-y-12 animate-fade-in pb-20 px-4">
             {/* Header Stats */}
             <div className="bg-slate-900/60 backdrop-blur-xl p-8 sm:p-12 rounded-[3rem] shadow-2xl border border-white/5 text-center relative overflow-hidden">
                 <div className="absolute top-0 left-0 w-full h-full bg-gradient-to-b from-brand-gold/5 to-transparent pointer-events-none"></div>
@@ -72,6 +78,31 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                         <p className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] mb-3">Global Syncs</p>
                         <p className="text-3xl font-mono font-black text-white">{transactions.length} <span className="text-xs text-blue-400">TXS</span></p>
                     </div>
+                </div>
+            </div>
+
+            {/* Proof of Reserves - Sovereign Vaults */}
+            <div className="space-y-6">
+                <div className="flex items-center gap-3 px-4">
+                    <LockIcon className="h-6 w-6 text-brand-gold" />
+                    <h2 className="text-xl font-black text-white uppercase tracking-tighter">Proof of Reserves: Sovereign Vaults</h2>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+                    {vaults.map(vault => (
+                        <div key={vault.id} className="glass-card p-6 rounded-[2rem] border-white/5 hover:border-brand-gold/20 transition-all text-center space-y-3">
+                             <p className="text-[9px] font-black text-brand-gold uppercase tracking-widest">{vault.name}</p>
+                             <p className="text-2xl font-mono font-black text-white">{vault.balance.toLocaleString()}</p>
+                             <div className="pt-2">
+                                <p className="text-[7px] font-black text-gray-600 uppercase tracking-widest">Anchor</p>
+                                <p className="text-[8px] font-mono text-gray-700 truncate">{vault.publicKey}</p>
+                             </div>
+                        </div>
+                    ))}
+                    {vaults.length === 0 && !isLoading && (
+                        <div className="col-span-full py-10 text-center glass-card rounded-[2rem] border-white/5">
+                             <p className="text-[10px] font-black uppercase tracking-[0.4em] text-gray-700">Awaiting Vault Anchorage...</p>
+                        </div>
+                    )}
                 </div>
             </div>
 
@@ -103,6 +134,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                                         <div className="flex items-center gap-3">
                                             <span className="text-[10px] font-black text-brand-gold bg-brand-gold/10 px-3 py-1 rounded-full uppercase tracking-widest">#{tx.id.substring(0, 8)}</span>
                                             <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">{formatTimeAgo(tx.timestamp?.toDate ? tx.timestamp.toDate().toISOString() : new Date().toISOString())}</span>
+                                            {tx.type === 'VAULT_SYNC' && <span className="text-[8px] font-black text-blue-400 border border-blue-900/50 px-2 py-0.5 rounded-full uppercase">Internal Sync</span>}
                                         </div>
                                         <div className="flex flex-wrap items-center gap-4 text-xs font-mono">
                                             <div className="space-y-1">
@@ -121,10 +153,10 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                                         <p className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Quantum ($UBT)</p>
                                     </div>
                                 </div>
-                                {/* Chain Integrity Visualization (Option 3) */}
+                                {/* Chain Integrity Visualization */}
                                 <div className="mt-4 pt-4 border-t border-white/5 flex items-center justify-between">
                                      <div className="flex items-center gap-2">
-                                        <span className="text-[8px] font-black text-gray-700 uppercase tracking-[0.2em]">Parent Hash:</span>
+                                        <span className="text-[8px] font-black text-gray-700 uppercase tracking-[0.2em]">Signature Root:</span>
                                         <span className="text-[8px] font-mono text-gray-600 truncate max-w-[150px]">{tx.signature?.substring(0, 32) || 'GENESIS_BLOCK_ROOT'}</span>
                                      </div>
                                      <ShieldCheckIcon className="h-3 w-3 text-green-900 opacity-50" />

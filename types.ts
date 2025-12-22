@@ -61,6 +61,28 @@ export interface User {
   socialLinks?: { title: string; url: string }[]; // Max 4 links
 }
 
+export interface TreasuryVault {
+    id: string;
+    name: string;
+    description: string;
+    balance: number;
+    publicKey: string;
+    type: 'GENESIS' | 'SUSTENANCE' | 'DISTRESS' | 'VENTURE' | 'FLOAT';
+    isLocked: boolean;
+}
+
+export interface VaultSync {
+    id: string;
+    fromVaultId: string;
+    toVaultId: string;
+    amount: number;
+    reason: string;
+    signature: string;
+    hash: string;
+    timestamp: number;
+    adminId: string;
+}
+
 // Specific User Roles
 export interface Agent extends User {
   role: 'agent';
@@ -387,7 +409,7 @@ export interface GlobalEconomy {
 
 export interface Transaction {
     id: string;
-    type: 'credit' | 'debit' | 'p2p_sent' | 'p2p_received' | 'amm_swap' | 'liquidation_lock' | 'liquidation_settled';
+    type: 'credit' | 'debit' | 'p2p_sent' | 'p2p_received' | 'amm_swap' | 'liquidation_lock' | 'liquidation_settled' | 'INTERNAL_SYNC';
     amount: number;
     reason: string;
     timestamp: Timestamp;
@@ -412,7 +434,7 @@ export interface UbtTransaction {
     senderPublicKey: string; // Needed for verify
     parentHash: string; // Chain integrity - link to previous event
     status?: 'pending' | 'verified' | 'failed';
-    type?: 'P2P_HANDSHAKE' | 'REDEMPTION' | 'SYSTEM_MINT';
+    type?: 'P2P_HANDSHAKE' | 'REDEMPTION' | 'SYSTEM_MINT' | 'VAULT_SYNC';
 }
 
 export interface LedgerViewParams {

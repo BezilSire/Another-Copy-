@@ -44,7 +44,7 @@ import {
     User, Agent, Member, NewMember, MemberUser, Broadcast, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
-    Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, P2POffer, PendingUbtPurchase, SellRequest
+    Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, P2POffer, PendingUbtPurchase, SellRequest, TreasuryVault
 } from '../types';
 import { cryptoService } from './cryptoService';
 
@@ -66,6 +66,7 @@ const ledgerCollection = collection(db, 'ledger');
 const p2pCollection = collection(db, 'p2p_offers');
 const pendingPurchasesCollection = collection(db, 'pending_ubt_purchases');
 const sellRequestsCollection = collection(db, 'sell_requests');
+const vaultsCollection = collection(db, 'treasury_vaults');
 
 const _deletePostAndSubcollections = async (postId: string) => {
     const postRef = doc(postsCollection, postId);
@@ -259,6 +260,96 @@ export const api = {
             // 5. Node Private Histories (Convenience Caching)
             t.set(doc(collection(db, 'users', transaction.senderId, 'transactions')), { type: 'p2p_sent', amount: transaction.amount, reason: 'Sent $UBT', timestamp: serverTimestamp(), actorId: transaction.senderId, txHash: transaction.id });
             t.set(doc(collection(db, 'users', transaction.receiverId, 'transactions')), { type: 'p2p_received', amount: transaction.amount, reason: 'Received $UBT', timestamp: serverTimestamp(), actorId: transaction.senderId, txHash: transaction.id });
+        });
+    },
+
+    // --- TREASURY & VAULT INFRASTRUCTURE ---
+
+    listenToVaults: (callback: (vaults: TreasuryVault[]) => void, onError: (e: Error) => void) => {
+        return onSnapshot(vaultsCollection, s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), onError);
+    },
+
+    initializeTreasury: async (admin: Admin) => {
+        const TOTAL_SUPPLY = 15000000;
+        const vaults: Omit<TreasuryVault, 'id'>[] = [
+            { name: 'Genesis Mother Node', type: 'GENESIS', description: 'Primary protocol anchor.', balance: TOTAL_SUPPLY, publicKey: 'GENESIS_PROTOCOL_ADDR', isLocked: true },
+            { name: 'Sustenance Vault', type: 'SUSTENANCE', description: 'Locked for food hamper drops.', balance: 0, publicKey: 'VAULT_SUSTENANCE_ADDR', isLocked: true },
+            { name: 'Distress Reserve', type: 'DISTRESS', description: 'Emergency community aid.', balance: 0, publicKey: 'VAULT_DISTRESS_ADDR', isLocked: true },
+            { name: 'Venture Seed Fund', type: 'VENTURE', description: 'Capital for member ideas.', balance: 0, publicKey: 'VAULT_VENTURE_ADDR', isLocked: true },
+            { name: 'Liquid System Float', type: 'FLOAT', description: 'Rewards & referrals pool.', balance: 0, publicKey: 'VAULT_LIQUID_FLOAT_ADDR', isLocked: false },
+        ];
+
+        return runTransaction(db, async (t) => {
+            const econRef = doc(globalsCollection, 'economy');
+            t.set(econRef, { total_ubt_supply: TOTAL_SUPPLY, ubt_in_cvp: 0, ubt_to_usd_rate: 1.0 }, { merge: true });
+
+            for (const vault of vaults) {
+                const vaultRef = doc(vaultsCollection, vault.type);
+                t.set(vaultRef, vault);
+            }
+
+            // Genesis Mint Event
+            const ledgerRef = doc(collection(db, 'ledger'));
+            t.set(ledgerRef, {
+                id: `genesis-mint-${Date.now()}`,
+                senderId: 'PROTOCOL_ORIGIN',
+                receiverId: 'GENESIS',
+                amount: TOTAL_SUPPLY,
+                timestamp: Date.now(),
+                serverTimestamp: serverTimestamp(),
+                type: 'SYSTEM_MINT',
+                hash: 'PROTOCOL_GENESIS_EVENT',
+                signature: 'SYSTEM_SIGNED',
+                senderPublicKey: 'TREASURY'
+            });
+        });
+    },
+
+    syncInternalVaults: async (admin: Admin, fromVault: TreasuryVault, toVault: TreasuryVault, amount: number, reason: string) => {
+        return runTransaction(db, async (t) => {
+            const fromRef = doc(vaultsCollection, fromVault.id);
+            const toRef = doc(vaultsCollection, toVault.id);
+            
+            const fromDoc = await t.get(fromRef);
+            const currentBal = fromDoc.data()?.balance || 0;
+            if (currentBal < amount) throw new Error("Vault liquidity insufficient.");
+
+            t.update(fromRef, { balance: increment(-amount) });
+            t.update(toRef, { balance: increment(amount) });
+
+            // Cryptographic Internal Sync Event
+            const timestamp = Date.now();
+            const nonce = cryptoService.generateNonce();
+            const payload = `${fromVault.id}:${toVault.id}:${amount}:${timestamp}:${nonce}`;
+            const signature = cryptoService.signTransaction(payload);
+            const txId = `sync-${Date.now()}`;
+
+            const ledgerRef = doc(collection(db, 'ledger'), txId);
+            t.set(ledgerRef, {
+                id: txId,
+                senderId: fromVault.id,
+                receiverId: toVault.id,
+                amount: amount,
+                timestamp: timestamp,
+                serverTimestamp: serverTimestamp(),
+                nonce: nonce,
+                signature: signature,
+                hash: payload,
+                senderPublicKey: admin.publicKey,
+                type: 'VAULT_SYNC',
+                status: 'verified'
+            });
+            
+            // Global log
+            t.set(doc(collection(db, 'activity')), {
+                type: 'VAULT_SYNC',
+                message: `Authority Node sync: ${amount} UBT moved from ${fromVault.name} to ${toVault.name}.`,
+                timestamp: serverTimestamp(),
+                causerId: admin.id,
+                causerName: admin.name,
+                causerCircle: admin.circle,
+                link: 'ledger'
+            });
         });
     },
 

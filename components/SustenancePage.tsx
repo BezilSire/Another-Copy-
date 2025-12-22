@@ -1,8 +1,10 @@
+
 import React, { useState, useEffect } from 'react';
-import { MemberUser, SustenanceVoucher } from '../types';
+import { MemberUser, SustenanceVoucher, TreasuryVault } from '../types';
 import { api } from '../services/apiService';
 import { HeartIcon } from './icons/HeartIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
+import { LockIcon } from './icons/LockIcon';
 import { formatTimeAgo } from '../utils';
 
 interface SustenancePageProps {
@@ -71,29 +73,53 @@ const VoucherCard: React.FC<{ voucher: SustenanceVoucher }> = ({ voucher }) => {
 };
 
 export const SustenancePage: React.FC<SustenancePageProps> = ({ user }) => {
+    const [sustenanceVault, setSustenanceVault] = useState<TreasuryVault | null>(null);
     const activeVouchers = user.sustenanceVouchers?.filter(v => v.status === 'active') || [];
     const pastVouchers = user.sustenanceVouchers?.filter(v => v.status !== 'active') || [];
+
+    useEffect(() => {
+        api.listenToVaults(vts => {
+            const vault = vts.find(v => v.type === 'SUSTENANCE');
+            if (vault) setSustenanceVault(vault);
+        }, console.error);
+    }, []);
 
     const calculateNextDrop = () => {
         const now = new Date();
         const year = now.getUTCFullYear();
-        // Cycles are every 2 months (Jan/Feb, Mar/Apr, etc.)
         const currentMonth = now.getUTCMonth();
         const nextCycleStartMonth = Math.floor(currentMonth / 2) * 2 + 2;
         return new Date(Date.UTC(year, nextCycleStartMonth, 1));
     };
 
     const nextDropDate = calculateNextDrop();
-    
-    // Calculate tickets based on the formula
-    const sustenanceTickets = Math.floor(((user.scap || 0) * 0.1) + (user.ccap || 0));
+    const sustenanceTickets = user.ccap || 0;
 
     return (
-        <div className="space-y-8 animate-fade-in">
+        <div className="space-y-8 animate-fade-in pb-10">
              <div className="text-center p-8 bg-slate-800 rounded-lg">
                 <HeartIcon className="h-16 w-16 mx-auto text-green-400 mb-4" />
                 <h1 className="text-3xl font-bold text-white">Sustenance Dividend</h1>
                 <p className="text-lg text-green-400 mt-1">Your Rightful Share of the Commons' Success</p>
+            </div>
+
+            {/* Proof of Reserve Section */}
+            <div className="bg-slate-950/60 p-6 rounded-lg border border-brand-gold/20 flex flex-col md:flex-row items-center justify-between gap-6">
+                <div className="flex items-center gap-4">
+                    <div className="p-3 bg-brand-gold/10 rounded-2xl border border-brand-gold/20 text-brand-gold">
+                        <LockIcon className="h-6 w-6" />
+                    </div>
+                    <div>
+                        <h3 className="text-sm font-black text-white uppercase tracking-widest">Sustenance Vault Balance</h3>
+                        <p className="text-xs text-gray-500 font-mono">Anchor: {sustenanceVault?.publicKey || 'Searching...'}</p>
+                    </div>
+                </div>
+                <div className="text-right">
+                    <p className="text-4xl font-black text-brand-gold font-mono tracking-tighter">
+                        {sustenanceVault?.balance.toLocaleString() || '0'} <span className="text-lg">UBT</span>
+                    </p>
+                    <p className="text-[10px] text-gray-500 uppercase font-black tracking-widest">Publicly Auditable Reserve</p>
+                </div>
             </div>
 
             <div className="bg-slate-900/50 p-6 rounded-lg border border-slate-700 flex items-start gap-4">
@@ -101,11 +127,11 @@ export const SustenancePage: React.FC<SustenancePageProps> = ({ user }) => {
                 <div>
                     <h2 className="text-lg font-semibold text-white">How Sustenance Tickets Work</h2>
                     <p className="text-sm text-gray-300 mt-1">
-                        Your Sustenance Tickets determine your chance of receiving a food hamper in our bi-monthly dividend drop. You earn tickets from your contributions to the commons.
+                        Your Sustenance Tickets determine your chance of receiving a food hamper in our bi-monthly dividend drop. You earn tickets directly from your Civic Capital (CCAP).
                         <br />
-                        <strong className="text-gray-200">The formula is: <code className="bg-slate-700 p-1 rounded text-xs">Tickets = (SCAP * 0.1) + CCAP</code>.</strong>
+                        <strong className="text-gray-200">The formula is: <code className="bg-slate-700 p-1 rounded text-xs">Tickets = CCAP</code>.</strong>
                         <br />
-                        The more you engage and contribute, the higher your chances!
+                        The more you contribute, the higher your chances!
                     </p>
                 </div>
             </div>
@@ -114,7 +140,7 @@ export const SustenancePage: React.FC<SustenancePageProps> = ({ user }) => {
                 <div className="bg-slate-800 p-6 rounded-lg text-center">
                     <h2 className="text-xl font-semibold text-white">Your Sustenance Tickets</h2>
                     <p className="text-6xl font-bold text-yellow-400 my-2">{sustenanceTickets.toLocaleString()}</p>
-                    <p className="text-sm text-gray-400">The more you contribute (SCAP & CCAP), the higher your chance of receiving the next dividend.</p>
+                    <p className="text-sm text-gray-400">The more you contribute (CCAP), the higher your chance of receiving the next dividend.</p>
                 </div>
                  <div className="bg-slate-800 p-6 rounded-lg text-center">
                      <h2 className="text-xl font-semibold text-white">Next Dividend Drop In</h2>
