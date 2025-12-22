@@ -3,85 +3,122 @@ import React, { useState } from 'react';
 import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
 import { ForgotPasswordForm } from './ForgotPasswordForm';
-import { NewPublicMemberData } from '../types';
+import { GenesisNodeFlow } from './GenesisNodeFlow';
 import { useAuth } from '../contexts/AuthContext';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { PublicRegistrationPage } from './PublicRegistrationPage';
+import { cryptoService } from '../services/cryptoService';
+import { UploadCloudIcon } from './icons/UploadCloudIcon';
+import { useToast } from '../contexts/ToastContext';
 
-type AuthView = 'login' | 'agentSignup' | 'publicSignup' | 'forgotPassword' | 'passwordResetSent';
+type AuthView = 'selector' | 'login' | 'agentSignup' | 'publicSignup' | 'forgotPassword' | 'genesis' | 'restore_file' | 'restore_words';
 
 export const AuthPage: React.FC = () => {
   const { login, agentSignup, publicMemberSignup, sendPasswordReset, isProcessingAuth } = useAuth();
-  
-  const [view, setView] = useState<AuthView>('login');
+  const [view, setView] = useState<AuthView>('selector');
   const [isPolicyVisible, setIsPolicyVisible] = useState(false);
-  const [resetEmail, setResetEmail] = useState('');
+  const { addToast } = useToast();
 
-  const handlePasswordReset = async (email: string) => {
-    await sendPasswordReset(email);
-    setResetEmail(email);
-    setView('passwordResetSent');
+  const handleRestoreFromFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+        try {
+            const content = event.target?.result as string;
+            const data = JSON.parse(content);
+            if (data.mnemonic) {
+                const pin = prompt("Enter the 6-digit PIN used to encrypt this file:");
+                if (pin) {
+                    await cryptoService.saveVault(data, pin);
+                    addToast("Identity Restored. Please log in.", "success");
+                    setView('login');
+                }
+            } else {
+                throw new Error("Invalid file format");
+            }
+        } catch (err) {
+            addToast("Could not read backup file.", "error");
+        }
+    };
+    reader.readAsText(file);
   };
 
-  const resetFlow = () => {
-    setView('login');
-    setResetEmail('');
-  };
-  
   const renderContent = () => {
     switch(view) {
-        case 'login':
-            return <LoginPage onLogin={login} isProcessing={isProcessingAuth} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => setView('publicSignup')} onSwitchToForgotPassword={() => setView('forgotPassword')} />;
-        case 'agentSignup':
-            return <SignupPage onSignup={agentSignup} isProcessing={isProcessingAuth} onSwitchToLogin={resetFlow} />;
-        case 'publicSignup':
-            return <PublicRegistrationPage onRegister={publicMemberSignup} isProcessing={isProcessingAuth} onBackToLogin={resetFlow} />;
-        case 'forgotPassword':
-            return <ForgotPasswordForm onReset={handlePasswordReset} isProcessing={isProcessingAuth} onBack={resetFlow} />;
-        case 'passwordResetSent':
+        case 'selector':
             return (
-                <div className="glass-card p-10 rounded-[3rem] border-white/10 text-center animate-fade-in space-y-6">
-                    <div className="w-20 h-20 bg-green-500/10 rounded-full flex items-center justify-center mx-auto border border-green-500/20">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-green-400"><rect width="20" height="16" x="2" y="4" rx="2" /><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7" /></svg>
+                <div className="module-frame glass-module p-10 sm:p-16 rounded-[4rem] border-white/10 shadow-premium animate-fade-in space-y-12 max-w-md w-full">
+                    <div className="corner-tl"></div><div className="corner-br"></div>
+                    <div className="text-center space-y-4">
+                        <h2 className="text-4xl font-black text-white tracking-tighter uppercase gold-text leading-none">Citizenship</h2>
+                        <p className="label-caps !text-[9px] !text-gray-500">Initiate Node Handshake</p>
                     </div>
-                    <h2 className="text-3xl font-black text-white tracking-tighter uppercase">Check your inbox</h2>
-                    <p className="text-gray-400 text-sm leading-relaxed uppercase tracking-wider font-bold">
-                        We've sent a recovery protocol to <strong className="text-brand-gold">{resetEmail}</strong>.
-                    </p>
-                    <button
-                        onClick={resetFlow}
-                        className="w-full py-4 bg-white/5 border border-white/10 text-white font-black rounded-2xl uppercase tracking-widest text-xs hover:bg-white/10 transition-all"
-                    >
-                        Back to Protocol
-                    </button>
+                    
+                    <div className="space-y-4">
+                        <button onClick={() => setView('genesis')} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all">
+                            New Member
+                        </button>
+                        <button onClick={() => setView('login')} className="w-full py-6 bg-white/5 border border-white/10 text-white font-black rounded-3xl uppercase tracking-[0.4em] text-[10px] hover:bg-white/10 transition-all">
+                            Connect Node
+                        </button>
+                        <button onClick={() => setView('restore_file')} className="w-full py-3 text-[9px] font-black uppercase text-gray-600 hover:text-brand-gold transition-colors tracking-[0.3em]">
+                            Restore from Backup File
+                        </button>
+                    </div>
                 </div>
             );
+        case 'restore_file':
+            return (
+                <div className="module-frame glass-module p-10 rounded-[3rem] text-center space-y-8 animate-fade-in max-w-md">
+                    <div className="p-6 bg-brand-gold/10 rounded-full w-24 h-24 mx-auto flex items-center justify-center border border-brand-gold/20">
+                        <UploadCloudIcon className="h-10 w-10 text-brand-gold" />
+                    </div>
+                    <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Upload Backup</h3>
+                    <p className="text-xs text-gray-500 uppercase font-black tracking-widest leading-loose">
+                        Select your <code>.json</code> identity file to restore your node.
+                    </p>
+                    <input 
+                        type="file" 
+                        accept=".json"
+                        onChange={handleRestoreFromFile}
+                        className="hidden" 
+                        id="backup-upload" 
+                    />
+                    <label 
+                        htmlFor="backup-upload"
+                        className="block w-full py-5 bg-white/5 border border-white/10 text-white font-black rounded-2xl uppercase tracking-[0.2em] text-xs cursor-pointer hover:bg-white/10 transition-all"
+                    >
+                        Select JSON File
+                    </label>
+                    <button onClick={() => setView('selector')} className="text-[9px] font-black text-gray-700 uppercase tracking-widest">Cancel</button>
+                </div>
+            );
+        case 'genesis':
+            return <GenesisNodeFlow onComplete={(m, p) => { cryptoService.saveVault({mnemonic: m}, p); setView('publicSignup'); }} onBack={() => setView('selector')} />;
+        case 'login':
+            return <LoginPage onLogin={login} isProcessing={isProcessingAuth} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => setView('publicSignup')} onSwitchToForgotPassword={() => setView('forgotPassword')} />;
+        case 'publicSignup':
+            return <PublicRegistrationPage onRegister={publicMemberSignup} isProcessing={isProcessingAuth} onBackToLogin={() => setView('login')} />;
+        case 'agentSignup':
+            return <SignupPage onSignup={agentSignup} isProcessing={isProcessingAuth} onSwitchToLogin={() => setView('login')} />;
+        case 'forgotPassword':
+            return <ForgotPasswordForm onReset={async (email) => { await sendPasswordReset(email); setView('selector'); }} isProcessing={isProcessingAuth} onBack={() => setView('login')} />;
         default:
             return <LoginPage onLogin={login} isProcessing={isProcessingAuth} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => setView('publicSignup')} onSwitchToForgotPassword={() => setView('forgotPassword')} />;
     }
   }
 
   return (
-    <div className="min-h-screen flex flex-col justify-center items-center px-4 py-12 relative">
-        <div className="w-full max-w-lg z-10">
-            <div key={view} className="animate-fade-in">
-                {renderContent()}
-            </div>
-
-            <div className="mt-12 text-center space-y-4">
-                <div className="flex justify-center items-center gap-6">
-                    <button onClick={() => setIsPolicyVisible(true)} className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-600 hover:text-brand-gold transition-colors">
-                        Privacy Protocol
-                    </button>
-                    <span className="w-1 h-1 rounded-full bg-gray-800"></span>
-                    <a href="mailto:support@globalcommons.app" className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-600 hover:text-brand-gold transition-colors">
-                        Network Support
-                    </a>
-                </div>
-                <p className="text-[9px] font-black text-gray-700 uppercase tracking-[0.5em]">&copy; Ubuntium G.C.N v2.5.0</p>
-            </div>
+    <div className="min-h-screen flex flex-col justify-center items-center px-4 py-12 relative bg-black">
+        <div className="absolute inset-0 blueprint-grid opacity-[0.05] pointer-events-none"></div>
+        <div className="w-full max-w-lg z-10 flex justify-center">
+            {renderContent()}
         </div>
-
+        <div className="mt-12 text-center space-y-4 relative z-10">
+            <button onClick={() => setIsPolicyVisible(true)} className="text-[10px] font-black uppercase tracking-[0.3em] text-gray-700 hover:text-brand-gold">Privacy Protocol</button>
+        </div>
         <PrivacyPolicyModal isOpen={isPolicyVisible} onClose={() => setIsPolicyVisible(false)} />
     </div>
   );

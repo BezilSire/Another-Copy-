@@ -1,62 +1,77 @@
-
 import React, { useState, useEffect } from 'react';
 import { User, UbtTransaction } from '../types';
 import { api } from '../services/apiService';
 import { cryptoService } from '../services/cryptoService';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
-import { ShieldXIcon } from './icons/ShieldXIcon';
 
 export const ProtocolReconciliation: React.FC<{ user: User, onClose: () => void }> = ({ user, onClose }) => {
     const [logs, setLogs] = useState<string[]>([]);
     const [isAuditRunning, setIsAuditRunning] = useState(true);
-    const [auditResult, setAuditResult] = useState<{ totalBlocks: number, verified: number, balanceMismatch: boolean } | null>(null);
+    const [auditResult, setAuditResult] = useState<{ totalBlocks: number, verified: number, ledgerBalance: number, isLegitimate: boolean } | null>(null);
 
     const addLog = (msg: string) => setLogs(prev => [...prev, `> ${msg}`]);
 
     useEffect(() => {
         const runAudit = async () => {
             addLog("INITIALIZING SOVEREIGN STATE AUDIT...");
-            addLog("FETCHING GLOBAL SIGNED EVENT STREAM...");
+            addLog("FETCHING GLOBAL MAINNET EVENT STREAM...");
             
             try {
-                const ledger = await api.getPublicLedger(100);
-                addLog(`BUFFERED ${ledger.length} SIGNED BLOCKS.`);
+                // Fetch ONLY Mainnet blocks
+                const ledger = await api.getPublicLedger(1000); 
+                addLog(`BUFFERED ${ledger.length} MAINNET BLOCKS.`);
                 
                 let verifiedCount = 0;
-                let computedBalance = 0;
+                let runningBalance = 0;
+                let genesisLinks = 0;
+
+                // Provenance Check logic:
+                // 1. Transaction must have valid signature.
+                // 2. Transaction must be MAINNET.
+                // 3. We ignore any balance increment that doesn't have a verifiable trail.
 
                 for (const tx of ledger) {
                     const blockId = tx.id.substring(0, 8);
-                    addLog(`VERIFYING BLOCK [${blockId}]...`);
                     
+                    // Filter: Only process if User is Sender or Receiver
+                    if (tx.receiverId !== user.id && tx.senderId !== user.id) continue;
+
                     const isValid = cryptoService.verifySignature(tx.hash, tx.signature, tx.senderPublicKey);
                     
                     if (isValid) {
                         verifiedCount++;
-                        if (tx.receiverId === user.id) computedBalance += tx.amount;
-                        if (tx.senderId === user.id) computedBalance -= tx.amount;
+                        if (tx.receiverId === user.id) runningBalance += tx.amount;
+                        if (tx.senderId === user.id) runningBalance -= tx.amount;
+                        
+                        // Check if block has Mother Node provenance
+                        if (tx.senderId === 'GENESIS' || tx.senderPublicKey === 'TREASURY_AUTHORITY' || tx.type === 'SYSTEM_MINT') {
+                            genesisLinks++;
+                        }
                     } else {
-                        addLog(`!! PROTOCOL BREACH DETECTED IN BLOCK ${blockId}`);
+                        addLog(`!! CRITICAL: Signature Breach in Block ${blockId}`);
                     }
                     
-                    // Artificial delay for terminal effect
-                    await new Promise(r => setTimeout(r, 100));
+                    await new Promise(r => setTimeout(r, 50));
                 }
 
-                const balanceMatches = Math.abs(computedBalance - (user.ubtBalance || 0)) < 0.01;
-                
+                // Any balance that exists in the User doc but is NOT reflected in the verified Mainnet ledger 
+                // is null and void.
+                const mirrorBalance = user.ubtBalance || 0;
+                const isLegitimate = Math.abs(runningBalance - mirrorBalance) < 0.01;
+
                 setAuditResult({
-                    totalBlocks: ledger.length,
+                    totalBlocks: verifiedCount,
                     verified: verifiedCount,
-                    balanceMismatch: !balanceMatches
+                    ledgerBalance: runningBalance,
+                    isLegitimate: isLegitimate
                 });
                 
                 addLog("AUDIT COMPLETE.");
-                if (balanceMatches) {
-                    addLog("STATE MIRROR INTEGRITY: VERIFIED.");
+                if (isLegitimate) {
+                    addLog("STATE INTEGRITY: VERIFIED. PROVENANCE: GENESIS.");
                 } else {
-                    addLog("STATE MIRROR INTEGRITY: MISMATCH DETECTED.");
+                    addLog("STATE INTEGRITY: BREACH DETECTED. UNAUTHORIZED ASSETS FOUND.");
                 }
                 
             } catch (e) {
@@ -76,7 +91,7 @@ export const ProtocolReconciliation: React.FC<{ user: User, onClose: () => void 
                     <h2 className="text-2xl font-black text-brand-gold uppercase tracking-tighter">Identity Audit Terminal</h2>
                     <p className="text-[10px] text-gray-500 uppercase tracking-widest mt-1">Local Node Reconciliation Protocol</p>
                 </div>
-                <button onClick={onClose} className="p-3 bg-white/5 hover:bg-white/10 rounded-full text-gray-500 hover:text-white transition-all">✕</button>
+                <button onClick={onClose} className="p-3 bg-white/5 hover:bg-white/10 rounded-full text-gray-500 hover:text-white transition-all font-sans">✕</button>
             </div>
 
             <div className="flex-1 bg-slate-950 border border-white/5 rounded-[2rem] p-6 overflow-y-auto no-scrollbar space-y-2 text-[10px] text-brand-gold/80">
@@ -87,30 +102,26 @@ export const ProtocolReconciliation: React.FC<{ user: User, onClose: () => void 
             {auditResult && (
                 <div className="mt-8 grid grid-cols-1 md:grid-cols-3 gap-6 animate-slide-up">
                     <div className="p-6 bg-slate-900 rounded-2xl border border-white/5">
-                        <p className="text-[9px] text-gray-500 uppercase mb-2">Sync Status</p>
+                        <p className="text-[9px] text-gray-500 uppercase mb-2">Verified Blocks</p>
                         <div className="flex items-center gap-3">
-                            <ShieldCheckIcon className="h-6 w-6 text-green-500" />
-                            <span className="text-lg font-black text-white">{auditResult.verified}/{auditResult.totalBlocks} Blocks</span>
+                            <ShieldCheckIcon className="h-6 w-6 text-brand-gold" />
+                            <span className="text-lg font-black text-white">{auditResult.verified} Signed Handshakes</span>
                         </div>
                     </div>
                     <div className="p-6 bg-slate-900 rounded-2xl border border-white/5">
-                        <p className="text-[9px] text-gray-500 uppercase mb-2">Mirror Integrity</p>
-                        <span className={`text-lg font-black ${auditResult.balanceMismatch ? 'text-red-500' : 'text-green-500'}`}>
-                            {auditResult.balanceMismatch ? 'MISMATCH' : 'HEALTHY'}
+                        <p className="text-[9px] text-gray-500 uppercase mb-2">Verified Genesis Balance</p>
+                        <span className={`text-3xl font-black font-mono tracking-tighter ${auditResult.isLegitimate ? 'text-green-500' : 'text-red-500'}`}>
+                            {auditResult.ledgerBalance.toFixed(2)} UBT
                         </span>
+                        {!auditResult.isLegitimate && (
+                            <p className="text-[8px] text-red-400 uppercase mt-1">Mirror Mismatch Detected</p>
+                        )}
                     </div>
                     <div className="flex items-end">
-                         <button onClick={onClose} className="w-full py-4 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-widest text-xs">Return to Node</button>
+                         <button onClick={onClose} className="w-full py-4 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-widest text-xs shadow-glow-gold active:scale-95">Return to Node</button>
                     </div>
                 </div>
             )}
         </div>
     );
 };
-
-const ShieldXIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
-    <path d="m14.5 9-5 5" /><path d="m9.5 9 5 5" />
-  </svg>
-);

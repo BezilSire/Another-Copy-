@@ -12,30 +12,22 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Robust admin check: checks custom claims first, then document role.
+    // Resilience: Check for document existence to prevent rules crash.
     function isAdmin() {
-      return isSignedIn() && (
-        request.auth.token.role == 'admin' || 
-        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
-         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin')
-      );
+      let adminPath = /databases/$(database)/documents/users/$(request.auth.uid);
+      return isSignedIn() && exists(adminPath) && get(adminPath).data.role == 'admin';
     }
 
     // --- CORE PROTOCOL (LEDGER & TREASURY) ---
     
     match /treasury_vaults/{vaultId} {
-      // All authenticated nodes can view reserve status
       allow read, list: if isSignedIn();
-      // Only Authority Master Node can modify vault mirrors
       allow write: if isAdmin();
     }
 
     match /ledger/{docId} {
-      // Ledger is a public source of truth for all node syncs
       allow read, list: if isSignedIn();
-      // Only established nodes can append to the chain via signed handshake
       allow create: if isSignedIn(); 
-      // State mirrors are immutable on the ledger
       allow update, delete: if isAdmin();
     }
 
@@ -68,7 +60,6 @@ service cloud.firestore {
     }
 
     match /reports/{reportId} {
-      // Reports are authority-only for review
       allow read, list: if isAdmin();
       allow create: if isSignedIn();
       allow update, delete: if isAdmin();
@@ -80,7 +71,6 @@ service cloud.firestore {
       allow get, list: if isSignedIn();
       allow create: if isSignedIn();
       
-      // Strict update rules to prevent node mirror manipulation
       allow update: if isOwner(userId) 
                     || isAdmin()
                     || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
@@ -92,11 +82,13 @@ service cloud.firestore {
       }
 
       match /transactions/{txId} {
+        // Fix: Explicitly allow listing based on parent path ownership
         allow read, list: if isOwner(userId) || isAdmin();
-        allow write: if isSignedIn(); 
+        allow create: if isSignedIn(); 
       }
       
       match /vaults/{vaultId} {
+        // Fix: Explicitly allow listing based on parent path ownership
         allow read, list, write: if isOwner(userId) || isAdmin();
       }
     }
@@ -147,8 +139,7 @@ service cloud.firestore {
     }
 
     match /pending_ubt_purchases/{docId} {
-      // Fixed: Allows listing if isAdmin, OR if query filters by userId
-      allow read, list: if isSignedIn() && (isAdmin() || (exists(resource) && resource.data.userId == request.auth.uid));
+      allow read, list: if isSignedIn();
       allow create: if isSignedIn();
       allow update, delete: if isAdmin();
     }
@@ -183,20 +174,14 @@ service cloud.firestore {
     }
 
     match /payouts/{payoutId} {
-      // Fixed: Allows listing if isAdmin, OR if query filters by userId
-      allow read, list: if isSignedIn() && (isAdmin() || (exists(resource) && resource.data.userId == request.auth.uid));
-      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow read, list: if isSignedIn();
+      allow create: if isSignedIn();
       allow update: if isAdmin();
     }
 
     match /sustenance_vouchers/{voucherId} {
-      allow read, list: if (isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin()));
+      allow read, list: if isSignedIn();
       allow update: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid); 
-    }
-    
-    match /price_verifications/{docId} {
-      allow read, list: if isAdmin();
-      allow create: if isSignedIn();
     }
     
     match /price_verifications/{docId} {

@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { HomeIcon } from './icons/HomeIcon';
 import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon';
@@ -6,6 +5,7 @@ import { WalletIcon } from './icons/WalletIcon';
 import { MessageSquareIcon } from './icons/MessageSquareIcon';
 import { UsersIcon } from './icons/UsersIcon';
 import { TrendingUpIcon } from './icons/TrendingUpIcon';
+import { GlobeIcon } from './icons/GlobeIcon';
 
 type MemberView = 
   | 'home' 
@@ -14,6 +14,7 @@ type MemberView =
   | 'more'
   | 'wallet'
   | 'chats'
+  | 'ledger'
   | 'hub';
 
 interface MemberBottomNavProps {
@@ -62,10 +63,10 @@ export const MemberBottomNav: React.FC<MemberBottomNavProps> = ({ activeView, se
                     onClick={() => setActiveView('home')}
                 />
                 <NavItem
-                    icon={<UsersIcon className="h-full w-full" />}
-                    label="Nodes"
-                    isActive={activeView === 'community'}
-                    onClick={() => setActiveView('community')}
+                    icon={<GlobeIcon className="h-full w-full" />}
+                    label="Ledger"
+                    isActive={activeView === 'ledger'}
+                    onClick={() => setActiveView('ledger')}
                 />
                 <NavItem
                     icon={<TrendingUpIcon className="h-full w-full" />}

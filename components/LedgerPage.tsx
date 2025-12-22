@@ -1,4 +1,6 @@
 import React, { useState, useEffect } from 'react';
+// FIX: Imported Timestamp from firebase/firestore to fix "Cannot find name 'Timestamp'" error on line 185
+import { Timestamp } from 'firebase/firestore';
 import { api } from '../services/apiService';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
@@ -6,6 +8,7 @@ import { GlobeIcon } from './icons/GlobeIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { LockIcon } from './icons/LockIcon';
+import { FileTextIcon } from './icons/FileTextIcon';
 import { formatTimeAgo } from '../utils';
 import { TreasuryVault } from '../types';
 import { useAuth } from '../contexts/AuthContext';
@@ -17,6 +20,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     const [vaults, setVaults] = useState<TreasuryVault[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [expandedBlock, setExpandedBlock] = useState<string | null>(null);
 
     const MAX_SUPPLY = 15000000;
 
@@ -28,7 +32,6 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
             setIsLoading(true);
             setError(null);
             try {
-                // Fetch public ledger and rich list
                 const [txs, topHolders] = await Promise.all([
                     api.getPublicLedger(100),
                     api.getRichList(15)
@@ -47,7 +50,6 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
 
         loadData();
         
-        // Listen to vaults separately as it might have different permission timing
         const unsubVaults = api.listenToVaults(
             (vts) => { if (isMounted) setVaults(vts); },
             (err) => { console.error("Vault listener error:", err); }
@@ -132,38 +134,61 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                                     <div key={i} className="h-32 bg-white/5 rounded-[2.5rem] animate-pulse"></div>
                                 ))
                             ) : transactions.map((tx) => (
-                                <div key={tx.id} className="module-frame bg-slate-900/30 p-8 sm:p-10 rounded-[3rem] border-white/5 hover:border-brand-gold/20 transition-all group flex flex-col md:flex-row justify-between items-start md:items-center gap-10">
-                                    <div className="space-y-8 flex-1 w-full">
-                                        <div className="flex items-center gap-4">
-                                            <span className="bg-brand-gold/10 border border-brand-gold/20 px-3 py-1 rounded text-[8px] font-black text-brand-gold uppercase tracking-widest font-mono shadow-sm">BLOCK: {tx.id.substring(0, 12)}</span>
-                                            <span className="text-[9px] font-black text-gray-700 uppercase tracking-[0.3em]">{formatTimeAgo(tx.timestamp?.toDate ? tx.timestamp.toDate().toISOString() : new Date().toISOString())}</span>
+                                <div key={tx.id} className="module-frame bg-slate-900/30 p-8 sm:p-10 rounded-[3rem] border-white/5 hover:border-brand-gold/20 transition-all group flex flex-col items-stretch gap-10">
+                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-10">
+                                        <div className="space-y-8 flex-1 w-full">
+                                            <div className="flex items-center gap-4">
+                                                <span className="bg-brand-gold/10 border border-brand-gold/20 px-3 py-1 rounded text-[8px] font-black text-brand-gold uppercase tracking-widest font-mono shadow-sm">BLOCK: {tx.id.substring(0, 12)}</span>
+                                                <span className="text-[9px] font-black text-gray-700 uppercase tracking-[0.3em]">{formatTimeAgo(tx.timestamp?.toDate ? tx.timestamp.toDate().toISOString() : new Date().toISOString())}</span>
+                                            </div>
+                                            
+                                            <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-14">
+                                                <div className="flex flex-col items-center sm:items-start gap-3">
+                                                    <p className="text-[7px] font-black text-gray-600 uppercase tracking-[0.5em]">Genesis Origin</p>
+                                                    <AddressLabel value={tx.senderId} />
+                                                </div>
+                                                <div className="text-gray-800 rotate-90 sm:rotate-0">
+                                                    <DatabaseIcon className="h-6 w-6 opacity-40 group-hover:opacity-100 transition-opacity" />
+                                                </div>
+                                                <div className="flex flex-col items-center sm:items-start gap-3">
+                                                    <p className="text-[7px] font-black text-gray-600 uppercase tracking-[0.5em]">Target Authority</p>
+                                                    <AddressLabel value={tx.receiverId} />
+                                                </div>
+                                            </div>
                                         </div>
                                         
-                                        <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-14">
-                                            <div className="flex flex-col items-center sm:items-start gap-3">
-                                                <p className="text-[7px] font-black text-gray-600 uppercase tracking-[0.5em]">Genesis Origin</p>
-                                                <AddressLabel value={tx.senderId} />
+                                        <div className="text-right w-full md:w-auto md:border-l md:border-white/5 md:pl-12 flex flex-col items-end">
+                                            <div className="flex items-center gap-3">
+                                                 <p className="text-5xl font-black text-white font-mono tracking-tighter leading-none">{tx.amount.toFixed(2)}</p>
+                                                 <span className="text-xl text-gray-700 font-black font-mono">UBT</span>
                                             </div>
-                                            <div className="text-gray-800 rotate-90 sm:rotate-0">
-                                                <ArrowRightIcon className="h-6 w-6 opacity-40 group-hover:opacity-100 transition-opacity" />
-                                            </div>
-                                            <div className="flex flex-col items-center sm:items-start gap-3">
-                                                <p className="text-[7px] font-black text-gray-600 uppercase tracking-[0.5em]">Target Authority</p>
-                                                <AddressLabel value={tx.receiverId} />
+                                            <div className="flex items-center gap-4 mt-5">
+                                                <button 
+                                                    onClick={() => setExpandedBlock(expandedBlock === tx.id ? null : tx.id)}
+                                                    className="flex items-center gap-2 text-[8px] font-black text-brand-gold uppercase tracking-widest hover:text-white transition-colors"
+                                                >
+                                                    <FileTextIcon className="h-3 w-3" />
+                                                    {expandedBlock === tx.id ? 'Hide Audit' : 'Audit Block Data'}
+                                                </button>
+                                                <div className="flex items-center gap-2 bg-emerald-500/5 px-3 py-1.5 rounded-xl border border-emerald-500/10">
+                                                    <ShieldCheckIcon className="h-3 w-3 text-emerald-500" />
+                                                    <span className="text-[8px] font-black text-emerald-400 uppercase tracking-[0.2em]">Verified</span>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
-                                    
-                                    <div className="text-right w-full md:w-auto md:border-l md:border-white/5 md:pl-12 flex flex-col items-end">
-                                        <div className="flex items-center gap-3">
-                                             <p className="text-5xl font-black text-white font-mono tracking-tighter leading-none">{tx.amount.toFixed(2)}</p>
-                                             <span className="text-xl text-gray-700 font-black font-mono">UBT</span>
+
+                                    {/* RAW JSON FILE SYSTEM VIEW */}
+                                    {expandedBlock === tx.id && (
+                                        <div className="mt-8 p-8 bg-black rounded-[2rem] border border-white/10 animate-fade-in font-mono text-[10px] overflow-x-auto shadow-inner relative">
+                                            <div className="absolute top-4 right-6 text-[8px] text-gray-700 uppercase font-black tracking-widest">Protocol Mirror System v2.0</div>
+                                            <pre className="text-emerald-500/80 leading-relaxed">
+                                                {JSON.stringify(tx, (key, value) => 
+                                                    value instanceof Timestamp ? value.toDate().toISOString() : value, 2
+                                                )}
+                                            </pre>
                                         </div>
-                                        <div className="flex items-center gap-2 mt-5 bg-emerald-500/5 px-3 py-1.5 rounded-xl border border-emerald-500/10">
-                                            <ShieldCheckIcon className="h-3 w-3 text-emerald-500" />
-                                            <span className="text-[8px] font-black text-emerald-400 uppercase tracking-[0.2em]">Verified Transaction</span>
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
                             ))}
                         </div>
@@ -218,10 +243,3 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
         </div>
     );
 };
-
-const ArrowRightIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" {...props}>
-    <line x1="5" y1="12" x2="19" y2="12" />
-    <polyline points="12 5 19 12 12 19" />
-  </svg>
-);

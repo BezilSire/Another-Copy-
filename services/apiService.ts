@@ -1,3 +1,4 @@
+
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -67,7 +68,6 @@ const pendingPurchasesCollection = collection(db, 'pending_ubt_purchases');
 const sellRequestsCollection = collection(db, 'sell_requests');
 const vaultsCollection = collection(db, 'treasury_vaults');
 
-// Helper to handle mixed timestamp types reliably
 const getMillis = (val: any): number => {
     if (!val) return 0;
     if (typeof val.toMillis === 'function') return val.toMillis();
@@ -161,7 +161,7 @@ export const api = {
             ubtBalance: d.ubtBalance
         };
     },
-     getPublicUserProfilesByUids: async (uids: string[]): Promise<PublicUserProfile[]> => {
+    getPublicUserProfilesByUids: async (uids: string[]): Promise<PublicUserProfile[]> => {
         if (uids.length === 0) return [];
         const promises = [];
         for (let i = 0; i < uids.length; i += 30) {
@@ -216,11 +216,14 @@ export const api = {
 
     // --- USER VAULTS ---
     listenToUserVaults: (userId: string, callback: (vaults: UserVault[]) => void) => {
-        // Simplified query to avoid index requirement
+        if (!userId) return () => {};
         return onSnapshot(collection(db, 'users', userId, 'vaults'), s => {
             const vaults = s.docs.map(d => ({ id: d.id, ...d.data() } as UserVault));
             vaults.sort((a, b) => getMillis(b.createdAt) - getMillis(a.createdAt));
             callback(vaults);
+        }, (err) => {
+            // SILENT FAIL: If permissions are insufficient, just return empty list to component
+            callback([]);
         });
     },
 
@@ -237,8 +240,6 @@ export const api = {
         });
     },
 
-    // --- WALLET & P2P TRANSACTIONS (Dual-State Protocol) ---
-
     processUbtTransaction: async (transaction: UbtTransaction) => {
         return runTransaction(db, async (t) => {
             const senderRef = doc(usersCollection, transaction.senderId);
@@ -252,21 +253,21 @@ export const api = {
             const isValid = cryptoService.verifySignature(transaction.hash, transaction.signature, transaction.senderPublicKey);
             if (!isValid) throw new Error("Protocol Signature Fault: Identity mismatch.");
 
-            // Update Mirror State
             t.update(senderRef, { ubtBalance: increment(-transaction.amount) });
             t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
             
-            // Store the Signed Truth with Protocol Mode
             const ledgerRef = doc(collection(db, 'ledger'), transaction.id);
             t.set(ledgerRef, { ...transaction, serverTimestamp: serverTimestamp() });
             
-            // Node History Cache
-            t.set(doc(collection(db, 'users', transaction.senderId, 'transactions')), { 
+            const senderTxRef = doc(collection(db, 'users', transaction.senderId, 'transactions'), transaction.id);
+            const receiverTxRef = doc(collection(db, 'users', transaction.receiverId, 'transactions'), transaction.id);
+
+            t.set(senderTxRef, { 
                 type: 'p2p_sent', amount: transaction.amount, reason: 'Quantum Sync Out', 
                 timestamp: serverTimestamp(), actorId: transaction.senderId, txHash: transaction.id,
                 protocol_mode: transaction.protocol_mode 
             });
-            t.set(doc(collection(db, 'users', transaction.receiverId, 'transactions')), { 
+            t.set(receiverTxRef, { 
                 type: 'p2p_received', amount: transaction.amount, reason: 'Quantum Sync In', 
                 timestamp: serverTimestamp(), actorId: transaction.senderId, txHash: transaction.id,
                 protocol_mode: transaction.protocol_mode
@@ -288,12 +289,12 @@ export const api = {
 
             t.update(vaultRef, { balance: increment(-amount) });
             
-            // If receiver node is recognized in the mirror, update balance
             if (receiverId && receiverId !== 'EXTERNAL_NODE') {
                 const receiverRef = doc(usersCollection, receiverId);
                 t.update(receiverRef, { ubtBalance: increment(amount) });
                 
-                t.set(doc(collection(db, 'users', receiverId, 'transactions')), { 
+                const receiverTxRef = doc(collection(db, 'users', receiverId, 'transactions'), transaction.id);
+                t.set(receiverTxRef, { 
                     type: 'p2p_received', amount: amount, reason: 'Treasury Dispatch', 
                     timestamp: serverTimestamp(), actorId: 'TREASURY', txHash: transaction.id,
                     protocol_mode: 'MAINNET'
@@ -304,8 +305,6 @@ export const api = {
             t.set(ledgerRef, { ...transaction, serverTimestamp: serverTimestamp() });
         });
     },
-
-    // --- TREASURY & VAULT INFRASTRUCTURE ---
 
     listenToVaults: (callback: (vaults: TreasuryVault[]) => void, onError: (e: Error) => void) => {
         return onSnapshot(vaultsCollection, s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), onError);
@@ -386,9 +385,6 @@ export const api = {
                     senderPublicKey: 'TREASURY_AUTHORITY',
                     protocol_mode: 'MAINNET'
                 });
-                
-                const adminRef = doc(usersCollection, admin.id);
-                t.update(adminRef, { ubtBalance: increment(1000) });
             });
         } catch (error) {
             console.error("Initialize Treasury Failed:", error);
@@ -414,10 +410,11 @@ export const api = {
                 hash: `SIM_EVENT_${txId}`,
                 signature: 'SIM_SIGNED',
                 senderPublicKey: 'SIM_VAULT',
-                protocol_mode: 'TESTNET' // Marked as TESTNET to exclude from public ledger audits
+                protocol_mode: 'TESTNET'
             });
 
-            t.set(doc(collection(db, 'users', admin.id, 'transactions')), {
+            const txRef = doc(collection(db, 'users', admin.id, 'transactions'), txId);
+            t.set(txRef, {
                 type: 'credit', amount, reason: 'Simulation Sync', timestamp: serverTimestamp(), 
                 actorId: 'SYSTEM', protocol_mode: 'TESTNET'
             });
@@ -426,22 +423,13 @@ export const api = {
     
     getPublicLedger: async (limitCount: number = 20): Promise<any[]> => {
         try {
-            // Filter by protocol_mode to exclude TESTNET/Simulation coins from the public source of truth
             const q = query(ledgerCollection, where('protocol_mode', '==', 'MAINNET'), limit(limitCount));
             const snapshot = await getDocs(q);
             const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            // Sort client-side to ensure the newest Mainnet events appear first without needing complex composite indices immediately
             return data.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         } catch (e: any) {
-            console.error("Mainnet ledger sync failed, attempting fail-safe fallback:", e);
-            // Fallback: If index is not yet built, fetch raw data and filter client-side
-            const qFallback = query(ledgerCollection, limit(limitCount * 2));
-            const snapshot = await getDocs(qFallback);
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-            return data
-                .filter((tx: any) => tx.protocol_mode === 'MAINNET' || !tx.protocol_mode) // Allow null as legacy mainnet
-                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))
-                .slice(0, limitCount);
+            console.error("Ledger sync failed:", e);
+            return [];
         }
     },
 
@@ -451,15 +439,10 @@ export const api = {
             const snapshot = await getDocs(q);
             return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile));
         } catch (e: any) {
-            // Fallback for non-indexed sorting
-            const qFallback = query(usersCollection, limit(50));
-            const snapshot = await getDocs(qFallback);
-            const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile));
-            return data.sort((a, b) => (b.ubtBalance || 0) - (a.ubtBalance || 0)).slice(0, limitCount);
+            return [];
         }
     },
 
-    // Follow/Unfollow
     followUser: async (follower: User, targetUserId: string) => {
         try {
             const batch = writeBatch(db);
@@ -573,9 +556,10 @@ export const api = {
             t.update(buyerRef, { ubtBalance: increment(offer.amount) });
             t.update(offerRef, { status: 'COMPLETED' });
 
-            const ledgerRef = doc(collection(db, 'ledger'));
+            const txId = `p2p-${offerId}`;
+            const ledgerRef = doc(collection(db, 'ledger'), txId);
             t.set(ledgerRef, {
-                id: `p2p-${offerId}`,
+                id: txId,
                 senderId: offer.sellerId,
                 receiverId: offer.buyerId,
                 amount: offer.amount,
@@ -587,9 +571,6 @@ export const api = {
                 senderPublicKey: 'PLATFORM_ESCROW',
                 protocol_mode: 'MAINNET'
             });
-
-            t.set(doc(collection(db, 'users', offer.sellerId, 'transactions')), { type: 'p2p_sent', amount: offer.amount, reason: `Sold $UBT via P2P Hub`, timestamp: serverTimestamp(), actorId: offer.sellerId, txHash: offerId, protocol_mode: 'MAINNET' });
-            t.set(doc(collection(db, 'users', offer.buyerId!, 'transactions')), { type: 'p2p_received', amount: offer.amount, reason: `Bought $UBT via P2P Hub`, timestamp: serverTimestamp(), actorId: offer.sellerId, txHash: offerId, protocol_mode: 'MAINNET' });
         });
     },
 
@@ -600,7 +581,6 @@ export const api = {
             const econRef = doc(globalsCollection, 'economy');
             
             const userDoc = await t.get(userRef);
-            const cvpDoc = await t.get(cvpRef);
             const econDoc = await t.get(econRef);
 
             const currentPrice = econDoc.data()?.ubt_to_usd_rate || 1.0;
@@ -609,6 +589,7 @@ export const api = {
                 ? currentPrice + (ubtAmount * priceImpact)
                 : currentPrice - (ubtAmount * priceImpact);
 
+            const txId = `amm-${Date.now()}`;
             if (type === 'BUY') {
                 t.update(userRef, { ubtBalance: increment(ubtAmount) });
                 t.update(cvpRef, { total_usd_value: increment(usdAmount) });
@@ -621,16 +602,6 @@ export const api = {
                 t.update(cvpRef, { total_usd_value: increment(-usdAmount) });
                 t.update(econRef, { ubt_in_cvp: increment(ubtAmount), ubt_to_usd_rate: Math.max(0.01, newPrice) });
             }
-
-            t.set(doc(collection(db, 'users', user.id, 'transactions')), {
-                type: 'amm_swap', 
-                amount: ubtAmount, 
-                reason: `${type} $UBT via Pulse Swap`, 
-                timestamp: serverTimestamp(), 
-                actorId: 'SYSTEM',
-                balanceAfter: (userDoc.data()?.ubtBalance || 0) + (type === 'BUY' ? ubtAmount : -ubtAmount),
-                protocol_mode: 'MAINNET'
-            });
         });
     },
 
@@ -667,7 +638,8 @@ export const api = {
             t.update(cvpRef, { total_usd_value: increment(purchase.amountUsd) });
             t.update(econRef, { ubt_in_cvp: increment(-purchase.amountUbt) });
 
-            const ledgerRef = doc(collection(db, 'ledger'), `ec-${purchase.id}`);
+            const txId = `ec-${purchase.id}`;
+            const ledgerRef = doc(collection(db, 'ledger'), txId);
             t.set(ledgerRef, {
                 senderId: 'TREASURY',
                 receiverId: purchase.userId,
@@ -675,26 +647,15 @@ export const api = {
                 type: 'ECOCASH_ACQUISITION',
                 timestamp: Date.now(),
                 serverTimestamp: serverTimestamp(),
-                id: ledgerRef.id,
+                id: txId,
                 hash: `ECOCASH_REF_${purchase.ecocashRef}`,
                 signature: 'TREASURY_SYNCED',
                 senderPublicKey: 'SYSTEM_ORACLE',
                 protocol_mode: 'MAINNET'
             });
-
-            t.set(doc(collection(db, 'users', purchase.userId, 'transactions')), {
-                type: 'credit',
-                amount: purchase.amountUbt,
-                reason: 'UBT Acquired via Ecocash',
-                timestamp: serverTimestamp(),
-                actorId: admin.id,
-                txHash: purchase.id,
-                protocol_mode: 'MAINNET'
-            });
         });
     },
 
-    // ... rest of the API remains identical ...
     rejectUbtPurchase: async (purchaseId: string) => {
         await updateDoc(doc(pendingPurchasesCollection, purchaseId), { status: 'REJECTED' });
     },
@@ -709,6 +670,7 @@ export const api = {
             t.update(userRef, { ubtBalance: increment(-amountUbt) });
 
             const sellRef = doc(sellRequestsCollection);
+            const txId = sellRef.id;
             t.set(sellRef, {
                 userId: user.id,
                 userName: user.name,
@@ -719,13 +681,14 @@ export const api = {
                 createdAt: serverTimestamp()
             });
 
-            t.set(doc(collection(db, 'users', user.id, 'transactions')), {
+            const userTxRef = doc(collection(db, 'users', user.id, 'transactions'), txId);
+            t.set(userTxRef, {
                 type: 'liquidation_lock',
                 amount: amountUbt,
                 reason: 'Assets Locked for Liquidation Protocol',
                 timestamp: serverTimestamp(),
                 actorId: 'SYSTEM',
-                txHash: sellRef.id,
+                txHash: txId,
                 protocol_mode: 'MAINNET'
             });
         });
@@ -769,9 +732,11 @@ export const api = {
 
             t.update(sellRef, { status: 'COMPLETED', completedAt: serverTimestamp() });
 
+            const txId = `liq-${request.id}`;
             if (request.claimerRole === 'agent') {
                 t.update(claimerRef, { ubtBalance: increment(request.amountUbt) });
-                t.set(doc(collection(db, 'users', request.claimerId!, 'transactions')), {
+                const claimerTxRef = doc(collection(db, 'users', request.claimerId!, 'transactions'), txId);
+                t.set(claimerTxRef, {
                     type: 'credit', amount: request.amountUbt, reason: 'UBT Acquired via Liquidation Bounty', timestamp: serverTimestamp(), actorId: request.userId, txHash: request.id, protocol_mode: 'MAINNET'
                 });
             } else {
@@ -779,21 +744,23 @@ export const api = {
                 t.update(econRef, { ubt_in_cvp: increment(request.amountUbt) });
             }
 
-            t.set(doc(collection(db, 'ledger')), {
+            const ledgerRef = doc(collection(db, 'ledger'), txId);
+            t.set(ledgerRef, {
                 senderId: request.userId,
                 receiverId: request.claimerId || 'TREASURY',
                 amount: request.amountUbt,
                 type: 'LIQUIDATION_SETTLEMENT',
                 timestamp: Date.now(),
                 serverTimestamp: serverTimestamp(),
-                id: `liq-${request.id}`,
+                id: txId,
                 hash: `LIQUIDATION_EVENT_${request.id}`,
                 signature: 'SETTLED',
                 senderPublicKey: 'SYSTEM_ESCROW',
                 protocol_mode: 'MAINNET'
             });
 
-            t.set(doc(collection(db, 'users', request.userId, 'transactions')), {
+            const userTxRef = doc(collection(db, 'users', request.userId, 'transactions'), txId);
+            t.set(userTxRef, {
                 type: 'liquidation_settled',
                 amount: request.amountUbt,
                 reason: 'Liquidation Protocol Settled',
@@ -817,22 +784,32 @@ export const api = {
         });
     },
 
-    listenForAllUsers: (adminUser: User, callback: (users: User[]) => void, onError: (error: Error) => void) => onSnapshot(usersCollection, s => {
-        const users = s.docs.map(d => ({ id: d.id, ...d.data() } as User));
-        users.sort((a, b) => getMillis(b.createdAt) - getMillis(a.createdAt));
-        callback(users);
-    }, onError),
-    listenForAllMembers: (adminUser: User, callback: (members: Member[]) => void, onError: (error: Error) => void) => onSnapshot(membersCollection, s => {
-        const members = s.docs.map(d => ({ id: d.id, ...d.data() } as Member));
-        members.sort((a, b) => getMillis(b.date_registered) - getMillis(a.date_registered));
-        callback(members);
-    }, onError),
-    listenForAllAgents: (adminUser: User, callback: (agents: Agent[]) => void, onError: (error: Error) => void) => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => {
-        const agents = s.docs.map(d => ({ id: d.id, ...d.data() } as Agent));
-        agents.sort((a, b) => getMillis(b.createdAt) - getMillis(a.createdAt));
-        callback(agents);
-    }, onError),
+    listenForAllUsers: (adminUser: User, callback: (users: User[]) => void, onError: (error: Error) => void) => {
+        if (!adminUser) return () => {};
+        return onSnapshot(usersCollection, s => {
+            const users = s.docs.map(d => ({ id: d.id, ...d.data() } as User));
+            users.sort((a, b) => getMillis(b.createdAt) - getMillis(a.createdAt));
+            callback(users);
+        }, onError);
+    },
+    listenForAllMembers: (adminUser: User, callback: (members: Member[]) => void, onError: (error: Error) => void) => {
+        if (!adminUser) return () => {};
+        return onSnapshot(membersCollection, s => {
+            const members = s.docs.map(d => ({ id: d.id, ...d.data() } as Member));
+            members.sort((a, b) => getMillis(b.date_registered) - getMillis(a.date_registered));
+            callback(members);
+        }, onError);
+    },
+    listenForAllAgents: (adminUser: User, callback: (agents: Agent[]) => void, onError: (error: Error) => void) => {
+        if (!adminUser) return () => {};
+        return onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => {
+            const agents = s.docs.map(d => ({ id: d.id, ...d.data() } as Agent));
+            agents.sort((a, b) => getMillis(b.createdAt) - getMillis(a.createdAt));
+            callback(agents);
+        }, onError);
+    },
     listenForPendingMembers: (adminUser: User, callback: (members: Member[]) => void, onError: (error: Error) => void) => {
+        if (!adminUser) return () => {};
         const q = query(membersCollection, where('payment_status', '==', 'pending_verification'));
         return onSnapshot(q, s => {
             const data = s.docs.map(d => ({ id: d.id, ...d.data() } as Member));
@@ -857,6 +834,7 @@ export const api = {
     },
     processPendingWelcomeMessages: async () => 0,
     listenForReferredUsers: (userId: string, callback: (users: PublicUserProfile[]) => void, onError: (error: Error) => void) => {
+        if (!userId) return () => {};
         return onSnapshot(doc(usersCollection, userId), async (userSnap) => {
             try {
                 if (!userSnap.exists()) { callback([]); return; }
@@ -967,12 +945,15 @@ export const api = {
         return { posts, lastVisible };
     },
     listenForPostsByAuthor: (authorId: string, callback: (posts: Post[]) => void, onError: (error: Error) => void) => {
+        if (!authorId) return () => {};
         const q = query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc'));
         return onSnapshot(q, s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), onError);
     },
     togglePinPost: (admin: User, postId: string, pin: boolean) => updateDoc(doc(postsCollection, postId), { isPinned: pin }),
-    listenForComments: (parentId: string, callback: (comments: Comment[]) => void, parentCollection: 'posts' | 'proposals', onError: (error: Error) => void) => 
-        onSnapshot(query(collection(db, parentCollection, parentId, 'comments'), orderBy('timestamp', 'asc')), (snapshot) => { callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Comment))); }, onError),
+    listenForComments: (parentId: string, callback: (comments: Comment[]) => void, parentCollection: 'posts' | 'proposals', onError: (error: Error) => void) => {
+        if (!parentId) return () => {};
+        return onSnapshot(query(collection(db, parentCollection, parentId, 'comments'), orderBy('timestamp', 'asc')), (snapshot) => { callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Comment))); }, onError);
+    },
     addComment: (parentId: string, commentData: Omit<Comment, 'id' | 'timestamp'>, parentCollection: 'posts' | 'proposals') => {
         const batch = writeBatch(db);
         batch.set(doc(collection(db, parentCollection, parentId, 'comments')), { ...commentData, timestamp: serverTimestamp() });
@@ -992,7 +973,10 @@ export const api = {
     },
     reportPost: (reporter: User, post: Post, reason: string, details: string) => addDoc(reportsCollection, { reporterId: reporter.id, reporterName: reporter.name, reportedUserId: post.authorId, reportedUserName: post.authorName, postId: post.id, postContent: post.content, postAuthorId: post.authorId, reason, details, date: new Date().toISOString(), status: 'new' }),
     reportUser: (reporter: User, reportedUser: PublicUserProfile, reason: string, details: string) => addDoc(reportsCollection, { reporterId: reporter.id, reporterName: reporter.name, reportedUserId: reportedUser.id, reportedUserName: reportedUser.name, reason, details, date: new Date().toISOString(), status: 'new' }),
-    listenForReports: (admin: User, callback: (reports: Report[]) => void, onError: (error: Error) => void) => onSnapshot(query(reportsCollection, orderBy('date', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Report))), onError),
+    listenForReports: (admin: User, callback: (reports: Report[]) => void, onError: (error: Error) => void) => {
+        if (!admin) return () => {};
+        return onSnapshot(query(reportsCollection, orderBy('date', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Report))), onError);
+    },
     resolvePostReport: async (admin: User, reportId: string, postId: string, authorId: string) => {
         const batch = writeBatch(db);
         batch.update(doc(reportsCollection, reportId), { status: 'resolved' });
@@ -1001,12 +985,14 @@ export const api = {
         await batch.commit();
     },
     dismissReport: (admin: User, reportId: string) => updateDoc(doc(reportsCollection, reportId), { status: 'resolved' }),
-    listenForConversations: (userId: string, callback: (convos: Conversation[]) => void, onError: (error: Error) => void) => 
-        onSnapshot(query(conversationsCollection, where('members', 'array-contains', userId)), (snapshot) => {
+    listenForConversations: (userId: string, callback: (convos: Conversation[]) => void, onError: (error: Error) => void) => {
+        if (!userId) return () => {};
+        return onSnapshot(query(conversationsCollection, where('members', 'array-contains', userId)), (snapshot) => {
                 const conversations = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
                 conversations.sort((a, b) => getMillis(b.lastMessageTimestamp) - getMillis(a.lastMessageTimestamp));
                 callback(conversations);
-            }, onError),
+            }, onError);
+    },
     
     startChat: async (currentUser: User, targetUser: PublicUserProfile): Promise<Conversation> => {
         const currentUserId = currentUser.id;
@@ -1032,6 +1018,7 @@ export const api = {
         await addDoc(conversationsCollection, { name, members: memberIds, memberNames, lastMessage: "Group created", lastMessageTimestamp: Timestamp.now(), lastMessageSenderId: memberIds[0], readBy: [memberIds[0]], isGroup: true });
     },
     listenForMessages: (convoId: string, currentUser: User, callback: (messages: Message[]) => void, onError: (error: Error) => void) => {
+        if (!convoId) return () => {};
         return onSnapshot(query(collection(db, 'conversations', convoId, 'messages'), orderBy('timestamp', 'asc')), (snapshot) => {
             callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Message)));
         }, onError);
@@ -1051,8 +1038,14 @@ export const api = {
     },
     updateGroupMembers: (convoId: string, newMemberIds: string[], newMemberNames: {[key: string]: string}) => updateDoc(doc(conversationsCollection, convoId), { members: newMemberIds, memberNames: newMemberNames }),
     leaveGroup: (convoId: string, userId: string) => updateDoc(doc(conversationsCollection, convoId), { members: arrayRemove(userId) }),
-    listenForNotifications: (userId: string, callback: (notifs: Notification[]) => void, onError: (error: Error) => void) => onSnapshot(query(collection(db, 'users', userId, 'notifications'), limit(50)), (s) => { callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Notification)).sort((a, b) => getMillis(b.timestamp) - getMillis(a.timestamp))); }, onError),
-    listenForActivity: (circle: string, callback: (acts: Activity[]) => void, onError: (error: Error) => void) => onSnapshot(query(activityCollection, where('causerCircle', '==', circle), limit(50)), (snapshot) => { callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Activity)).sort((a, b) => getMillis(b.timestamp) - getMillis(a.timestamp)).slice(0, 10)); }, onError),
+    listenForNotifications: (userId: string, callback: (notifs: Notification[]) => void, onError: (error: Error) => void) => {
+        if (!userId) return () => {};
+        return onSnapshot(query(collection(db, 'users', userId, 'notifications'), limit(50)), (s) => { callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Notification)).sort((a, b) => getMillis(b.timestamp) - getMillis(a.timestamp))); }, onError);
+    },
+    listenForActivity: (circle: string, callback: (acts: Activity[]) => void, onError: (error: Error) => void) => {
+        if (!circle) return () => {};
+        return onSnapshot(query(activityCollection, where('causerCircle', '==', circle), limit(50)), (snapshot) => { callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Activity)).sort((a, b) => getMillis(b.timestamp) - getMillis(a.timestamp)).slice(0, 10)); }, onError);
+    },
     listenForRecentActivity: (count: number, callback: (acts: Activity[]) => void, onError: (error: Error) => void) => onSnapshot(query(activityCollection, orderBy('timestamp', 'desc'), limit(count)), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), onError),
     listenForAllNewMemberActivity: (callback: (acts: Activity[]) => void, onError: (error: Error) => void) => onSnapshot(query(activityCollection, where('type', '==', 'NEW_MEMBER'), orderBy('timestamp', 'desc'), limit(10)), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), onError),
     markNotificationAsRead: (userId: string, notificationId: string) => updateDoc(doc(db, 'users', userId, 'notifications', notificationId), { read: true }),
@@ -1079,7 +1072,10 @@ export const api = {
     },
     closeProposal: (user: User, proposalId: string, status: 'passed' | 'failed') => updateDoc(doc(proposalsCollection, proposalId), { status }),
     getCurrentRedemptionCycle: async (): Promise<RedemptionCycle | null> => { const q = query(redemptionCyclesCollection, orderBy('endDate', 'desc'), limit(1)); const snapshot = await getDocs(q); return snapshot.empty ? null : {id: snapshot.docs[0].id, ...snapshot.docs[0].data()} as RedemptionCycle; },
-    listenForUserPayouts: (userId: string, callback: (payouts: PayoutRequest[]) => void, onError: (error: Error) => void) => onSnapshot(query(payoutsCollection, where('userId', '==', userId)), (snapshot) => { callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest)).sort((a, b) => getMillis(b.requestedAt) - getMillis(a.requestedAt))); }, onError),
+    listenForUserPayouts: (userId: string, callback: (payouts: PayoutRequest[]) => void, onError: (error: Error) => void) => {
+        if (!userId) return () => {};
+        return onSnapshot(query(payoutsCollection, where('userId', '==', userId)), (snapshot) => { callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest)).sort((a, b) => getMillis(b.requestedAt) - getMillis(a.requestedAt))); }, onError);
+    },
     requestPayout: (user: User, ecocashName: string, ecocashNumber: string, amount: number) => addDoc(payoutsCollection, { userId: user.id, userName: user.name, type: 'referral', amount, ecocashName, ecocashNumber, status: 'pending', requestedAt: serverTimestamp() }),
     claimBonusPayout: (payoutId: string, ecocashName: string, ecocashNumber: string) => updateDoc(doc(payoutsCollection, payoutId), { ecocashName, ecocashNumber }),
     requestCommissionPayout: (user: User, ecocashName: string, ecocashNumber: string, amount: number) => {
@@ -1088,7 +1084,10 @@ export const api = {
             t.update(doc(usersCollection, user.id), { commissionBalance: 0 });
         });
     },
-    listenForPayoutRequests: (admin: User, callback: (reqs: PayoutRequest[]) => void, onError: (error: Error) => void) => onSnapshot(query(payoutsCollection, orderBy('requestedAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), onError),
+    listenForPayoutRequests: (admin: User, callback: (reqs: PayoutRequest[]) => void, onError: (error: Error) => void) => {
+        if (!admin) return () => {};
+        return onSnapshot(query(payoutsCollection, orderBy('requestedAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), onError);
+    },
     updatePayoutStatus: (adminUser: User, payout: PayoutRequest, status: 'completed' | 'rejected') => {
         return runTransaction(db, async (t) => {
             t.update(doc(payoutsCollection, payout.id), { status, processedBy: { adminId: adminUser.id, adminName: adminUser.name }, completedAt: serverTimestamp() });
@@ -1098,12 +1097,13 @@ export const api = {
                 else if (payout.type === 'ubt_redemption') amountToRefund = payout.meta?.ubtAmount;
                 if (amountToRefund && amountToRefund > 0) {
                     t.update(doc(usersCollection, payout.userId), { ubtBalance: increment(amountToRefund) });
-                    t.set(doc(collection(db, 'users', payout.userId, 'transactions')), { type: 'credit', amount: amountToRefund, reason: `Reversal for rejected ${payout.type.replace(/_/g, ' ')}`, timestamp: serverTimestamp(), actorId: adminUser.id, actorName: adminUser.name });
+                    const txId = `rev-${payout.id}`;
+                    const txRef = doc(collection(db, 'users', payout.userId, 'transactions'), txId);
+                    t.set(txRef, { type: 'credit', amount: amountToRefund, reason: `Reversal for rejected ${payout.type.replace(/_/g, ' ')}`, timestamp: serverTimestamp(), actorId: adminUser.id, actorName: adminUser.name, protocol_mode: 'MAINNET' });
                 }
             }
         });
     },
-    // Economy CCAP Actions
     redeemCcapForCash: (user: User, ecocashName: string, ecocashNumber: string, usdtValue: number, ccapToRedeem: number, ccap_to_usd_rate: number) => {
         return addDoc(collection(db, 'payouts'), {
             userId: user.id, userName: user.name, type: 'ccap_redemption', amount: usdtValue, status: 'pending', requestedAt: serverTimestamp(), ecocashName, ecocashNumber,
@@ -1177,7 +1177,10 @@ export const api = {
     },
     getFundraisingVentures: async (): Promise<Venture[]> => { const q = query(venturesCollection, where('status', '==', 'fundraising'), orderBy('createdAt', 'desc')); const snapshot = await getDocs(q); return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Venture)); },
     listenForFundraisingVentures: (callback: (ventures: Venture[]) => void, onError: (e: Error) => void) => onSnapshot(query(venturesCollection, where('status', '==', 'fundraising'), orderBy('createdAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), onError),
-    listenForUserVentures: (userId: string, callback: (ventures: Venture[]) => void, onError: (e: Error) => void) => onSnapshot(query(venturesCollection, where('ownerId', '==', userId)), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture)).sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0))), onError),
+    listenForUserVentures: (userId: string, callback: (ventures: Venture[]) => void, onError: (e: Error) => void) => {
+        if (!userId) return () => {};
+        return onSnapshot(query(venturesCollection, where('ownerId', '==', userId)), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture)).sort((a, b) => (b.createdAt?.toMillis() || 0) - (a.createdAt?.toMillis() || 0))), onError);
+    },
     createVenture: async (ventureData: any) => {
         await addDoc(venturesCollection, { ...ventureData, status: 'fundraising', createdAt: Timestamp.now(), fundingRaisedCcap: 0, backers: [], ticker: ventureData.name.substring(0, 4).toUpperCase() + Math.floor(Math.random() * 100), totalSharesIssued: 0, totalProfitsDistributed: 0 });
     },
@@ -1190,7 +1193,10 @@ export const api = {
         if (venture.backers && venture.backers.length > 0) throw new Error("Cannot delete funded venture.");
         await deleteDoc(ventureRef);
     },
-    listenForVentures: (admin: User, callback: (ventures: Venture[]) => void, onError: (e: Error) => void) => onSnapshot(query(venturesCollection, orderBy('createdAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), onError),
+    listenForVentures: (admin: User, callback: (ventures: Venture[]) => void, onError: (e: Error) => void) => {
+        if (!admin) return () => {};
+        return onSnapshot(query(venturesCollection, orderBy('createdAt', 'desc')), s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), onError);
+    },
     getVentureById: async (id: string): Promise<Venture | null> => { const docSnap = await getDoc(doc(venturesCollection, id)); return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } as Venture : null; },
     getDistributionsForUserInVenture: async (userId: string, ventureId: string, userShares: number, totalShares: number): Promise<Distribution[]> => { const snapshot = await getDocs(query(collection(db, 'ventures', ventureId, 'distributions'), orderBy('date', 'desc'))); return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Distribution)); },
     requestVeqPayout: (user: User, holding: VentureEquityHolding, shares: number, ecocashName: string, ecocashNumber: string) => addDoc(payoutsCollection, { userId: user.id, userName: user.name, type: 'veq_redemption', amount: shares, ecocashName, ecocashNumber, status: 'pending', requestedAt: serverTimestamp(), meta: { ventureId: holding.ventureId, ventureName: holding.ventureName } }),
@@ -1204,9 +1210,21 @@ export const api = {
         return false;
     },
     getCommunityValuePool: async (): Promise<CommunityValuePool> => { const docSnap = await getDoc(doc(globalsCollection, 'cvp')); return docSnap.exists() ? docSnap.data() as CommunityValuePool : { id: 'singleton', total_usd_value: 0, total_circulating_ccap: 0, ccap_to_usd_rate: 0.01 }; },
-    listenForCVP: (admin: User, callback: (cvp: CommunityValuePool | null) => void, onError: (e: Error) => void) => onSnapshot(doc(globalsCollection, 'cvp'), s => callback(s.exists() ? s.data() as CommunityValuePool : null), onError),
+    listenForCVP: (admin: User, callback: (cvp: CommunityValuePool | null) => void, onError: (e: Error) => void) => {
+        if (!admin) return () => {};
+        return onSnapshot(doc(globalsCollection, 'cvp'), s => callback(s.exists() ? s.data() as CommunityValuePool : null), onError);
+    },
     addFundsToCVP: (admin: User, amount: number) => runTransaction(db, async t => { const cvpRef = doc(globalsCollection, 'cvp'); const cvpDoc = await t.get(cvpRef); const newTotal = (cvpDoc.data()?.total_usd_value || 0) + amount; t.set(cvpRef, { total_usd_value: newTotal }, { merge: true }); }),
-    listenForUserTransactions: (userId: string, callback: (txs: Transaction[]) => void, onError: (error: Error) => void) => onSnapshot(query(collection(db, 'users', userId, 'transactions'), orderBy('timestamp', 'desc'), limit(50)), (snapshot) => { callback(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))); }, onError),
+    listenForUserTransactions: (userId: string, callback: (txs: Transaction[]) => void, onError: (error: Error) => void) => {
+        if (!userId) return () => {};
+        return onSnapshot(query(collection(db, 'users', userId, 'transactions'), where('protocol_mode', '==', 'MAINNET'), limit(50)), (snapshot) => { 
+            const data = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+            callback(data.sort((a,b) => getMillis(b.timestamp) - getMillis(a.timestamp)));
+        }, (err) => {
+            // SILENT FAIL
+            callback([]);
+        });
+    },
     listenForGlobalEconomy: (callback: (economy: GlobalEconomy | null) => void, onError: (error: Error) => void) => onSnapshot(doc(globalsCollection, 'economy'), (snapshot) => { callback(snapshot.exists() ? snapshot.data() as GlobalEconomy : null); }, onError),
     setGlobalEconomy: (adminUser: User, data: Partial<GlobalEconomy>) => setDoc(doc(globalsCollection, 'economy'), data, { merge: true }),
     updateUbtRedemptionWindow: (adminUser: User, open: boolean) => {
@@ -1223,14 +1241,16 @@ export const api = {
     updateUserUbt: (adminUser: Admin, userId: string, amount: number, reason: string) => {
         return runTransaction(db, async (transaction) => {
             const userRef = doc(db, 'users', userId);
-            const transactionLogRef = doc(collection(db, 'users', userId, 'transactions'));
             const userDoc = await transaction.get(userRef);
             if (!userDoc.exists()) throw new Error(`User profile for ID ${userId} not found.`);
             const currentBalance = userDoc.data().ubtBalance || 0;
             const newBalance = currentBalance + amount;
             if (newBalance < 0) throw new Error(`Insufficient balance.`);
+            
+            const txId = `adj-${Date.now()}`;
             transaction.update(userRef, { ubtBalance: newBalance });
-            transaction.set(transactionLogRef, {
+            const txLogRef = doc(collection(db, 'users', userId, 'transactions'), txId);
+            transaction.set(txLogRef, {
                 type: amount > 0 ? 'credit' : 'debit',
                 amount: Math.abs(amount),
                 reason: reason,
@@ -1247,7 +1267,8 @@ export const api = {
         return runTransaction(db, async (t) => {
             const payoutRef = doc(collection(db, 'payouts'));
             const userRef = doc(usersCollection, user.id);
-            const txRef = doc(collection(db, 'users', user.id, 'transactions'));
+            const txId = `red-${Date.now()}`;
+            const txRef = doc(collection(db, 'users', user.id, 'transactions'), txId);
             
             t.set(payoutRef, { userId: user.id, userName: user.name, type: 'ubt_redemption', amount: usdValue, status: 'pending', requestedAt: serverTimestamp(), ecocashName, ecocashNumber, meta: { ubtAmount: ubtAmount, ubtToUsdRate: ubtAmount > 0 ? usdValue / ubtAmount : 0 } });
             t.update(userRef, { ubtBalance: increment(-ubtAmount) });
@@ -1258,7 +1279,8 @@ export const api = {
         return runTransaction(db, async (t) => {
              const payoutRef = doc(collection(db, 'payouts'));
              const userRef = doc(usersCollection, user.id);
-             const txRef = doc(collection(db, 'users', user.id, 'transactions'));
+             const txId = `onchain-${Date.now()}`;
+             const txRef = doc(collection(db, 'users', user.id, 'transactions'), txId);
              
             t.set(payoutRef, { userId: user.id, userName: user.name, type: 'onchain_withdrawal', amount: ubtAmount, status: 'pending', requestedAt: serverTimestamp(), ecocashName: 'N/A', ecocashNumber: 'N/A', meta: { solanaAddress: solanaAddress } });
             t.update(userRef, { ubtBalance: increment(-ubtAmount) });

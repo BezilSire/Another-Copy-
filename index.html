@@ -6,7 +6,7 @@
   <title>Ubuntium | Sovereign Protocol</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/logo.svg" type="image/svg+xml" sizes="any">
-  <link rel="apple-touch-icon" href="/logo.svg">
+  <link rel=" apple-touch-icon" href="/logo.svg">
   <meta name="theme-color" id="theme-color-meta" content="#000000"/>
   <script type="importmap">
 {
@@ -26,12 +26,18 @@
     "react-dom/": "https://aistudiocdn.com/react-dom@19.2.0/",
     "tweetnacl": "https://esm.sh/tweetnacl@1.0.3?bundle",
     "qrcode": "https://esm.sh/qrcode@1.5.3?bundle",
-    "html5-qrcode": "https://esm.sh/html5-qrcode@2.3.8?bundle"
+    "html5-qrcode": "https://esm.sh/html5-qrcode@2.3.8?bundle",
+    "bip39": "https://esm.sh/bip39@3.1.0?bundle",
+    "buffer": "https://esm.sh/buffer@6.0.3?bundle"
   }
 }
 </script>
   <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
   <script src="https://cdn.tailwindcss.com"></script>
+  <script type="module">
+    import { Buffer } from 'buffer';
+    window.Buffer = Buffer; // Essential for bip39 support
+  </script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -64,6 +70,7 @@
             'terminal-cursor': 'blink 1s step-end infinite',
             'draw': 'draw 2s ease-out forwards',
             'spin-slow': 'spin 12s linear infinite',
+            'pulse-soft': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
           },
           keyframes: {
             glitch: {
@@ -114,7 +121,6 @@
       background-size: 60px 60px;
     }
 
-    /* Viewfinder Brackets */
     .module-frame {
       position: relative;
       border: 1px solid rgba(255, 255, 255, 0.05);
@@ -162,11 +168,6 @@
       filter: drop-shadow(0 0 10px rgba(212, 175, 55, 0.2));
     }
 
-    .matrix-text {
-      color: #34d399;
-      text-shadow: 0 0 15px rgba(16, 185, 129, 0.6);
-    }
-
     .label-caps {
       text-transform: uppercase;
       letter-spacing: 0.5em;
@@ -198,21 +199,12 @@
       from { transform: translateY(-100vh); }
       to { transform: translateY(100vh); }
     }
-
-    .no-scrollbar::-webkit-scrollbar {
-        display: none;
-    }
-    .no-scrollbar {
-        -ms-overflow-style: none;
-        scrollbar-width: none;
-    }
   </style>
 </head>
 <body class="dark antialiased">
   <div id="incision-layer">
     <div class="blueprint-grid"></div>
     <div class="scan-line"></div>
-    <div class="vignette" style="position: absolute; inset: 0; background: radial-gradient(circle at center, transparent 0%, rgba(0,0,0,0.95) 100%);"></div>
   </div>
   <div id="root"></div>
   <script type="module" src="/index.js"></script>

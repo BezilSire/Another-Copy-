@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -32,6 +31,7 @@ import { RadarModal } from './components/RadarModal';
 import { UBTScan } from './components/UBTScan';
 import { LogoIcon } from './components/icons/LogoIcon';
 import { LoaderIcon } from './components/icons/LoaderIcon';
+import { PinVaultLogin } from './components/PinVaultLogin';
 
 const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [logs, setLogs] = useState<string[]>([]);
@@ -52,9 +52,9 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
         i++;
       } else {
         clearInterval(interval);
-        setTimeout(onComplete, 400);
+        setTimeout(onComplete, 150);
       }
-    }, 450); 
+    }, 120); 
     return () => clearInterval(interval);
   }, []);
 
@@ -75,7 +75,7 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 };
 
 const App: React.FC = () => {
-  const { currentUser, isLoadingAuth, logout, updateUser, firebaseUser } = useAuth();
+  const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser, isSovereignLocked, unlockSovereignSession } = useAuth();
   const [isBooting, setIsBooting] = useState(true);
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const { addToast } = useToast();
@@ -129,7 +129,8 @@ const App: React.FC = () => {
   };
   
   const renderContent = () => {
-    if (isLoadingAuth) {
+    // 1. Initial Identity Syncing or background auto-login
+    if (isLoadingAuth || isProcessingAuth) {
       return (
         <div className="fixed inset-0 bg-black flex flex-col items-center justify-center p-10 font-mono">
             <LoaderIcon className="h-8 w-8 animate-spin text-brand-gold mb-4 opacity-50" />
@@ -138,10 +139,22 @@ const App: React.FC = () => {
       );
     }
 
+    // 2. Sovereign PIN Gate
+    if (isSovereignLocked) {
+        return (
+            <div className="min-h-screen bg-black flex flex-col justify-center items-center px-4">
+                <div className="absolute inset-0 blueprint-grid opacity-[0.05] pointer-events-none"></div>
+                <PinVaultLogin onUnlock={unlockSovereignSession} onReset={() => addToast("Restoration protocol available via identity anchor.", "info")} />
+            </div>
+        );
+    }
+
+    // 3. Cloud Gate (Email Login)
     if (!currentUser) {
       return <AuthPage />;
     }
 
+    // 4. Feature Routing
     if (chatTarget) {
       return (
         <ChatsPage
@@ -246,17 +259,19 @@ const App: React.FC = () => {
       
       {!isBooting && (
           <div className="animate-fade-in">
-            <Header 
-                user={currentUser} 
-                onLogout={requestLogout} 
-                onViewProfile={handleViewProfile} 
-                onChatClick={() => handleOpenChat('main')}
-                onRadarClick={() => setIsRadarOpen(true)} 
-                onScanClick={() => setIsScanOpen(true)}
-            />
+            {!isSovereignLocked && currentUser && (
+                <Header 
+                    user={currentUser} 
+                    onLogout={requestLogout} 
+                    onViewProfile={handleViewProfile} 
+                    onChatClick={() => handleOpenChat('main')}
+                    onRadarClick={() => setIsRadarOpen(true)} 
+                    onScanClick={() => setIsScanOpen(true)}
+                />
+            )}
             {renderContent()}
             
-            {currentUser && (
+            {currentUser && !isSovereignLocked && (
                 <NotificationPermissionBanner permission={permission} onRequestPermission={requestPermission} />
             )}
 
