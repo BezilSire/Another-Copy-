@@ -401,15 +401,18 @@ export interface Transaction {
 }
 
 export interface UbtTransaction {
-    id: string; // UUID
+    id: string; // Event ID (UUID)
     senderId: string;
     receiverId: string;
     amount: number;
     timestamp: number;
     nonce: string; // Random nonce to prevent replay
-    signature: string; // Base64 encoded signature
-    hash: string; // The data that was signed
+    signature: string; // Ed25519 Base64 encoded signature
+    hash: string; // The data payload string that was signed
+    senderPublicKey: string; // Needed for verify
+    parentHash: string; // Chain integrity - link to previous event
     status?: 'pending' | 'verified' | 'failed';
+    type?: 'P2P_HANDSHAKE' | 'REDEMPTION' | 'SYSTEM_MINT';
 }
 
 export interface LedgerViewParams {

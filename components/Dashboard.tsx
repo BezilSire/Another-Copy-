@@ -6,10 +6,8 @@ import { BriefcaseIcon } from './icons/BriefcaseIcon';
 import { ClockIcon } from './icons/ClockIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { DonutChart } from './DonutChart';
-import { api } from '../services/apiService';
 import { LoaderIcon } from './icons/LoaderIcon';
 
-// Fix: Define DashboardProps interface
 interface DashboardProps {
   user: Admin;
   users: User[];
@@ -24,13 +22,17 @@ interface DashboardProps {
   onSendBroadcast: (message: string) => Promise<void>;
 }
 
-const DashboardStat: React.FC<{ icon: React.ReactNode; title: string; value: string | number; color: string; glow: string }> = ({ icon, title, value, color, glow }) => (
-  <div className="bg-slate-900/40 backdrop-blur-md border border-white/10 p-6 rounded-3xl transition-all hover:scale-[1.02] duration-300">
+const DashboardStat: React.FC<{ icon: React.ReactNode; title: string; value: string | number; color: string; glow: string; isLoading?: boolean }> = ({ icon, title, value, color, glow, isLoading }) => (
+  <div className="bg-slate-900/40 backdrop-blur-md border border-white/10 p-6 rounded-3xl transition-all hover:scale-[1.02] duration-300 shadow-xl">
     <div className={`inline-flex p-3 rounded-2xl ${color} ${glow} mb-4 text-white`}>
       {icon}
     </div>
     <p className="text-[10px] font-black uppercase tracking-[0.2em] text-gray-500 mb-1">{title}</p>
-    <p className="text-3xl font-black text-white font-mono tracking-tighter">{value}</p>
+    {isLoading ? (
+        <div className="h-9 w-20 bg-white/5 rounded animate-pulse"></div>
+    ) : (
+        <p className="text-3xl font-black text-white font-mono tracking-tighter">{value}</p>
+    )}
   </div>
 );
 
@@ -39,6 +41,8 @@ export const Dashboard: React.FC<DashboardProps> = (props) => {
     const [broadcastMessage, setBroadcastMessage] = useState('');
     const [isSending, setIsSending] = useState(false);
     const editorRef = useRef<HTMLDivElement>(null);
+
+    const isSyncing = users.length === 0;
 
     const userStatusData = useMemo(() => {
         const counts = users.reduce((acc, user) => {
@@ -57,15 +61,18 @@ export const Dashboard: React.FC<DashboardProps> = (props) => {
     return (
         <div className="space-y-8 animate-fade-in">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-                <DashboardStat icon={<UsersIcon className="h-6 w-6"/>} title="Members" value={members.length} color="bg-green-600" glow="shadow-glow-green" />
-                <DashboardStat icon={<BriefcaseIcon className="h-6 w-6"/>} title="Agents" value={agents.length} color="bg-blue-600" glow="shadow-[0_0_15px_-3px_rgba(37,99,235,0.4)]" />
-                <DashboardStat icon={<ClockIcon className="h-6 w-6"/>} title="Pending" value={pendingMembers.length} color="bg-yellow-600" glow="shadow-[0_0_15px_-3px_rgba(202,138,4,0.4)]" />
-                <DashboardStat icon={<AlertTriangleIcon className="h-6 w-6"/>} title="Reports" value={reports.filter(r => r.status === 'new').length} color="bg-red-600" glow="shadow-[0_0_15px_-3px_rgba(220,38,38,0.4)]" />
+                <DashboardStat isLoading={isSyncing} icon={<UsersIcon className="h-6 w-6"/>} title="Members" value={members.length} color="bg-green-600" glow="shadow-glow-green" />
+                <DashboardStat isLoading={isSyncing} icon={<BriefcaseIcon className="h-6 w-6"/>} title="Agents" value={agents.length} color="bg-blue-600" glow="shadow-[0_0_15px_-3px_rgba(37,99,235,0.4)]" />
+                <DashboardStat isLoading={isSyncing} icon={<ClockIcon className="h-6 w-6"/>} title="Pending" value={pendingMembers.length} color="bg-yellow-600" glow="shadow-[0_0_15px_-3px_rgba(202,138,4,0.4)]" />
+                <DashboardStat isLoading={isSyncing} icon={<AlertTriangleIcon className="h-6 w-6"/>} title="Reports" value={reports.filter(r => r.status === 'new').length} color="bg-red-600" glow="shadow-[0_0_15px_-3px_rgba(220,38,38,0.4)]" />
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 sm:gap-8">
                 <div className="lg:col-span-2 bg-slate-900/40 backdrop-blur-md border border-white/10 p-6 sm:p-8 rounded-[2.5rem] shadow-premium">
-                    <h3 className="text-xl font-black text-white mb-6 uppercase tracking-tighter">Global Proclamation</h3>
+                    <div className="flex justify-between items-center mb-6">
+                        <h3 className="text-xl font-black text-white uppercase tracking-tighter">Global Proclamation</h3>
+                        {isSyncing && <span className="text-[8px] font-black text-brand-gold animate-pulse tracking-widest">CONNECTING...</span>}
+                    </div>
                     <form onSubmit={async (e) => {
                         e.preventDefault();
                         if (!editorRef.current?.textContent?.trim()) return;
@@ -81,12 +88,12 @@ export const Dashboard: React.FC<DashboardProps> = (props) => {
                                 ref={editorRef}
                                 contentEditable="true"
                                 onInput={(e) => setBroadcastMessage(e.currentTarget.innerHTML)}
-                                data-placeholder="What must the commons know today?"
-                                className="w-full p-4 text-gray-200 text-lg focus:outline-none wysiwyg-editor min-h-[150px]"
+                                data-placeholder="Enter protocol transmission..."
+                                className="w-full p-6 text-gray-200 text-lg focus:outline-none wysiwyg-editor min-h-[180px]"
                             />
                         </div>
                         <button type="submit" disabled={isSending} className="mt-6 w-full py-4 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-2xl transition-all active:scale-95 shadow-glow-gold disabled:opacity-50 uppercase tracking-widest text-xs">
-                            {isSending ? <LoaderIcon className="h-4 w-4 animate-spin mx-auto"/> : "Dispatch Message"}
+                            {isSending ? <LoaderIcon className="h-4 w-4 animate-spin mx-auto"/> : "Dispatch Protocol Message"}
                         </button>
                     </form>
                 </div>
@@ -94,8 +101,8 @@ export const Dashboard: React.FC<DashboardProps> = (props) => {
                  <div className="bg-slate-900/40 backdrop-blur-md border border-white/10 p-8 rounded-[2.5rem] flex flex-col items-center shadow-premium">
                     <h3 className="text-sm font-black text-gray-500 mb-8 uppercase tracking-[0.3em]">Network Pulse</h3>
                     <DonutChart 
-                        data={userStatusData}
-                        centerText={<><div className="text-4xl font-black text-white tracking-tighter">{users.length}</div><div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Citizens</div></>}
+                        data={isSyncing ? [] : userStatusData}
+                        centerText={<><div className="text-4xl font-black text-white tracking-tighter">{isSyncing ? '...' : users.length}</div><div className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Citizens</div></>}
                     />
                     <div className="mt-10 w-full space-y-4">
                         {userStatusData.map(item => (
@@ -104,7 +111,7 @@ export const Dashboard: React.FC<DashboardProps> = (props) => {
                                     <div className="w-2 h-2 rounded-full mr-3 shadow-sm" style={{backgroundColor: item.color}}></div>
                                     {item.label}
                                 </span>
-                                <span className="font-mono font-bold text-white text-sm">{item.value}</span>
+                                <span className="font-mono font-bold text-white text-sm">{isSyncing ? '...' : item.value}</span>
                             </div>
                         ))}
                     </div>

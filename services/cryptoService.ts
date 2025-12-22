@@ -12,7 +12,6 @@ interface KeyPair {
 }
 
 const encodeUTF8 = (s: string): Uint8Array => new TextEncoder().encode(s);
-const decodeUTF8 = (arr: Uint8Array): string => new TextDecoder().decode(arr);
 
 const encodeBase64 = (arr: Uint8Array): string => {
     let binary = '';
@@ -90,6 +89,18 @@ export const cryptoService = {
         return encodeBase64(signature);
     },
 
+    verifySignature: (payload: string, signatureBase64: string, publicKeyBase64: string): boolean => {
+        try {
+            const publicKey = decodeBase64(publicKeyBase64);
+            const signature = decodeBase64(signatureBase64);
+            const message = encodeUTF8(payload);
+            return nacl.sign.detached.verify(message, signature, publicKey);
+        } catch (e) {
+            console.error("Signature verification error:", e);
+            return false;
+        }
+    },
+
     generateNonce: (): string => {
         const array = new Uint8Array(12);
         window.crypto.getRandomValues(array);
@@ -103,7 +114,7 @@ export const cryptoService = {
         return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
     },
 
-    // Password-based Vault Encryption
+    // Password-based Vault Encryption for sovereign data portability
     encryptVault: async (password: string): Promise<string> => {
         const keys = cryptoService.getOrGenerateSigningKeys();
         const enc = new TextEncoder();
@@ -123,7 +134,9 @@ export const cryptoService = {
             v: 1,
             iv: encodeBase64(iv),
             salt: encodeBase64(salt),
-            data: encodeBase64(new Uint8Array(ciphertext))
+            data: encodeBase64(new Uint8Array(ciphertext)),
+            publicKey: keys.publicKey,
+            exportedAt: Date.now()
         };
         return JSON.stringify(vaultObj);
     },

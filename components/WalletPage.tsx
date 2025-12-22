@@ -20,6 +20,7 @@ import { KeyIcon } from './icons/KeyIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { IdentityVault } from './IdentityVault';
 import { DatabaseIcon } from './icons/DatabaseIcon';
+import { ProtocolReconciliation } from './ProtocolReconciliation';
 
 interface WalletPageProps {
   user: User;
@@ -68,6 +69,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ user, onNavigateToLedger
     const [isSendOpen, setIsSendOpen] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
     const [activeTab, setActiveTab] = useState<'history' | 'security'>(initialTab);
+    const [isAuditOpen, setIsAuditOpen] = useState(false);
     
     const ubtBalance = user.ubtBalance || 0;
     const usdValue = ubtBalance * (economy?.ubt_to_usd_rate || 0);
@@ -92,6 +94,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ user, onNavigateToLedger
         <div className="max-w-4xl mx-auto space-y-12 animate-fade-in pb-28 px-4">
             {isScanOpen && <UBTScan currentUser={user} onTransactionComplete={() => {}} onClose={() => setIsScanOpen(false)} />}
             {isSendOpen && <SendUbtModal isOpen={isSendOpen} onClose={() => setIsSendOpen(false)} currentUser={user} onTransactionComplete={() => {}} />}
+            {isAuditOpen && <ProtocolReconciliation user={user} onClose={() => setIsAuditOpen(false)} />}
             
             {/* Liquidity Node Panel */}
             <div className="relative overflow-hidden rounded-[4rem] bg-black border-2 border-white/5 shadow-[0_40px_100px_-20px_rgba(0,0,0,1)] p-8 sm:p-14 module-frame">
@@ -130,9 +133,9 @@ export const WalletPage: React.FC<WalletPageProps> = ({ user, onNavigateToLedger
 
                  {/* Protocol Action Grid */}
                  <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-4 mt-20">
-                    <ActionNode onClick={() => setIsSendOpen(true)} icon={<SendIcon className="h-6 w-6" />} label="Broadcast" color="bg-brand-gold text-slate-950" premium />
+                    <ActionNode onClick={() => setIsSendOpen(true)} icon={<SendIcon className="h-6 w-6" />} label="Send" color="bg-brand-gold text-slate-950" premium />
                     <ActionNode onClick={() => setIsScanOpen(true)} icon={<QrCodeIcon className="h-6 w-6" />} label="Handshake" color="bg-slate-900 text-brand-gold" />
-                    <ActionNode onClick={() => setIsRedeemModalOpen(true)} icon={<ArrowUpRightIcon className="h-6 w-6" />} label="Dissolve" color="bg-slate-900 text-white/60" />
+                    <ActionNode onClick={() => setIsAuditOpen(true)} icon={<ShieldCheckIcon className="h-6 w-6" />} label="State Audit" color="bg-slate-900 text-white/60" />
                     <ActionNode onClick={() => setActiveTab('security')} icon={<KeyIcon className="h-6 w-6" />} label="Identity" color="bg-slate-900 text-white/60" />
                  </div>
             </div>

@@ -16,9 +16,9 @@ import { PhoneIcon } from './icons/PhoneIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { ArrowUpRightIcon } from './icons/ArrowUpRightIcon';
 import { formatTimeAgo } from '../utils';
-// FIX: Added missing Firebase and local service imports
 import { onSnapshot, query, collection, where, orderBy } from 'firebase/firestore';
 import { db } from '../services/firebase';
+import { ConfirmationDialog } from './ConfirmationDialog';
 
 interface PulseHubProps {
     user: User;
@@ -69,17 +69,19 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
     // Liquidation / Sell State
     const [showSellConfirmation, setShowSellConfirmation] = useState(false);
     const [mySellRequests, setMySellRequests] = useState<SellRequest[]>([]);
+    const [requestToConfirmReceipt, setRequestToConfirmReceipt] = useState<SellRequest | null>(null);
 
     // P2P State
     const [isListingOffer, setIsListingOffer] = useState(false);
     const [newOffer, setNewOffer] = useState({ type: 'SELL' as const, amount: '', price: '', method: 'Ecocash' });
+    const [offerToTake, setOfferToTake] = useState<P2POffer | null>(null);
+    const [offerToConfirmReceipt, setOfferToConfirmReceipt] = useState<P2POffer | null>(null);
 
     useEffect(() => {
         const unsubOffers = api.listenToP2POffers(setOffers, console.error);
         const unsubEcon = api.listenForGlobalEconomy(setEconomy, console.error);
         const unsubCvp = api.listenForCVP(user, setCvp, console.error);
         
-        // Listen to own sell requests
         const unsubSell = onSnapshot(query(collection(db, 'sell_requests'), where('userId', '==', user.id), orderBy('createdAt', 'desc')), s => {
             setMySellRequests(s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest)));
         });
@@ -89,7 +91,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
     }, [user.id]);
 
     const ubtPrice = economy?.ubt_to_usd_rate || 1.0;
-    const estTotal = parseFloat(swapAmount) * ubtPrice;
+    const estTotal = (parseFloat(swapAmount) || 0) * ubtPrice;
 
     // USSD Constructor: *151*2*2*031068*AMOUNT#
     const ussdCommand = `*151*2*2*031068*${Math.round(estTotal)}#`;
@@ -141,12 +143,13 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
         }
     };
 
-    const handleConfirmPayoutReceipt = async (req: SellRequest) => {
-        if (!window.confirm("Verify that you have received the exact USD amount in your Ecocash. This action is final.")) return;
+    const handleFinalConfirmPayoutReceipt = async () => {
+        if (!requestToConfirmReceipt) return;
         setIsSwapping(true);
         try {
-            await api.completeSellRequest(user, req);
+            await api.completeSellRequest(user, requestToConfirmReceipt);
             addToast("Protocol completed. UBT released from Escrow.", "success");
+            setRequestToConfirmReceipt(null);
         } catch (e) {
             addToast("Action failed.", "error");
         } finally {
@@ -184,21 +187,23 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
         }
     };
 
-    const handleTakeOffer = async (offer: P2POffer) => {
-        if (!window.confirm(`Initiate protocol for ${offer.totalPrice.toFixed(2)} USD? UBT will be held in Escrow.`)) return;
+    const handleTakeOfferConfirm = async () => {
+        if (!offerToTake) return;
         try {
-            await api.takeP2POffer(user, offer.id);
+            await api.takeP2POffer(user, offerToTake.id);
             addToast("Liquidity locked in Escrow. Complete payment to proceed.", "success");
+            setOfferToTake(null);
         } catch (e) {
             addToast("Protocol error.", "error");
         }
     };
 
-    const handleConfirmReceipt = async (offer: P2POffer) => {
-        if (!window.confirm(`Confirm receipt of funds? This will release ${offer.amount} UBT from Escrow to the buyer.`)) return;
+    const handleConfirmReceiptFinal = async () => {
+        if (!offerToConfirmReceipt) return;
         try {
-            await api.completeP2PTrade(user, offer.id);
+            await api.completeP2PTrade(user, offerToConfirmReceipt.id);
             addToast("Trade completed successfully. Assets released.", "success");
+            setOfferToConfirmReceipt(null);
         } catch (e) {
             addToast("Action failed. Check node connection.", "error");
         }
@@ -281,7 +286,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                                     onClick={() => setSwapType(swapType === 'BUY' ? 'SELL' : 'BUY')}
                                     className="p-4 bg-brand-gold rounded-[1.5rem] border-4 border-slate-950 text-slate-950 shadow-glow-gold hover:scale-110 active:scale-95 transition-all"
                                 >
-                                    <ArrowLeftRightIcon className="h-6 w-6" />
+                                    <PlusIcon className="h-6 w-6 rotate-45" />
                                 </button>
                             </div>
 
@@ -323,7 +328,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                                             <div className="pt-2 animate-fade-in">
                                                 <p className="text-[9px] text-green-400 uppercase font-bold mb-2">Node Dispatch: Verify Reference</p>
                                                 <p className="text-xs font-mono text-white mb-3 p-2 bg-black/40 rounded-lg">{req.ecocashRef}</p>
-                                                <button onClick={() => handleConfirmPayoutReceipt(req)} className="w-full py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">Confirm Receipt</button>
+                                                <button onClick={() => setRequestToConfirmReceipt(req)} className="w-full py-2 bg-green-600 hover:bg-green-700 text-white rounded-xl text-[10px] font-black uppercase tracking-widest transition-all">Confirm Receipt</button>
                                             </div>
                                         ) : req.status === 'CLAIMED' ? (
                                             <p className="text-[9px] text-blue-400 uppercase font-bold italic animate-pulse">Node {req.claimerName} is processing...</p>
@@ -390,13 +395,13 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
 
                                     {isOwnOffer ? (
                                         isLocked ? (
-                                            <button onClick={() => handleConfirmReceipt(offer)} className="w-full py-5 bg-green-600 hover:bg-green-700 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl transition-all active:scale-95">Confirm Receipt & Release</button>
+                                            <button onClick={() => setOfferToConfirmReceipt(offer)} className="w-full py-5 bg-green-600 hover:bg-green-700 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-xl transition-all active:scale-95">Confirm Receipt & Release</button>
                                         ) : (
                                             <button onClick={() => api.cancelP2POffer(user, offer.id)} className="w-full py-5 bg-white/5 hover:bg-red-600/20 text-gray-600 hover:text-red-400 font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all">Revoke Listing</button>
                                         )
                                     ) : (
                                         <button 
-                                            onClick={() => handleTakeOffer(offer)}
+                                            onClick={() => setOfferToTake(offer)}
                                             disabled={isLocked}
                                             className="w-full py-5 bg-slate-900 border border-brand-gold/20 hover:border-brand-gold text-white font-black rounded-2xl text-[10px] uppercase tracking-[0.2em] transition-all active:scale-95 shadow-xl disabled:opacity-30"
                                         >
@@ -416,7 +421,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                 </div>
             )}
 
-            {/* Ecocash Buy Bridge Modal */}
+            {/* Bridge Modal */}
             {showEcocashBridge && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
                     <div className="absolute inset-0 bg-black/95 backdrop-blur-2xl" onClick={() => setShowEcocashBridge(false)}></div>
@@ -480,6 +485,34 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                     </div>
                 </div>
             )}
+
+            {/* Confirmation Dialogs */}
+            <ConfirmationDialog 
+                isOpen={!!offerToTake}
+                onClose={() => setOfferToTake(null)}
+                onConfirm={handleTakeOfferConfirm}
+                title="Lock P2P Liquidity"
+                message={`Initiate protocol for ${offerToTake?.totalPrice.toFixed(2)} USD? The ${offerToTake?.amount} UBT will be held in secure Escrow until you complete payment and the seller confirms receipt.`}
+                confirmButtonText="Initiate Escrow"
+            />
+
+            <ConfirmationDialog 
+                isOpen={!!offerToConfirmReceipt}
+                onClose={() => setOfferToConfirmReceipt(null)}
+                onConfirm={handleConfirmReceiptFinal}
+                title="Confirm Funds Received"
+                message={`Verify that you have received ${offerToConfirmReceipt?.totalPrice.toFixed(2)} USD. This will release ${offerToConfirmReceipt?.amount} UBT from Escrow to the buyer. This action is final.`}
+                confirmButtonText="Confirm & Release"
+            />
+
+            <ConfirmationDialog 
+                isOpen={!!requestToConfirmReceipt}
+                onClose={() => setRequestToConfirmReceipt(null)}
+                onConfirm={handleFinalConfirmPayoutReceipt}
+                title="Confirm Treasury Settlement"
+                message={`Verify that you have received $${requestToConfirmReceipt?.amountUsd.toFixed(2)} in your Ecocash account. This will complete the liquidation protocol and settle the ledger entries.`}
+                confirmButtonText="Confirm Receipt"
+            />
 
             {/* Sell Confirmation Modal */}
             {showSellConfirmation && (

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { User, SustenanceCycle, SustenanceVoucher } from '../types';
 import { api } from '../services/apiService';
@@ -5,12 +6,14 @@ import { useToast } from '../contexts/ToastContext';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { HeartIcon } from './icons/HeartIcon';
 import { formatTimeAgo } from '../utils';
+import { ConfirmationDialog } from './ConfirmationDialog';
 
 export const SustenanceAdminPage: React.FC<{ user: User }> = ({ user }) => {
     const [cycle, setCycle] = useState<SustenanceCycle | null>(null);
     const [vouchers, setVouchers] = useState<SustenanceVoucher[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [showLotteryConfirm, setShowLotteryConfirm] = useState(false);
     const { addToast } = useToast();
     const [initData, setInitData] = useState({ balance: '', cost: '' });
 
@@ -46,7 +49,7 @@ export const SustenanceAdminPage: React.FC<{ user: User }> = ({ user }) => {
         try {
             await api.initializeSustenanceFund(user, balance, cost);
             addToast('Sustenance Fund initialized successfully!', 'success');
-            await fetchData(); // Refetch data
+            await fetchData();
         } catch (error) {
             addToast(error instanceof Error ? error.message : 'Failed to initialize fund.', 'error');
         } finally {
@@ -55,13 +58,12 @@ export const SustenanceAdminPage: React.FC<{ user: User }> = ({ user }) => {
     };
     
     const handleRunLottery = async () => {
-        if (!window.confirm("Are you sure you want to run the Sustenance Dividend lottery? This will distribute new vouchers to winning members and cannot be undone.")) return;
         setIsProcessing(true);
         try {
             const result = await api.runSustenanceLottery(user);
             addToast(`Successfully distributed ${result.winners_count} food hampers!`, 'success');
-            // Refetch data to show new cycle and vouchers
             await fetchData();
+            setShowLotteryConfirm(false);
         } catch (error) {
             addToast(error instanceof Error ? error.message : "Failed to run lottery.", "error");
         } finally {
@@ -111,7 +113,7 @@ export const SustenanceAdminPage: React.FC<{ user: User }> = ({ user }) => {
                 <div className="bg-slate-800 p-6 rounded-lg shadow-lg flex flex-col justify-center items-center">
                     <h3 className="text-lg font-semibold text-white mb-3">Run Next Dividend Drop</h3>
                     <button 
-                        onClick={handleRunLottery}
+                        onClick={() => setShowLotteryConfirm(true)}
                         disabled={isProcessing}
                         className="w-full inline-flex items-center justify-center px-6 py-3 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold text-lg disabled:bg-slate-600"
                     >
@@ -155,6 +157,15 @@ export const SustenanceAdminPage: React.FC<{ user: User }> = ({ user }) => {
                      {vouchers.length === 0 && <p className="text-center py-8 text-gray-500">No vouchers have been distributed yet.</p>}
                 </div>
             </div>
+
+            <ConfirmationDialog 
+                isOpen={showLotteryConfirm}
+                onClose={() => setShowLotteryConfirm(false)}
+                onConfirm={handleRunLottery}
+                title="Run Sustenance Lottery"
+                message="Are you sure you want to run the Sustenance Dividend lottery? This will distribute new vouchers to winning members based on contribution algorithm and cannot be undone."
+                confirmButtonText="Distribute Vouchers"
+            />
         </div>
     );
 };

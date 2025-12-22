@@ -84,7 +84,8 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
       }
     };
     
-    const unsubBounties = api.listenToSellRequests(setSellRequests);
+    // FIX: Added required error callback for sell requests listener to resolve build error
+    const unsubBounties = api.listenToSellRequests(setSellRequests, console.error);
 
     fetchMembers();
     return () => { unsubBounties(); };

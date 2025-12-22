@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import * as QRCodeLib from 'qrcode';
 import { Html5QrcodeScanner } from 'html5-qrcode';
@@ -63,8 +62,18 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
 
     // Initialize/Cleanup Scanner
     useEffect(() => {
+        let isMounted = true;
+
         if (mode === 'scan_code' && !scannedData) {
             const timer = setTimeout(() => {
+                if (!isMounted) return;
+                
+                const readerElement = document.getElementById("reader");
+                if (!readerElement) {
+                    console.warn("Scanner element 'reader' not found in DOM yet.");
+                    return;
+                }
+
                 try {
                     const scanner = new Html5QrcodeScanner(
                         "reader", 
@@ -81,14 +90,15 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
                     scannerInstanceRef.current = scanner;
                 } catch (err) {
                     console.error("Scanner init failed:", err);
-                    addToast("Scanner initialization failed.", "error");
+                    addToast("Camera access failed. Check browser permissions.", "error");
                 }
-            }, 100);
+            }, 500); // Increased delay for DOM rendering
 
             return () => {
+                isMounted = false;
                 clearTimeout(timer);
                 if (scannerInstanceRef.current) {
-                    scannerInstanceRef.current.clear().catch(() => {});
+                    scannerInstanceRef.current.clear().catch((e: any) => console.debug("Scanner clear ignore:", e));
                     scannerInstanceRef.current = null;
                 }
             };
@@ -101,11 +111,12 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
             if (data.id && data.key) {
                 setScannedData(decodedText);
                 if (scannerInstanceRef.current) {
-                    scannerInstanceRef.current.clear().catch(() => {});
+                    scannerInstanceRef.current.clear().catch((e: any) => console.debug("Clear after scan:", e));
+                    scannerInstanceRef.current = null;
                 }
             }
         } catch (e) {
-            console.warn("Detection failed.");
+            console.warn("Invalid detection payload.");
         }
     };
 
@@ -138,6 +149,7 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
             const signature = cryptoService.signTransaction(payloadToSign);
             const txId = Date.now().toString(36) + Math.random().toString(36).substring(2);
             
+            // FIX: Added missing properties senderPublicKey and parentHash to comply with UbtTransaction type
             const transaction: UbtTransaction = {
                 id: txId, 
                 senderId: currentUser.id,
@@ -146,7 +158,9 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
                 timestamp: timestamp,
                 nonce: nonce,
                 signature: signature,
-                hash: payloadToSign
+                hash: payloadToSign,
+                senderPublicKey: currentUser.publicKey || cryptoService.getPublicKey() || "",
+                parentHash: 'GENESIS_SCAN'
             };
 
             await api.processUbtTransaction(transaction);

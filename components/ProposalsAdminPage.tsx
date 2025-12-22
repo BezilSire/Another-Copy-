@@ -1,9 +1,11 @@
+
 import React, { useState, useEffect } from 'react';
 import { User, Proposal } from '../types';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { ProposalDetailsPage } from './ProposalDetailsPage';
+import { ConfirmationDialog } from './ConfirmationDialog';
 
 interface ProposalsAdminPageProps {
   user: User;
@@ -48,6 +50,7 @@ export const ProposalsAdminPage: React.FC<ProposalsAdminPageProps> = ({ user }) 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [newProposal, setNewProposal] = useState({ title: '', description: '' });
   const [selectedProposalId, setSelectedProposalId] = useState<string | null>(null);
+  const [statusChange, setStatusChange] = useState<{ id: string, status: 'passed' | 'failed' } | null>(null);
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -77,13 +80,15 @@ export const ProposalsAdminPage: React.FC<ProposalsAdminPageProps> = ({ user }) 
     }
   };
 
-  const handleUpdateStatus = async (id: string, status: 'passed' | 'failed') => {
-    if (!window.confirm(`Are you sure you want to mark this proposal as ${status}?`)) return;
+  const handleUpdateStatusFinal = async () => {
+    if (!statusChange) return;
     try {
-        await api.closeProposal(user, id, status);
+        await api.closeProposal(user, statusChange.id, statusChange.status);
         addToast('Proposal status updated.', 'success');
     } catch (error) {
         addToast('Failed to update proposal status.', 'error');
+    } finally {
+        setStatusChange(null);
     }
   };
 
@@ -127,12 +132,21 @@ export const ProposalsAdminPage: React.FC<ProposalsAdminPageProps> = ({ user }) 
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-700">
-                        {proposals.map(p => <ProposalRow key={p.id} proposal={p} onUpdateStatus={handleUpdateStatus} onSelect={setSelectedProposalId} />)}
+                        {proposals.map(p => <ProposalRow key={p.id} proposal={p} onUpdateStatus={(id, status) => setStatusChange({id, status})} onSelect={setSelectedProposalId} />)}
                     </tbody>
                 </table>
             </div>
         )}
       </div>
+
+      <ConfirmationDialog 
+          isOpen={!!statusChange}
+          onClose={() => setStatusChange(null)}
+          onConfirm={handleUpdateStatusFinal}
+          title="Update Proposal Status"
+          message={`Are you sure you want to mark this proposal as ${statusChange?.status}? This action is final and will affect future distributions or rules.`}
+          confirmButtonText="Update Status"
+      />
     </div>
   );
 };
