@@ -86,7 +86,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                         ))}
                     </div>
 
-                    <button onClick={handleNextStep} className="w-full py-5 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.3em] text-[10px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-2">
+                    <button onClick={handleNextStep} className="w-full py-5 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-2">
                         I Have Anchored My Node <ArrowRightIcon className="h-4 w-4"/>
                     </button>
                 </div>

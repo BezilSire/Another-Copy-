@@ -1,3 +1,4 @@
+
 import * as tweetnacl from 'tweetnacl';
 import * as bip39 from 'bip39';
 import { Buffer } from 'buffer';
@@ -50,8 +51,9 @@ export const cryptoService = {
         const secretKey = seed.slice(0, 32);
         const keyPair = nacl.sign.keyPair.fromSeed(secretKey);
         
+        // Protocol standard: Addresses start with UBT-
         return {
-            publicKey: encodeBase64(keyPair.publicKey),
+            publicKey: `UBT-${encodeBase64(keyPair.publicKey)}`,
             secretKey: encodeBase64(keyPair.secretKey)
         };
     },
@@ -69,7 +71,6 @@ export const cryptoService = {
         localStorage.setItem(SIGN_SECRET_KEY_STORAGE, keys.secretKey);
     },
 
-    // New helper to add email/pass to vault after manual login
     updateVaultCredentials: async (email: string, password: string, pin: string) => {
         const encrypted = localStorage.getItem(ENCRYPTED_VAULT_STORAGE);
         if (!encrypted) return;
@@ -143,18 +144,6 @@ export const cryptoService = {
         return new TextDecoder().decode(decrypted);
     },
 
-    getOrGenerateSigningKeys: () => {
-        const storedSecret = localStorage.getItem(SIGN_SECRET_KEY_STORAGE);
-        const storedPublic = localStorage.getItem(SIGN_PUBLIC_KEY_STORAGE);
-        if (storedSecret && storedPublic) return { publicKey: storedPublic, secretKey: storedSecret };
-        
-        const mnemonic = cryptoService.generateMnemonic();
-        const keys = cryptoService.mnemonicToKeyPair(mnemonic);
-        localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, keys.publicKey);
-        localStorage.setItem(SIGN_SECRET_KEY_STORAGE, keys.secretKey);
-        return keys;
-    },
-
     getPublicKey: (): string | null => localStorage.getItem(SIGN_PUBLIC_KEY_STORAGE),
     
     signTransaction: (payload: string): string => {
@@ -165,8 +154,13 @@ export const cryptoService = {
         return encodeBase64(signature);
     },
 
-    verifySignature: (payload: string, signatureBase64: string, publicKeyBase64: string): boolean => {
+    verifySignature: (payload: string, signatureBase64: string, publicKeyBase64WithPrefix: string): boolean => {
         try {
+            // Strip UBT- prefix if present for raw verification
+            const publicKeyBase64 = publicKeyBase64WithPrefix.startsWith('UBT-') 
+                ? publicKeyBase64WithPrefix.substring(4) 
+                : publicKeyBase64WithPrefix;
+                
             const publicKey = decodeBase64(publicKeyBase64);
             const signature = decodeBase64(signatureBase64);
             return nacl.sign.detached.verify(encodeUTF8(payload), signature, publicKey);

@@ -87,7 +87,8 @@ export const AdminDashboard: React.FC<{
   const renderActiveView = () => {
     switch (view) {
         case 'dashboard': 
-            return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={api.sendBroadcast} />;
+            // FIX: Wrapped sendBroadcast call to pass current user
+            return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={(msg) => api.sendBroadcast(user, msg)} />;
         case 'treasury':
             return <TreasuryManager admin={user} />;
         case 'dispatch':
@@ -136,7 +137,7 @@ export const AdminDashboard: React.FC<{
             );
         case 'wallet': return <LedgerPage />;
         case 'profile': return <AdminProfile user={user} onUpdateUser={onUpdateUser} />;
-        case 'feed': return ( <> <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView /><PostsFeed user={user} feedType="all" isAdminView onViewProfile={onViewProfile} typeFilter={typeFilter} /></> );
+        case 'feed': return ( <> <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView /><PostsFeed user={user} onViewProfile={onViewProfile} typeFilter={typeFilter} isAdminView /></> );
         default: return null;
     }
   };

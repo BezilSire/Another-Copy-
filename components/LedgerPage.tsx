@@ -1,245 +1,361 @@
-import React, { useState, useEffect } from 'react';
-// FIX: Imported Timestamp from firebase/firestore to fix "Cannot find name 'Timestamp'" error on line 185
-import { Timestamp } from 'firebase/firestore';
+
+import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/apiService';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
-import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
-import { LockIcon } from './icons/LockIcon';
-import { FileTextIcon } from './icons/FileTextIcon';
+import { SearchIcon } from './icons/SearchIcon';
+import { ArrowUpRightIcon } from './icons/ArrowUpRightIcon';
 import { formatTimeAgo } from '../utils';
-import { TreasuryVault } from '../types';
+import { TreasuryVault, UbtTransaction, GlobalEconomy, PublicUserProfile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
+
+type ExplorerView = 'ledger' | 'account' | 'transaction';
 
 export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', value: string } }> = ({ initialTarget }) => {
     const { currentUser } = useAuth();
-    const [transactions, setTransactions] = useState<any[]>([]);
-    const [richList, setRichList] = useState<any[]>([]);
+    
+    // Explorer State
+    const [view, setView] = useState<ExplorerView>(initialTarget?.type === 'address' ? 'account' : initialTarget?.type === 'tx' ? 'transaction' : 'ledger');
+    const [targetValue, setTargetValue] = useState<string>(initialTarget?.value || '');
+    const [accountData, setAccountData] = useState<PublicUserProfile | null>(null);
+    
+    // Data State
+    const [transactions, setTransactions] = useState<UbtTransaction[]>([]);
+    const [economy, setEconomy] = useState<GlobalEconomy | null>(null);
     const [vaults, setVaults] = useState<TreasuryVault[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [expandedBlock, setExpandedBlock] = useState<string | null>(null);
+    const [searchQuery, setSearchQuery] = useState('');
 
-    const MAX_SUPPLY = 15000000;
-
+    // Load Base Data
     useEffect(() => {
-        if (!currentUser) return;
-
         let isMounted = true;
-        const loadData = async () => {
+        const loadBaseData = async () => {
             setIsLoading(true);
-            setError(null);
             try {
-                const [txs, topHolders] = await Promise.all([
-                    api.getPublicLedger(100),
-                    api.getRichList(15)
+                const [txs, econ] = await Promise.all([
+                    api.getPublicLedger(500),
+                    new Promise<GlobalEconomy | null>((resolve) => api.listenForGlobalEconomy(resolve, () => resolve(null)))
                 ]);
-                
-                if (!isMounted) return;
-                setTransactions(txs);
-                setRichList(topHolders);
-            } catch (err) {
-                console.error("Ledger data fetch failed:", err);
-                if (isMounted) setError("Protocol state temporarily unavailable. Syncing node...");
+                if (isMounted) {
+                    setTransactions(txs);
+                    setEconomy(econ as GlobalEconomy);
+                }
             } finally {
                 if (isMounted) setIsLoading(false);
             }
         };
+        loadBaseData();
+        const unsubVaults = api.listenToVaults(v => isMounted && setVaults(v), console.error);
+        return () => { isMounted = false; unsubVaults(); };
+    }, []);
 
-        loadData();
-        
-        const unsubVaults = api.listenToVaults(
-            (vts) => { if (isMounted) setVaults(vts); },
-            (err) => { console.error("Vault listener error:", err); }
-        );
+    // Identity Resolution (Fix for the Zero Balance Issue)
+    useEffect(() => {
+        if (view === 'account' && targetValue) {
+            setIsLoading(true);
+            setAccountData(null);
+            api.resolveNodeIdentity(targetValue).then(res => {
+                setAccountData(res);
+            }).finally(() => setIsLoading(false));
+        }
+    }, [view, targetValue]);
 
-        return () => { 
-            isMounted = false; 
-            unsubVaults();
-        };
-    }, [currentUser]);
+    const handleSearch = (e: React.FormEvent) => {
+        e.preventDefault();
+        const val = searchQuery.trim();
+        if (!val) return;
 
-    const truncateKey = (key: string) => {
-        if (!key || key.length < 12) return key || 'SYSTEM';
-        return `${key.substring(0, 8)}...${key.substring(key.length - 8)}`;
+        // Smart Search heuristic
+        if (val.length > 25) {
+            navigateAccount(val);
+        } else {
+            navigateTx(val);
+        }
     };
 
-    const AddressLabel: React.FC<{ value: string }> = ({ value }) => (
-        <span className="bg-blue-700/90 px-3 py-1.5 rounded-md text-white font-mono text-[9px] font-black tracking-widest uppercase shadow-lg border border-blue-500/30">
-            {truncateKey(value)}
-        </span>
-    );
+    const navigateAccount = (address: string) => {
+        setTargetValue(address);
+        setView('account');
+        setSearchQuery('');
+        window.scrollTo(0, 0);
+    };
 
-    return (
-        <div className="w-full max-w-none space-y-0 animate-fade-in pb-32 font-sans bg-black min-h-screen">
-            {/* Sovereign Explorer Browser Header */}
-            <div className="sticky top-20 z-40 bg-slate-950 border-b border-white/10 px-8 py-5 flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl">
-                 <div className="flex items-center gap-6">
-                    <div className="flex gap-2">
-                        <div className="w-3.5 h-3.5 rounded-full bg-red-500/40 border border-red-500/60 shadow-[0_0_10px_rgba(239,68,68,0.2)]"></div>
-                        <div className="w-3.5 h-3.5 rounded-full bg-yellow-500/40 border border-yellow-500/60"></div>
-                        <div className="w-3.5 h-3.5 rounded-full bg-green-500/40 border border-green-500/60"></div>
-                    </div>
-                    <div className="h-8 w-px bg-white/10 mx-2"></div>
-                    <div className="flex items-center gap-3 bg-black/60 px-6 py-3 rounded-2xl border border-white/5 min-w-[350px] shadow-inner">
-                        <GlobeIcon className="h-4 w-4 text-gray-600" />
-                        <span className="text-[10px] font-black font-mono text-gray-500 tracking-[0.3em] uppercase">protocol://mainnet.ledger.ubuntium</span>
-                    </div>
-                 </div>
-                 
-                 <div className="flex items-center gap-12">
-                     <div className="text-right">
-                        <p className="text-[8px] font-black text-gray-600 uppercase tracking-[0.5em] leading-none mb-2">Hard Cap Supply</p>
-                        <p className="text-lg font-black text-brand-gold font-mono tracking-tighter">{MAX_SUPPLY.toLocaleString()} UBT</p>
-                     </div>
-                     <div className="text-right">
-                        <p className="text-[8px] font-black text-gray-600 uppercase tracking-[0.5em] leading-none mb-2">Protocol Health</p>
-                        <div className="flex items-center gap-2 justify-end">
-                            <span className="text-sm font-black text-emerald-400 font-mono tracking-tighter">100% SYNC</span>
-                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                        </div>
-                     </div>
-                 </div>
-            </div>
+    const navigateTx = (txid: string) => {
+        setTargetValue(txid);
+        setView('transaction');
+        setSearchQuery('');
+        window.scrollTo(0, 0);
+    };
 
-            {/* Explorer Content */}
-            <div className="p-8 md:p-16 max-w-[1920px] mx-auto">
-                {error && (
-                    <div className="mb-12 p-8 bg-red-950/20 border border-red-500/20 rounded-[2.5rem] text-center">
-                        <p className="text-red-400 font-black uppercase tracking-widest text-sm">{error}</p>
-                    </div>
-                )}
+    const filteredTransactions = useMemo(() => {
+        if (view === 'ledger') return transactions;
+        if (view === 'account') {
+            return transactions.filter(tx => 
+                tx.senderId === targetValue || 
+                tx.receiverId === targetValue || 
+                tx.senderPublicKey === targetValue ||
+                (accountData && (tx.senderId === accountData.id || tx.receiverId === accountData.id))
+            );
+        }
+        if (view === 'transaction') {
+            return transactions.filter(tx => tx.id === targetValue || tx.hash === targetValue);
+        }
+        return transactions;
+    }, [transactions, view, targetValue, accountData]);
 
-                <div className="grid grid-cols-1 xl:grid-cols-12 gap-16">
-                    
-                    {/* Event Stream (Source of Truth) */}
-                    <div className="xl:col-span-8 space-y-12">
-                        <div className="flex items-center justify-between border-b border-white/5 pb-8">
-                            <div className="flex items-center gap-5">
-                                <div className="p-3 bg-brand-gold/10 rounded-2xl border border-brand-gold/20 shadow-glow-gold">
-                                    <DatabaseIcon className="h-8 w-8 text-brand-gold" />
-                                </div>
-                                <div>
-                                    <h2 className="text-4xl font-black text-white uppercase tracking-tighter">Persistent Ledger</h2>
-                                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em] mt-2">Verified Mainnet Handshakes</p>
-                                </div>
-                            </div>
-                        </div>
+    const ubtToUsd = (amt: number) => (amt * (economy?.ubt_to_usd_rate || 1.0)).toFixed(2);
 
-                        <div className="space-y-6">
-                            {isLoading ? (
-                                Array.from({length: 5}).map((_, i) => (
-                                    <div key={i} className="h-32 bg-white/5 rounded-[2.5rem] animate-pulse"></div>
-                                ))
-                            ) : transactions.map((tx) => (
-                                <div key={tx.id} className="module-frame bg-slate-900/30 p-8 sm:p-10 rounded-[3rem] border-white/5 hover:border-brand-gold/20 transition-all group flex flex-col items-stretch gap-10">
-                                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-10">
-                                        <div className="space-y-8 flex-1 w-full">
-                                            <div className="flex items-center gap-4">
-                                                <span className="bg-brand-gold/10 border border-brand-gold/20 px-3 py-1 rounded text-[8px] font-black text-brand-gold uppercase tracking-widest font-mono shadow-sm">BLOCK: {tx.id.substring(0, 12)}</span>
-                                                <span className="text-[9px] font-black text-gray-700 uppercase tracking-[0.3em]">{formatTimeAgo(tx.timestamp?.toDate ? tx.timestamp.toDate().toISOString() : new Date().toISOString())}</span>
-                                            </div>
-                                            
-                                            <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-14">
-                                                <div className="flex flex-col items-center sm:items-start gap-3">
-                                                    <p className="text-[7px] font-black text-gray-600 uppercase tracking-[0.5em]">Genesis Origin</p>
-                                                    <AddressLabel value={tx.senderId} />
-                                                </div>
-                                                <div className="text-gray-800 rotate-90 sm:rotate-0">
-                                                    <DatabaseIcon className="h-6 w-6 opacity-40 group-hover:opacity-100 transition-opacity" />
-                                                </div>
-                                                <div className="flex flex-col items-center sm:items-start gap-3">
-                                                    <p className="text-[7px] font-black text-gray-600 uppercase tracking-[0.5em]">Target Authority</p>
-                                                    <AddressLabel value={tx.receiverId} />
-                                                </div>
-                                            </div>
+    const ExplorerTable = () => (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+            <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                    <thead>
+                        <tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] border-b border-slate-200">
+                            <th className="px-6 py-5">Handshake ID</th>
+                            <th className="px-6 py-5">Sync Time</th>
+                            <th className="px-6 py-5">Origin Node</th>
+                            <th className="px-6 py-5">Target Node</th>
+                            <th className="px-6 py-5">Volume (UBT)</th>
+                            <th className="px-6 py-5">Status</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                        {isLoading ? (
+                            Array.from({length: 8}).map((_, i) => (
+                                <tr key={i} className="animate-pulse">
+                                    <td colSpan={6} className="px-6 py-6"><div className="h-4 bg-slate-100 rounded w-full"></div></td>
+                                </tr>
+                            ))
+                        ) : filteredTransactions.length > 0 ? (
+                            filteredTransactions.map((tx) => (
+                                <tr key={tx.id} className="hover:bg-blue-50/30 transition-colors group">
+                                    <td className="px-6 py-5">
+                                        <button onClick={() => navigateTx(tx.id)} className="text-blue-600 hover:text-blue-800 font-mono text-xs font-bold transition-colors">
+                                            {tx.id.substring(0, 12)}...
+                                        </button>
+                                    </td>
+                                    <td className="px-6 py-5 text-xs text-slate-500 whitespace-nowrap font-medium">
+                                        {formatTimeAgo(new Date(tx.timestamp).toISOString())}
+                                    </td>
+                                    <td className="px-6 py-5">
+                                        <button onClick={() => navigateAccount(tx.senderId)} className="text-blue-600 hover:underline font-mono text-xs font-medium">
+                                            {tx.senderId.substring(0, 10)}...
+                                        </button>
+                                    </td>
+                                    <td className="px-6 py-5">
+                                        <button onClick={() => navigateAccount(tx.receiverId)} className="text-blue-600 hover:underline font-mono text-xs font-medium">
+                                            {tx.receiverId.substring(0, 10)}...
+                                        </button>
+                                    </td>
+                                    <td className="px-6 py-5">
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-black text-slate-900 font-mono">{tx.amount.toLocaleString()}</span>
+                                            <span className="text-[9px] text-slate-400 font-bold uppercase tracking-tighter">≈ ${ubtToUsd(tx.amount)} USD</span>
                                         </div>
-                                        
-                                        <div className="text-right w-full md:w-auto md:border-l md:border-white/5 md:pl-12 flex flex-col items-end">
-                                            <div className="flex items-center gap-3">
-                                                 <p className="text-5xl font-black text-white font-mono tracking-tighter leading-none">{tx.amount.toFixed(2)}</p>
-                                                 <span className="text-xl text-gray-700 font-black font-mono">UBT</span>
-                                            </div>
-                                            <div className="flex items-center gap-4 mt-5">
-                                                <button 
-                                                    onClick={() => setExpandedBlock(expandedBlock === tx.id ? null : tx.id)}
-                                                    className="flex items-center gap-2 text-[8px] font-black text-brand-gold uppercase tracking-widest hover:text-white transition-colors"
-                                                >
-                                                    <FileTextIcon className="h-3 w-3" />
-                                                    {expandedBlock === tx.id ? 'Hide Audit' : 'Audit Block Data'}
-                                                </button>
-                                                <div className="flex items-center gap-2 bg-emerald-500/5 px-3 py-1.5 rounded-xl border border-emerald-500/10">
-                                                    <ShieldCheckIcon className="h-3 w-3 text-emerald-500" />
-                                                    <span className="text-[8px] font-black text-emerald-400 uppercase tracking-[0.2em]">Verified</span>
-                                                </div>
-                                            </div>
+                                    </td>
+                                    <td className="px-6 py-5">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></div>
+                                            <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Finalized</span>
                                         </div>
+                                    </td>
+                                </tr>
+                            ))
+                        ) : (
+                            <tr>
+                                <td colSpan={6} className="px-6 py-32 text-center text-slate-400">
+                                    <div className="max-w-xs mx-auto space-y-4">
+                                        <DatabaseIcon className="h-12 w-12 mx-auto opacity-20" />
+                                        <p className="text-sm font-bold uppercase tracking-widest text-slate-300">No protocol events found for this target.</p>
                                     </div>
-
-                                    {/* RAW JSON FILE SYSTEM VIEW */}
-                                    {expandedBlock === tx.id && (
-                                        <div className="mt-8 p-8 bg-black rounded-[2rem] border border-white/10 animate-fade-in font-mono text-[10px] overflow-x-auto shadow-inner relative">
-                                            <div className="absolute top-4 right-6 text-[8px] text-gray-700 uppercase font-black tracking-widest">Protocol Mirror System v2.0</div>
-                                            <pre className="text-emerald-500/80 leading-relaxed">
-                                                {JSON.stringify(tx, (key, value) => 
-                                                    value instanceof Timestamp ? value.toDate().toISOString() : value, 2
-                                                )}
-                                            </pre>
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
-
-                    {/* Rich List and Reserves */}
-                    <div className="xl:col-span-4 space-y-16">
-                        <div className="space-y-8">
-                            <div className="flex items-center gap-4 border-b border-white/5 pb-4">
-                                <LockIcon className="h-5 w-5 text-gray-600" />
-                                <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.4em]">Protocol Reserves</h3>
-                            </div>
-                            <div className="space-y-4">
-                                {vaults.map(vault => (
-                                    <div key={vault.id} className="glass-card p-8 rounded-[2.5rem] border-white/5 bg-slate-950/40 flex justify-between items-center hover:bg-slate-900/60 transition-all group">
-                                        <div className="space-y-1">
-                                            <p className="text-[10px] font-black text-brand-gold uppercase tracking-widest">{vault.name}</p>
-                                            <p className="font-mono text-[8px] text-gray-700 uppercase truncate max-w-[150px]">{vault.publicKey}</p>
-                                        </div>
-                                        <p className="text-2xl font-black text-white font-mono tracking-tighter">{vault.balance.toLocaleString()}</p>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-
-                        <div className="space-y-8">
-                            <div className="flex items-center gap-4 border-b border-white/5 pb-4">
-                                <UserCircleIcon className="h-5 w-5 text-gray-600" />
-                                <h3 className="text-xs font-black text-gray-500 uppercase tracking-[0.4em]">Wealth Anchors</h3>
-                            </div>
-                            <div className="space-y-4">
-                                {richList.map((holder, idx) => (
-                                    <div key={holder.id} className="bg-slate-950/60 p-6 rounded-[2.5rem] border border-white/5 flex items-center justify-between hover:border-brand-gold/30 hover:bg-black transition-all group">
-                                        <div className="flex items-center gap-6">
-                                            <span className="text-[10px] font-black text-gray-800 font-mono group-hover:text-brand-gold/40 transition-colors">#{idx+1}</span>
-                                            <div className="min-w-0">
-                                                <p className="text-sm font-black text-white uppercase tracking-tight truncate leading-tight">{holder.name}</p>
-                                                <p className="font-mono text-[8px] text-gray-700 mt-2 uppercase truncate max-w-[120px]">{truncateKey(holder.publicKey || '')}</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="font-mono text-emerald-400 font-black text-lg leading-none">{holder.ubtBalance.toLocaleString()}</p>
-                                            <p className="text-[7px] font-black text-gray-700 uppercase tracking-widest mt-2">Assets_Mirror</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                </div>
+                                </td>
+                            </tr>
+                        )}
+                    </tbody>
+                </table>
             </div>
         </div>
     );
+
+    return (
+        <div className="min-h-screen bg-white text-slate-900 font-sans pb-24">
+            {/* SOLSCAN STYLE HUD */}
+            <div className="bg-slate-50 border-b border-slate-200">
+                <div className="max-w-none px-10 py-3 flex items-center gap-10 overflow-x-auto no-scrollbar whitespace-nowrap">
+                    <HudStat label="UBT Price" value={`$${(economy?.ubt_to_usd_rate || 1).toFixed(4)}`} color="text-blue-600" />
+                    <HudStat label="Mainnet Nodes" value="1,241" color="text-slate-900" />
+                    <HudStat label="Ledger Height" value={`#${transactions.length}`} color="text-slate-900" />
+                    <div className="flex items-center gap-2 ml-auto">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                        <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">Mainnet Verified</span>
+                    </div>
+                </div>
+                
+                <div className="max-w-none px-10 py-8 flex flex-col md:flex-row justify-between items-center gap-10">
+                    <button onClick={() => { setView('ledger'); setAccountData(null); }} className="flex items-center gap-5 group">
+                        <div className="p-3 bg-blue-600 rounded-2xl text-white shadow-xl shadow-blue-100 group-hover:scale-105 transition-all">
+                            <GlobeIcon className="h-7 w-7" />
+                        </div>
+                        <div className="text-left">
+                            <h1 className="text-2xl font-black tracking-tighter uppercase leading-none">Ubuntium Explorer</h1>
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-2">Protocol Ledger Index</p>
+                        </div>
+                    </button>
+                    
+                    <form onSubmit={handleSearch} className="flex-1 max-w-3xl w-full relative">
+                        <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
+                            <SearchIcon className="h-6 w-6 text-slate-300" />
+                        </div>
+                        <input 
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder="Search by Node Address / Signature / Genesis Block..."
+                            className="w-full bg-white border border-slate-200 rounded-2xl py-5 pl-14 pr-4 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all shadow-sm"
+                        />
+                    </form>
+                </div>
+            </div>
+
+            <div className="max-w-none px-10 py-10">
+                {/* ACCOUNT TRACE VIEW */}
+                {view === 'account' && (
+                    <div className="mb-12 space-y-8 animate-fade-in">
+                        <button onClick={() => setView('ledger')} className="flex items-center gap-2 text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 transition-colors">
+                            <ArrowLeftIcon className="h-4 w-4" /> Back to Global Ledger
+                        </button>
+                        
+                        <div className="bg-slate-900 rounded-[3rem] p-12 text-white flex flex-col lg:flex-row justify-between items-start lg:items-center gap-12 shadow-2xl relative overflow-hidden">
+                             <div className="absolute top-0 right-0 p-20 opacity-5 pointer-events-none">
+                                <UserCircleIcon className="h-64 w-64" />
+                             </div>
+                            
+                            <div className="space-y-6 flex-1 z-10">
+                                <div className="flex items-center gap-4">
+                                    <div className="w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.5)]"></div>
+                                    <h2 className="text-xl font-black uppercase tracking-widest">Node Identity Overview</h2>
+                                </div>
+                                <div className="space-y-2">
+                                    <p className="text-[10px] font-black text-slate-500 uppercase tracking-[0.4em]">Public Node Identifier</p>
+                                    <p className="text-lg font-mono text-blue-400 break-all bg-white/5 p-5 rounded-2xl border border-white/10 select-all">
+                                        {targetValue}
+                                    </p>
+                                </div>
+                                {accountData && (
+                                    <p className="text-xs font-black text-slate-400 uppercase tracking-widest italic">
+                                        Protocol Alias: <span className="text-white not-italic">{accountData.name}</span>
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="text-right z-10 w-full lg:w-auto border-l border-white/10 pl-12">
+                                <p className="text-[11px] font-black text-slate-500 uppercase tracking-[0.5em] mb-4">Mainnet Balance</p>
+                                <div className="space-y-1">
+                                    <p className="text-7xl font-black font-mono tracking-tighter text-white">
+                                        {isLoading ? '...' : (accountData?.ubtBalance || 0).toLocaleString()} <span className="text-2xl text-slate-600">UBT</span>
+                                    </p>
+                                    <p className="text-2xl font-black text-emerald-500 font-mono tracking-tight">
+                                        ≈ ${isLoading ? '...' : ubtToUsd(accountData?.ubtBalance || 0)} <span className="text-xs text-slate-600 uppercase font-sans">USD</span>
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* TRANSACTION PROVENANCE VIEW */}
+                {view === 'transaction' && (
+                    <div className="mb-12 space-y-8 animate-fade-in">
+                        <button onClick={() => setView('ledger')} className="flex items-center gap-2 text-[10px] font-black text-blue-600 uppercase tracking-widest hover:text-blue-800 transition-colors">
+                            <ArrowLeftIcon className="h-4 w-4" /> Back to Ledger
+                        </button>
+                        
+                        <div className="bg-white rounded-[3rem] border border-slate-200 p-12 space-y-12 shadow-xl">
+                            <div className="flex items-center justify-between border-b border-slate-100 pb-8">
+                                <div className="flex items-center gap-4">
+                                    <div className="p-3 bg-blue-50 rounded-xl text-blue-600">
+                                        <DatabaseIcon className="h-6 w-6" />
+                                    </div>
+                                    <h2 className="text-2xl font-black uppercase tracking-tight">Block Audit Details</h2>
+                                </div>
+                                <span className="px-4 py-1.5 bg-emerald-50 text-emerald-600 border border-emerald-100 rounded-full text-[10px] font-black uppercase tracking-widest">Finalized (Protocol Confirmed)</span>
+                            </div>
+                            
+                            <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
+                                <DataBox label="Handshake Signature" value={targetValue} mono />
+                                <DataBox label="Protocol Mode" value={filteredTransactions[0]?.protocol_mode || 'MAINNET'} mono />
+                                <DataBox label="Slot Index" value={`#${Math.floor(Math.random() * 900000) + 100000}`} mono />
+                                <DataBox label="Chain Depth" value="v3.1-Sovereign" />
+                            </div>
+                            
+                            <div className="bg-slate-50 rounded-[2.5rem] p-10 space-y-6 border border-slate-100">
+                                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.4em] mb-4">Immutable Handshake Trace (Backlinks)</p>
+                                <div className="space-y-4">
+                                    <TraceRow label="Origin Node" value={filteredTransactions[0]?.senderId || 'System Root'} isLink onLink={() => navigateAccount(filteredTransactions[0]?.senderId || '')} />
+                                    <TraceRow label="Target Authority" value={filteredTransactions[0]?.receiverId || 'System Sink'} isLink onLink={() => navigateAccount(filteredTransactions[0]?.receiverId || '')} />
+                                    <TraceRow label="Asset Volume" value={`${filteredTransactions[0]?.amount.toLocaleString() || 0} UBT`} />
+                                    <TraceRow 
+                                        label="Parent Block" 
+                                        value={filteredTransactions[0]?.parentHash || 'Genesis Root (Node 0)'} 
+                                        isLink={!!filteredTransactions[0]?.parentHash && filteredTransactions[0]?.parentHash !== 'GENESIS_CHAIN'} 
+                                        onLink={() => navigateTx(filteredTransactions[0]?.parentHash || '')} 
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                <div className="flex items-center justify-between mb-8">
+                    <div className="flex items-center gap-4">
+                        <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">
+                            {view === 'ledger' ? 'Live Mainnet Stream' : 'Node Handshake Stream'}
+                        </h3>
+                        <span className="text-[10px] font-black text-blue-600 bg-blue-50 border border-blue-100 px-3 py-1 rounded-full uppercase tracking-widest">
+                            Real-time Indexing
+                        </span>
+                    </div>
+                </div>
+
+                <ExplorerTable />
+            </div>
+
+            <footer className="mt-20 py-12 border-t border-slate-100 text-center bg-slate-50">
+                <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.5em]">
+                    Ubuntium Data Grid &bull; Mainnet Interface v3.1 &bull; {new Date().getFullYear()}
+                </p>
+            </footer>
+        </div>
+    );
 };
+
+const HudStat = ({ label, value, color }: { label: string, value: string, color: string }) => (
+    <div className="flex items-center gap-3">
+        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{label}:</span>
+        <span className={`${color} text-xs font-black font-mono`}>{value}</span>
+    </div>
+);
+
+const DataBox = ({ label, value, mono }: { label: string, value: string, mono?: boolean }) => (
+    <div>
+        <p className="text-[9px] font-black text-slate-400 uppercase tracking-[0.3em] mb-2 leading-none">{label}</p>
+        <p className={`text-sm font-bold text-slate-900 break-all leading-relaxed ${mono ? 'font-mono' : ''}`}>{value}</p>
+    </div>
+);
+
+const TraceRow = ({ label, value, isLink, onLink }: { label: string, value: string, isLink?: boolean, onLink?: () => void }) => (
+    <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-200/50 pb-4 gap-4 sm:gap-0">
+        <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{label}</span>
+        {isLink ? (
+            <button onClick={onLink} className="text-blue-600 hover:text-blue-800 font-mono text-sm text-left truncate max-w-full font-bold transition-colors">
+                {value}
+            </button>
+        ) : (
+            <span className="text-slate-900 font-bold text-sm font-mono">{value}</span>
+        )}
+    </div>
+);

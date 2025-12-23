@@ -142,6 +142,7 @@ export interface Member {
   lookingFor?: string[];
   businessIdea?: string;
   skills_lowercase?: string[];
+  is_duplicate_email?: boolean;
 }
 
 export interface NewMember {
@@ -328,6 +329,8 @@ export interface PayoutRequest {
         ventureName?: string;
         ubtAmount?: number;
         ubtToUsdRate?: number;
+        ccapAmount?: number;
+        ccapToUsdRate?: number;
     };
     processedBy?: {
         adminId: string;
@@ -400,8 +403,8 @@ export interface GlobalEconomy {
     ubtRedemptionWindowOpen?: boolean;
     ubtRedemptionWindowStartedAt?: Timestamp;
     ubtRedemptionWindowClosesAt?: Timestamp;
-    total_ubt_supply: number;
-    ubt_in_cvp: number;
+    total_ubt_supply?: number;
+    ubt_in_cvp?: number;
 }
 
 export interface Transaction {

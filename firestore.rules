@@ -12,7 +12,6 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
-    // Resilience: Check for document existence to prevent rules crash.
     function isAdmin() {
       let adminPath = /databases/$(database)/documents/users/$(request.auth.uid);
       return isSignedIn() && exists(adminPath) && get(adminPath).data.role == 'admin';
@@ -82,13 +81,11 @@ service cloud.firestore {
       }
 
       match /transactions/{txId} {
-        // Fix: Explicitly allow listing based on parent path ownership
         allow read, list: if isOwner(userId) || isAdmin();
         allow create: if isSignedIn(); 
       }
       
       match /vaults/{vaultId} {
-        // Fix: Explicitly allow listing based on parent path ownership
         allow read, list, write: if isOwner(userId) || isAdmin();
       }
     }

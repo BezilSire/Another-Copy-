@@ -1,15 +1,7 @@
-
 import { GoogleGenAI, Type, Chat } from '@google/genai';
-import { User, Post, PublicUserProfile } from '../types';
 
-const GEMINI_API_KEY = process.env.API_KEY;
-
-if (!GEMINI_API_KEY) {
-  throw new Error("Gemini API Key is missing. Ensure the `API_KEY` environment variable is set in your project settings.");
-}
-
-// FIX: Initializing GoogleGenAI instance according to guidelines
-const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
+// FIX: Initializing GoogleGenAI instance according to strictly directly from process.env.API_KEY
+const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
 // --- ChatBot Functions ---
 let chat: Chat | null = null;
@@ -85,6 +77,7 @@ export const generateProjectIdea = async (): Promise<any> => {
       commonsFeedbackLoop: { type: Type.STRING },
       externalResources: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, url: { type: Type.STRING } } } },
     },
+    required: ['projectName', 'category', 'justification', 'requirements', 'budgetBreakdown', 'totalEstimatedCost', 'executionPlan', 'timeline', 'financials', 'riskAnalysis', 'scalability', 'commonsFeedbackLoop', 'externalResources'],
   };
   
   // FIX: Using recommended model 'gemini-3-pro-preview' for complex reasoning tasks
@@ -114,6 +107,7 @@ export const elaborateBusinessIdea = async (idea: string): Promise<{ suggestedNa
             detailedPlan: { type: Type.STRING },
             impactAnalysis: { type: Type.OBJECT, properties: { score: { type: Type.INTEGER }, reasoning: { type: Type.STRING } } },
         },
+        required: ['suggestedNames', 'detailedPlan', 'impactAnalysis'],
     };
     // FIX: Using gemini-3-pro-preview
     const response = await ai.models.generateContent({
@@ -134,7 +128,8 @@ export const analyzeTargetMarket = async (detailedPlan: string, targetMarketDesc
         properties: {
             personas: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { name: { type: Type.STRING }, demographics: { type: Type.STRING }, needs: { type: Type.STRING }, painPoints: { type: Type.STRING } } } },
             requiredSkills: { type: Type.ARRAY, items: { type: Type.STRING } }
-        }
+        },
+        required: ['personas', 'requiredSkills'],
     };
     // FIX: Using gemini-3-flash-preview
     const response = await ai.models.generateContent({
@@ -156,6 +151,7 @@ export const generatePitchDeck = async (detailedPlan: string, lookingFor: string
             title: { type: Type.STRING },
             slides: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { title: { type: Type.STRING }, content: { type: Type.STRING } } } },
         },
+        required: ['title', 'slides'],
     };
     // FIX: Using gemini-3-flash-preview
     const response = await ai.models.generateContent({

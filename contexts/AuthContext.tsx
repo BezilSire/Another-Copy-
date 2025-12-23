@@ -67,9 +67,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               api.logout();
             } else {
               setCurrentUser(userData);
-              const sessionPubKey = cryptoService.getPublicKey();
-              if (sessionPubKey && userData.publicKey !== sessionPubKey) {
-                  await api.updateUser(user.uid, { publicKey: sessionPubKey });
+              
+              // Stabilize Identity Anchor
+              // If the user has a Sovereign vault, we wait for PIN unlock. 
+              // We only attempt automatic pubkey sync IF session is unlocked or no vault exists.
+              const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
+              const hasVault = cryptoService.hasVault();
+
+              if (!hasVault || isUnlocked) {
+                  const localPubKey = cryptoService.getPublicKey();
+                  if (localPubKey && userData.publicKey !== localPubKey) {
+                      if (!isProcessingAuthRef.current) {
+                          await api.updateUser(user.uid, { publicKey: localPubKey });
+                      }
+                  }
               }
             }
           } else {
@@ -99,12 +110,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsProcessingAuth(true);
     try {
       await api.login(credentials.email, credentials.password);
-      // Capture PIN from current session if it exists to anchor these credentials
       const pin = sessionStorage.getItem('ugc_temp_pin');
       if (pin) {
         await cryptoService.updateVaultCredentials(credentials.email, credentials.password, pin);
-        // We do not remove the PIN yet, as we might need it for other cryptographic actions 
-        // within this session if it's the only way we have it.
       }
     } catch (error: any) {
       addToast(error.message || 'Handshake failed', 'error');
@@ -117,7 +125,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const unlockSovereignSession = useCallback(async (data: VaultData, pin: string) => {
       setIsProcessingAuth(true);
       try {
-          // Store PIN in current session memory for credential anchoring
           sessionStorage.setItem('ugc_temp_pin', pin);
           sessionStorage.setItem('ugc_node_unlocked', 'true');
           
@@ -128,7 +135,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setIsSovereignLocked(false);
           addToast("Identity Reconstituted.", "success");
       } catch (err) {
-          console.error("Auto-handshake failed", err);
           setIsSovereignLocked(false); 
           addToast("Cloud Sync Offline. Manual auth required.", "info");
       } finally {

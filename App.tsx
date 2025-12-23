@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -32,6 +33,7 @@ import { UBTScan } from './components/UBTScan';
 import { LogoIcon } from './components/icons/LogoIcon';
 import { LoaderIcon } from './components/icons/LoaderIcon';
 import { PinVaultLogin } from './components/PinVaultLogin';
+import { cryptoService } from './services/cryptoService';
 
 const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [logs, setLogs] = useState<string[]>([]);
@@ -139,8 +141,9 @@ const App: React.FC = () => {
       );
     }
 
-    // 2. Sovereign PIN Gate
-    if (isSovereignLocked) {
+    // 2. Sovereign PIN Gate - STICKY PERSISTENCE
+    // If hasVault is true, we ONLY allow the user to see the PIN login.
+    if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
         return (
             <div className="min-h-screen bg-black flex flex-col justify-center items-center px-4">
                 <div className="absolute inset-0 blueprint-grid opacity-[0.05] pointer-events-none"></div>

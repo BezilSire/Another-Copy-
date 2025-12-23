@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { User } from '../types';
 import { useToast } from '../contexts/ToastContext';
@@ -18,7 +19,7 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({ user, onLogout
   const handleResend = async () => {
     setIsSending(true);
     try {
-      // FIX: Changed sendVerificationEmail to sendEmailVerification to match the apiService implementation
+      // FIX: Changed api.sendVerificationEmail to api.sendEmailVerification
       await api.sendEmailVerification();
       addToast('A new verification email has been sent. Please check your inbox (and spam folder).', 'success');
     } catch (error) {
@@ -33,15 +34,9 @@ export const VerifyEmailPage: React.FC<VerifyEmailPageProps> = ({ user, onLogout
 
     setIsChecking(true);
     try {
-        // This re-fetches the user's data from Firebase Auth backend
         await auth.currentUser.reload();
-
-        // After reload, the user object is updated with the latest state
         if (auth.currentUser.emailVerified) {
             addToast("Email verified successfully! Welcome aboard.", "success");
-            // The onAuthStateChanged listener in App.tsx should now see the updated
-            // verification status and automatically navigate to the dashboard.
-            // A hard refresh is a good fallback to ensure the app state is fully reset.
             setTimeout(() => window.location.reload(), 1000);
         } else {
             addToast("Your email is still not verified. Please find the email and click the verification link.", "info");

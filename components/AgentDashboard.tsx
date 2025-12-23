@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { Agent, Member, NewMember, Broadcast, User, NotificationItem, PublicUserProfile, SellRequest } from '../types';
 import { RegisterMemberForm } from './RegisterMemberForm';
@@ -85,7 +84,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
     };
     
     // FIX: Added required error callback for sell requests listener to resolve build error
-    const unsubBounties = api.listenToSellRequests(setSellRequests, console.error);
+    const unsubBounties = api.listenToSellRequests(setSellRequests, (err: Error) => console.error('Bounty listener error:', err));
 
     fetchMembers();
     return () => { unsubBounties(); };
@@ -117,7 +116,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
   const handleNavigate = (item: NotificationItem) => {
        if (item.type === 'NEW_MEMBER' || item.type === 'POST_LIKE' || item.type === 'NEW_POST_PROPOSAL' || item.type === 'NEW_POST_OPPORTUNITY' || item.type === 'NEW_POST_GENERAL' || item.type === 'NEW_POST_OFFER') {
           const targetId = item.itemType === 'notification' ? item.causerId : item.link;
-          onViewProfile(targetId);
+          if (targetId) onViewProfile(targetId);
       } else {
           addToast('Navigation for this notification is not available in this view.', 'info');
       }
