@@ -1,189 +1,73 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // --- SHARED PROTOCOL FUNCTIONS ---
-
-    function isSignedIn() {
-      return request.auth != null;
+    // Helper functions
+    function isSignedIn() { return request.auth != null; }
+    function isAdmin() { 
+      return isSignedIn() && 
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; 
     }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
 
-    function isOwner(userId) {
-      return isSignedIn() && request.auth.uid == userId;
-    }
-
-    function isAdmin() {
-      let adminPath = /databases/$(database)/documents/users/$(request.auth.uid);
-      return isSignedIn() && exists(adminPath) && get(adminPath).data.role == 'admin';
-    }
-
-    // --- CORE PROTOCOL (LEDGER & TREASURY) ---
-    
+    // Treasury & Ledger (Admin Managed)
     match /treasury_vaults/{vaultId} {
-      allow read, list: if isSignedIn();
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
-
     match /ledger/{docId} {
-      allow read, list: if isSignedIn();
-      allow create: if isSignedIn(); 
-      allow update, delete: if isAdmin();
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
-
     match /globals/{docId} {
-      allow read, list: if isSignedIn();
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
-    match /redemption_cycles/{docId} {
-      allow read, list: if isSignedIn();
-      allow write: if isAdmin();
-    }
-
-    // --- SYSTEM BROADCASTS & ACTIVITY ---
-
-    match /broadcasts/{broadcastId} {
-      allow read, list: if isSignedIn();
-      allow write: if isAdmin();
-    }
-
-    match /activity/{activityId} {
-      allow read, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update, delete: if isAdmin();
-    }
-
-    match /sustenance_cycles/{docId} {
-      allow read, list: if isSignedIn();
-      allow write: if isAdmin();
-    }
-
-    match /reports/{reportId} {
-      allow read, list: if isAdmin();
-      allow create: if isSignedIn();
-      allow update, delete: if isAdmin();
-    }
-
-    // --- NODE IDENTITY (USER PROFILES) ---
-
-    match /users/{userId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      
-      allow update: if isOwner(userId) 
-                    || isAdmin()
-                    || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                        'followers', 'following', 'lastSeen', 'ubtBalance', 'publicKey', 'fcmToken', 'hasReadKnowledgeBase', 'scap', 'ccap', 'socialLinks'
-                    ]));
-
-      match /notifications/{notificationId} {
-        allow read, write: if isOwner(userId) || isAdmin();
-      }
-
-      match /transactions/{txId} {
-        allow read, list: if isOwner(userId) || isAdmin();
-        allow create: if isSignedIn(); 
-      }
-      
-      match /vaults/{vaultId} {
-        allow read, list, write: if isOwner(userId) || isAdmin();
-      }
-    }
-
-    // --- SOCIAL & FEATURES ---
-
-    match /posts/{postId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if (isSignedIn() && resource.data.authorId == request.auth.uid) 
-                    || isAdmin() 
-                    || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasAny(['upvotes', 'commentCount', 'repostCount', 'isPinned']));
-      allow delete: if (isSignedIn() && resource.data.authorId == request.auth.uid) || isAdmin();
-
-      match /comments/{commentId} {
-        allow get, list: if isSignedIn();
-        allow create: if isSignedIn();
-        allow update: if (isSignedIn() && resource.data.authorId == request.auth.uid) 
-                      || isAdmin() 
-                      || (isSignedIn() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes']));
-        allow delete: if (isSignedIn() && resource.data.authorId == request.auth.uid) || isAdmin();
-      }
-    }
-
-    match /conversations/{conversationId} {
-      allow get, list: if isSignedIn() && (request.auth.uid in resource.data.members || isAdmin());
-      allow create: if isSignedIn();
-      allow update: if isSignedIn() && (request.auth.uid in resource.data.members || isAdmin());
-
-      match /messages/{messageId} {
-        allow read, list, write: if isSignedIn(); 
-      }
-    }
-
-    match /members/{memberId} {
-      allow get, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if (isSignedIn() && resource.data.uid == request.auth.uid) || isAdmin();
-    }
-
-    // --- EXCHANGE & LIQUIDITY (PULSE HUB) ---
-
-    match /p2p_offers/{offerId} {
-      allow read, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isSignedIn(); 
-      allow delete: if isSignedIn() && (resource.data.sellerId == request.auth.uid || isAdmin());
-    }
-
+    // Bridge & Liquidation (Admin Verified)
     match /pending_ubt_purchases/{docId} {
       allow read, list: if isSignedIn();
       allow create: if isSignedIn();
       allow update, delete: if isAdmin();
     }
-
     match /sell_requests/{docId} {
-        allow read, list: if isSignedIn(); 
-        allow create: if isSignedIn();
-        allow update: if isSignedIn();
-        allow delete: if isAdmin();
-    }
-
-    match /proposals/{proposalId} {
       allow read, list: if isSignedIn();
       allow create: if isSignedIn();
-      allow update: if isSignedIn(); 
-      
-      match /comments/{commentId} {
-        allow read, list, write: if isSignedIn();
-      }
+      allow update: if isSignedIn(); // Agents claim, Admins settle
+      allow delete: if isAdmin();
     }
 
-    match /ventures/{ventureId} {
+    // Identity & Wallets
+    match /users/{userId} {
+      allow get, list: if isSignedIn();
+      allow create: if isSignedIn();
+      allow update: if isOwner(userId) || isAdmin();
+
+      match /notifications/{id} { allow read, write: if isOwner(userId) || isAdmin(); }
+      match /transactions/{id} { allow read, write: if isOwner(userId) || isAdmin(); }
+      match /vaults/{id} { allow read, write: if isOwner(userId) || isAdmin(); }
+    }
+
+    // Community Content
+    match /posts/{postId} {
       allow read, list: if isSignedIn();
       allow create: if isSignedIn();
-      allow update: if (isSignedIn() && (resource.data.ownerId == request.auth.uid || isAdmin()));
-      allow delete: if (isSignedIn() && resource.data.ownerId == request.auth.uid) || isAdmin();
-      
-      match /distributions/{distId} {
-          allow read, list: if isSignedIn();
-          allow write: if isAdmin() || (isSignedIn() && get(/databases/$(database)/documents/ventures/$(ventureId)).data.ownerId == request.auth.uid);
-      }
-    }
-
-    match /payouts/{payoutId} {
-      allow read, list: if isSignedIn();
-      allow create: if isSignedIn();
-      allow update: if isAdmin();
-    }
-
-    match /sustenance_vouchers/{voucherId} {
-      allow read, list: if isSignedIn();
-      allow update: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid); 
+      allow update: if isSignedIn();
+      allow delete: if isAdmin() || (isSignedIn() && resource.data.authorId == request.auth.uid);
+      match /comments/{id} { allow read, write: if isSignedIn(); }
     }
     
-    match /price_verifications/{docId} {
-      allow read, list: if isAdmin();
-      allow create: if isSignedIn();
+    match /conversations/{convoId} {
+      allow read, write: if isSignedIn();
+      match /messages/{id} { allow read, write: if isSignedIn(); }
     }
+
+    match /members/{id} { allow read, create: if isSignedIn(); allow update, delete: if isAdmin(); }
+    match /proposals/{id} { allow read, create, update: if isSignedIn(); }
+    match /ventures/{id} { allow read, create, update: if isSignedIn(); allow delete: if isAdmin(); }
+    match /payouts/{id} { allow read, create: if isSignedIn(); allow update: if isAdmin(); }
+    match /sustenance_cycles/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /sustenance_vouchers/{id} { allow read: if isSignedIn(); allow write: if isAdmin(); }
+    match /activity/{id} { allow read: if isSignedIn(); allow write: if isSignedIn(); }
+    match /reports/{id} { allow read, write: if isAdmin() || isSignedIn(); }
   }
 }

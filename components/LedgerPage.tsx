@@ -53,7 +53,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
         return () => { isMounted = false; unsubVaults(); };
     }, []);
 
-    // Identity Resolution (Fix for the Zero Balance Issue)
+    // Identity Resolution
     useEffect(() => {
         if (view === 'account' && targetValue) {
             setIsLoading(true);
@@ -214,7 +214,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="Search by Node Address / Signature / Genesis Block..."
+                            placeholder="Search by Node Address / Signature..."
                             className="w-full bg-white border border-slate-200 rounded-2xl py-5 pl-14 pr-4 text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 transition-all shadow-sm"
                         />
                     </form>

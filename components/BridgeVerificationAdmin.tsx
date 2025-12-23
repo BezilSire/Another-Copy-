@@ -22,12 +22,15 @@ export const BridgeVerificationAdmin: React.FC<BridgeVerificationAdminProps> = (
     const handleApprove = async (purchase: PendingUbtPurchase) => {
         const methodLabel = purchase.payment_method === 'CRYPTO' ? `${purchase.cryptoAsset} On-chain` : 'Ecocash Handshake';
         if (!window.confirm(`Settle ${methodLabel}? Release ${purchase.amountUbt} UBT to node ${purchase.userName}?`)) return;
+        
         setProcessingId(purchase.id);
         try {
             await api.approveUbtPurchase(adminUser, purchase);
             addToast("Ledger Settled. Assets Distributed.", "success");
-        } catch (e) {
-            addToast("Protocol failure.", "error");
+        } catch (e: any) {
+            console.error("Settlement error:", e);
+            const errorMsg = e.message || "Protocol failure.";
+            addToast(`AUTHORIZATION FAILED: ${errorMsg}`, "error");
         } finally {
             setProcessingId(null);
         }
@@ -39,8 +42,9 @@ export const BridgeVerificationAdmin: React.FC<BridgeVerificationAdminProps> = (
         try {
             await api.rejectUbtPurchase(id);
             addToast("Block Rejected.", "info");
-        } catch (e) {
-            addToast("Error rejecting.", "error");
+        } catch (e: any) {
+            console.error("Rejection error:", e);
+            addToast("Error rejecting block.", "error");
         } finally {
             setProcessingId(null);
         }
@@ -55,8 +59,8 @@ export const BridgeVerificationAdmin: React.FC<BridgeVerificationAdminProps> = (
             
             <div className="flex justify-between items-center mb-10 border-b border-white/5 pb-8 relative z-10">
                 <div>
-                    <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text leading-none">Settlement Bridge</h2>
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.5em] mt-3">Awaiting Authority Verification</p>
+                    <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text leading-none">Bridge Verifier</h2>
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.5em] mt-3">Manual Settlement Protocol</p>
                 </div>
                 <div className="flex items-center gap-3 bg-black/40 px-6 py-3 rounded-2xl border border-white/5">
                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
@@ -96,7 +100,7 @@ export const BridgeVerificationAdmin: React.FC<BridgeVerificationAdminProps> = (
 
                             <div className="p-4 bg-black rounded-2xl border border-white/5 shadow-inner">
                                 <p className="text-[8px] text-gray-600 font-black uppercase tracking-widest mb-1">
-                                    {purchase.payment_method === 'CRYPTO' ? 'Deposit Anchor Identity' : 'Ecocash Reference Anchor'}
+                                    {purchase.payment_method === 'CRYPTO' ? 'Deposit Anchor' : 'Ecocash Reference'}
                                 </p>
                                 <p className="text-lg font-mono text-brand-gold font-bold break-all select-all tracking-widest">
                                     {purchase.payment_method === 'CRYPTO' ? purchase.cryptoAddress : purchase.ecocashRef}
@@ -108,14 +112,14 @@ export const BridgeVerificationAdmin: React.FC<BridgeVerificationAdminProps> = (
                             <button 
                                 onClick={() => handleApprove(purchase)}
                                 disabled={!!processingId}
-                                className="w-full py-5 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-[0.3em] transition-all active:scale-95 shadow-glow-gold flex items-center justify-center gap-3"
+                                className="w-full py-5 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-[0.3em] transition-all active:scale-95 shadow-glow-gold flex items-center justify-center gap-3 disabled:opacity-50"
                             >
                                 {processingId === purchase.id ? <LoaderIcon className="h-5 w-5 animate-spin"/> : <>Settle Handshake</>}
                             </button>
                             <button 
                                 onClick={() => handleReject(purchase.id)}
                                 disabled={!!processingId}
-                                className="w-full py-4 bg-red-950/20 text-red-500 hover:text-red-400 font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all border border-red-900/30"
+                                className="w-full py-4 bg-red-950/20 text-red-500 hover:text-red-400 font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all border border-red-900/30 disabled:opacity-50"
                             >
                                 Reject Block
                             </button>
@@ -125,7 +129,7 @@ export const BridgeVerificationAdmin: React.FC<BridgeVerificationAdminProps> = (
                 {purchases.length === 0 && (
                     <div className="text-center py-32 opacity-30">
                         <DatabaseIcon className="h-16 w-16 text-gray-800 mx-auto mb-6" />
-                        <p className="label-caps !text-[12px] !tracking-[0.6em]">No Handshakes Pending Validation</p>
+                        <p className="label-caps !text-[12px] !tracking-[0.6em]">No Bridge Handshakes Pending</p>
                     </div>
                 )}
             </div>

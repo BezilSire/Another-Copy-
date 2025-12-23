@@ -23,6 +23,7 @@ import { BriefcaseIcon } from './icons/BriefcaseIcon';
 import { TrendingUpIcon } from './icons/TrendingUpIcon';
 import { PlusIcon } from './icons/PlusIcon';
 import { ProtocolReconciliation } from './ProtocolReconciliation';
+import { HistoryIcon } from './icons/HistoryIcon';
 
 export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -95,10 +96,10 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
 
                  {/* Protocol Quick-Access Bar */}
                  <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-4 mt-12 pt-10 border-t border-white/5">
-                    <HUDButton onClick={() => setIsSendOpen(true)} icon={<SendIcon className="h-5 w-5" />} label="Dispatch" color="bg-brand-gold text-slate-950" premium />
+                    <HUDButton onClick={() => setIsSendOpen(true)} icon={<SendIcon className="h-5 w-5" />} label="Dispatch" color="bg-brand-gold text-slate-950" />
                     <HUDButton onClick={() => setIsScanOpen(true)} icon={<QrCodeIcon className="h-5 w-5" />} label="Handshake" color="bg-white/5 text-gray-300" />
-                    <HUDButton onClick={() => setIsAuditOpen(true)} icon={<ShieldCheckIcon className="h-5 w-5" />} label="Audit" color="bg-white/5 text-gray-300" />
-                    <HUDButton onClick={() => setActiveTab('ledger')} icon={<DatabaseIcon className="h-5 w-5" />} label="Ledger" color="bg-white/5 text-gray-300" />
+                    <HUDButton onClick={() => setIsAuditOpen(true)} icon={<HistoryIcon className="h-5 w-5" />} label="Run Audit" color="bg-white/5 text-gray-300" />
+                    <HUDButton onClick={() => setActiveTab('security')} icon={<KeyIcon className="h-5 w-5" />} label="Identity" color="bg-white/5 text-gray-300" />
                  </div>
             </div>
 
@@ -113,20 +114,12 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                 <div className="min-h-[400px]">
                     {activeTab === 'vaults' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
-                            {/* Static Hot Wallet View */}
                             <VaultCard name="Bazaar Float" balance={hotBalance} type="LIQUID" description="Assets currently available for social exchange." icon={<TrendingUpIcon className="h-6 w-6 text-emerald-400" />} color="border-emerald-500/20" />
-                            
                             {vaults.map(v => (
                                 <VaultCard key={v.id} name={v.name} balance={v.balance} type={v.type} description={v.type === 'LOCKED' ? `Locked until ${v.lockedUntil?.toDate().toLocaleDateString()}` : "Operational venture assets."} icon={v.type === 'LOCKED' ? <LockIcon className="h-6 w-6 text-red-400" /> : <BriefcaseIcon className="h-6 w-6 text-blue-400" />} color={v.type === 'LOCKED' ? "border-red-500/20" : "border-blue-500/20"} />
                             ))}
-                            
-                            <button 
-                                onClick={() => api.createUserVault(user.id, "Savings Node", "LOCKED", 30)}
-                                className="p-10 rounded-[2.5rem] border-2 border-dashed border-white/5 flex flex-col items-center justify-center gap-5 hover:bg-white/[0.02] hover:border-brand-gold/20 transition-all text-gray-600 hover:text-brand-gold group"
-                            >
-                                <div className="p-4 rounded-2xl bg-white/5 group-hover:bg-brand-gold/10 transition-colors">
-                                    <PlusIcon className="h-8 w-8" />
-                                </div>
+                            <button onClick={() => api.createUserVault(user.id, "Savings Node", "LOCKED", 30)} className="p-10 rounded-[2.5rem] border-2 border-dashed border-white/5 flex flex-col items-center justify-center gap-5 hover:bg-white/[0.02] hover:border-brand-gold/20 transition-all text-gray-600 hover:text-brand-gold group">
+                                <div className="p-4 rounded-2xl bg-white/5 group-hover:bg-brand-gold/10 transition-colors"><PlusIcon className="h-8 w-8" /></div>
                                 <span className="label-caps !text-[9px] !tracking-[0.4em]">Partition New Vault</span>
                             </button>
                         </div>
@@ -165,7 +158,7 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                     )}
 
                     {activeTab === 'security' && (
-                        <div className="animate-fade-in max-w-2xl">
+                        <div className="animate-fade-in max-w-2xl mx-auto">
                             <IdentityVault onRestore={() => window.location.reload()} />
                         </div>
                     )}
@@ -179,7 +172,7 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
     );
 };
 
-const HUDButton: React.FC<{ onClick: () => void; icon: React.ReactNode; label: string; color: string; premium?: boolean }> = ({ onClick, icon, label, color, premium }) => (
+const HUDButton: React.FC<{ onClick: () => void; icon: React.ReactNode; label: string; color: string }> = ({ onClick, icon, label, color }) => (
     <button onClick={onClick} className={`${color} py-6 rounded-2xl border border-white/5 flex flex-col items-center justify-center gap-3 transition-all active:scale-[0.95] hover:opacity-90 shadow-lg group`}>
         <div className={`transition-all duration-300 group-hover:scale-110`}>{icon}</div>
         <span className="label-caps !text-[8px] !tracking-[0.3em] font-black">{label}</span>
@@ -194,9 +187,7 @@ const NavTab: React.FC<{ active: boolean; onClick: () => void; label: string }> 
 
 const VaultCard: React.FC<{ name: string; balance: number; type: string; description: string; icon: React.ReactNode; color: string }> = ({ name, balance, description, icon, color }) => (
     <div className={`glass-card p-8 rounded-[2.5rem] border-white/5 hover:border-brand-gold/20 transition-all duration-500 group relative overflow-hidden flex flex-col border-t-2 ${color}`}>
-        <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-40 transition-opacity">
-            {icon}
-        </div>
+        <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-40 transition-opacity">{icon}</div>
         <p className="label-caps !text-[8px] text-gray-500 mb-2">{name}</p>
         <p className="text-4xl font-black text-white font-mono tracking-tighter leading-none mb-6">{balance.toLocaleString()}</p>
         <div className="mt-auto pt-6 border-t border-white/5">

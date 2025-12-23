@@ -1,22 +1,21 @@
 
 import * as tweetnacl from 'tweetnacl';
+import * as bip39 from 'bip39';
 
-// Robustly resolve the nacl object, checking for 'default' export or direct attachment
+// FIX: Initializing nacl with a check for default export to handle different environment types
 const nacl = (tweetnacl as any).default || tweetnacl;
 
 const SIGN_SECRET_KEY_STORAGE = 'gcn_sign_secret_key';
 const SIGN_PUBLIC_KEY_STORAGE = 'gcn_sign_public_key';
+const ENCRYPTED_VAULT_STORAGE = 'gcn_encrypted_vault';
 
-interface KeyPair {
-    publicKey: string; // Base64
-    secretKey: string; // Base64
+export interface VaultData {
+    mnemonic: string;
+    email?: string;
+    password?: string;
 }
 
-// --- Native Helpers ---
-
-const encodeUTF8 = (s: string): Uint8Array => {
-    return new TextEncoder().encode(s);
-};
+const encodeUTF8 = (s: string): Uint8Array => new TextEncoder().encode(s);
 
 const encodeBase64 = (arr: Uint8Array): string => {
     let binary = '';
@@ -38,79 +37,146 @@ const decodeBase64 = (s: string): Uint8Array => {
         }
         return bytes;
     } catch (e) {
-        console.error("Failed to decode Base64", e);
         return new Uint8Array(0);
     }
 };
 
-// --- Service Implementation ---
-
+// FIX: Added mnemonic-based key generation and secure vault storage methods
 export const cryptoService = {
-    getOrGenerateSigningKeys: (): KeyPair => {
-        const storedSecret = localStorage.getItem(SIGN_SECRET_KEY_STORAGE);
-        const storedPublic = localStorage.getItem(SIGN_PUBLIC_KEY_STORAGE);
-
-        if (storedSecret && storedPublic) {
-            return { publicKey: storedPublic, secretKey: storedSecret };
-        }
-
-        if (!nacl || !nacl.sign) {
-            throw new Error("Crypto library initialization failed.");
-        }
-
-        const keys = nacl.sign.keyPair();
-        const publicKeyBase64 = encodeBase64(keys.publicKey);
-        const secretKeyBase64 = encodeBase64(keys.secretKey);
-
-        localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, publicKeyBase64);
-        localStorage.setItem(SIGN_SECRET_KEY_STORAGE, secretKeyBase64);
-
-        return { publicKey: publicKeyBase64, secretKey: secretKeyBase64 };
+    generateMnemonic: (): string => {
+        return bip39.generateMnemonic();
     },
 
-    getPublicKey: (): string | null => {
-        return localStorage.getItem(SIGN_PUBLIC_KEY_STORAGE);
+    validateMnemonic: (mnemonic: string): boolean => {
+        return bip39.validateMnemonic(mnemonic.trim().toLowerCase());
     },
 
-    signTransaction: (payload: string): string => {
-        const keys = cryptoService.getOrGenerateSigningKeys();
-        const secretKey = decodeBase64(keys.secretKey);
-        const messageUint8 = encodeUTF8(payload);
+    mnemonicToKeyPair: (mnemonic: string) => {
+        const seed = bip39.mnemonicToSeedSync(mnemonic.trim().toLowerCase());
+        const secretKey = seed.slice(0, 32);
+        const keyPair = nacl.sign.keyPair.fromSeed(secretKey);
         
-        const signature = nacl.sign.detached(messageUint8, secretKey);
+        // Protocol standard: Addresses start with UBT- for UI distinction
+        return {
+            publicKey: `UBT-${encodeBase64(keyPair.publicKey)}`,
+            secretKey: encodeBase64(keyPair.secretKey)
+        };
+    },
+
+    hasVault: (): boolean => {
+        return !!localStorage.getItem(ENCRYPTED_VAULT_STORAGE);
+    },
+
+    saveVault: async (data: VaultData, pin: string) => {
+        const encrypted = await cryptoService._encryptWithPin(JSON.stringify(data), pin);
+        localStorage.setItem(ENCRYPTED_VAULT_STORAGE, encrypted);
+        
+        const keys = cryptoService.mnemonicToKeyPair(data.mnemonic);
+        localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, keys.publicKey);
+        localStorage.setItem(SIGN_SECRET_KEY_STORAGE, keys.secretKey);
+    },
+
+    updateVaultCredentials: async (email: string, password: string, pin: string) => {
+        const encrypted = localStorage.getItem(ENCRYPTED_VAULT_STORAGE);
+        if (!encrypted) return;
+        try {
+            const currentStr = await cryptoService._decryptWithPin(encrypted, pin);
+            const currentData = JSON.parse(currentStr) as VaultData;
+            await cryptoService.saveVault({ ...currentData, email, password }, pin);
+        } catch (e) {
+            console.error("Vault credential update failed");
+        }
+    },
+
+    unlockVault: async (pin: string): Promise<VaultData | null> => {
+        const encrypted = localStorage.getItem(ENCRYPTED_VAULT_STORAGE);
+        if (!encrypted) return null;
+
+        try {
+            const dataStr = await cryptoService._decryptWithPin(encrypted, pin);
+            const data = JSON.parse(dataStr) as VaultData;
+            if (!bip39.validateMnemonic(data.mnemonic)) return null;
+            
+            const keys = cryptoService.mnemonicToKeyPair(data.mnemonic);
+            localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, keys.publicKey);
+            localStorage.setItem(SIGN_SECRET_KEY_STORAGE, keys.secretKey);
+            return data;
+        } catch (e) {
+            return null;
+        }
+    },
+
+    _encryptWithPin: async (text: string, pin: string): Promise<string> => {
+        const enc = new TextEncoder();
+        const pwHash = await crypto.subtle.importKey('raw', enc.encode(pin), { name: 'PBKDF2' }, false, ['deriveKey']);
+        const salt = window.crypto.getRandomValues(new Uint8Array(16));
+        const key = await crypto.subtle.deriveKey(
+            { name: 'PBKDF2', salt, iterations: 1000, hash: 'SHA-256' },
+            pwHash,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['encrypt']
+        );
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(text));
+        
+        const vaultObj = {
+            iv: encodeBase64(iv),
+            salt: encodeBase64(salt),
+            data: encodeBase64(new Uint8Array(ciphertext))
+        };
+        return JSON.stringify(vaultObj);
+    },
+
+    _decryptWithPin: async (vaultJson: string, pin: string): Promise<string> => {
+        const vault = JSON.parse(vaultJson);
+        const enc = new TextEncoder();
+        const pwHash = await crypto.subtle.importKey('raw', enc.encode(pin), { name: 'PBKDF2' }, false, ['deriveKey']);
+        
+        const key = await crypto.subtle.deriveKey(
+            { name: 'PBKDF2', salt: decodeBase64(vault.salt), iterations: 1000, hash: 'SHA-256' },
+            pwHash,
+            { name: 'AES-GCM', length: 256 },
+            false,
+            ['decrypt']
+        );
+        
+        const decrypted = await crypto.subtle.decrypt(
+            { name: 'AES-GCM', iv: decodeBase64(vault.iv) },
+            key,
+            decodeBase64(vault.data)
+        );
+        return new TextDecoder().decode(decrypted);
+    },
+
+    getPublicKey: (): string | null => localStorage.getItem(SIGN_PUBLIC_KEY_STORAGE),
+    
+    signTransaction: (payload: string): string => {
+        const storedSecret = localStorage.getItem(SIGN_SECRET_KEY_STORAGE);
+        if (!storedSecret) throw new Error("Vault locked.");
+        const secretKey = decodeBase64(storedSecret);
+        const signature = nacl.sign.detached(encodeUTF8(payload), secretKey);
         return encodeBase64(signature);
     },
 
-    verifySignature: (payload: string, signatureBase64: string, publicKeyBase64: string): boolean => {
+    verifySignature: (payload: string, signatureBase64: string, publicKeyBase64WithPrefix: string): boolean => {
         try {
+            const publicKeyBase64 = publicKeyBase64WithPrefix.startsWith('UBT-') 
+                ? publicKeyBase64WithPrefix.substring(4) 
+                : publicKeyBase64WithPrefix;
+                
             const publicKey = decodeBase64(publicKeyBase64);
             const signature = decodeBase64(signatureBase64);
-            const message = encodeUTF8(payload);
-            
-            return nacl.sign.detached.verify(message, signature, publicKey);
+            return nacl.sign.detached.verify(encodeUTF8(payload), signature, publicKey);
         } catch (e) {
-            console.error("Verification error:", e);
             return false;
         }
     },
 
-    hashBlock: async (data: string): Promise<string> => {
-        const msgUint8 = encodeUTF8(data);
-        const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-        const hashArray = Array.from(new Uint8Array(hashBuffer));
-        const hashHex = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-        return hashHex;
-    },
-
-    generateNonce: (): string => {
-        const array = new Uint8Array(12);
-        window.crypto.getRandomValues(array);
-        return encodeBase64(array);
-    },
-
-    resetKeys: (): KeyPair => {
-        localStorage.removeItem(SIGN_PUBLIC_KEY_STORAGE);
+    generateNonce: (): string => encodeBase64(window.crypto.getRandomValues(new Uint8Array(12))),
+    
+    clearSession: () => {
         localStorage.removeItem(SIGN_SECRET_KEY_STORAGE);
-        return cryptoService.getOrGenerateSigningKeys();
+        localStorage.removeItem(SIGN_PUBLIC_KEY_STORAGE);
     }
 };

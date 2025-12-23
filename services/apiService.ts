@@ -1,3 +1,4 @@
+
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -27,8 +28,6 @@ import {
   arrayUnion,
   arrayRemove,
   runTransaction,
-  DocumentSnapshot,
-  DocumentData,
 } from 'firebase/firestore';
 import {
     ref,
@@ -43,9 +42,8 @@ import {
     User, Agent, Member, NewMember, MemberUser, Broadcast, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
-    Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, UserVault, TreasuryVault, PendingUbtPurchase, SellRequest, P2POffer
+    Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase, SellRequest, P2POffer, AssetType, UserVault
 } from '../types';
-import { cryptoService } from './cryptoService';
 
 const usersCollection = collection(db, 'users');
 const membersCollection = collection(db, 'members');
@@ -62,20 +60,10 @@ const vouchersCollection = collection(db, 'sustenance_vouchers');
 const venturesCollection = collection(db, 'ventures');
 const globalsCollection = collection(db, 'globals');
 const ledgerCollection = collection(db, 'ledger');
-const p2pCollection = collection(db, 'p2p_offers');
+const vaultsCollection = collection(db, 'treasury_vaults');
 const pendingPurchasesCollection = collection(db, 'pending_ubt_purchases');
 const sellRequestsCollection = collection(db, 'sell_requests');
-const vaultsCollection = collection(db, 'treasury_vaults');
-
-const getMillis = (val: any): number => {
-    if (!val) return 0;
-    if (typeof val.toMillis === 'function') return val.toMillis();
-    if (val instanceof Timestamp) return val.toMillis();
-    if (val instanceof Date) return val.getTime();
-    if (val.seconds !== undefined) return val.seconds * 1000;
-    const date = new Date(val);
-    return isNaN(date.getTime()) ? 0 : date.getTime();
-};
+const p2pCollection = collection(db, 'p2p_offers');
 
 const _deletePostAndSubcollections = async (postId: string) => {
     const postRef = doc(postsCollection, postId);
@@ -87,7 +75,7 @@ const _deletePostAndSubcollections = async (postId: string) => {
 };
 
 export const api = {
-    // --- AUTHENTICATION & PRESENCE ---
+    // Auth & Presence
     login: (email: string, password: string): Promise<FirebaseUser> => {
         return signInWithEmailAndPassword(auth, email, password)
             .then(userCredential => userCredential.user);
@@ -111,31 +99,17 @@ export const api = {
     },
     goOffline: (userId: string) => set(ref(rtdb, '/status/' + userId), { state: 'offline', last_changed: rtdbServerTimestamp() }),
 
-    // --- USER MANAGEMENT ---
+    // User Management
     getUser: async (uid: string): Promise<User> => {
         const userDoc = await getDoc(doc(db, 'users', uid));
         if (!userDoc.exists()) throw new Error("User data not found.");
         return { id: userDoc.id, ...userDoc.data() } as User;
     },
     getUserByPublicKey: async (publicKey: string): Promise<User | null> => {
-        // Enforce exact UBT- prefix matching in registry
         const q = query(usersCollection, where('publicKey', '==', publicKey), limit(1));
         const snapshot = await getDocs(q);
         if (snapshot.empty) return null;
         return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as User;
-    },
-    getUsersByUids: async (uids: string[]): Promise<User[]> => {
-        if (uids.length === 0) return [];
-        const promises = [];
-        for (let i = 0; i < uids.length; i += 30) {
-            const chunk = uids.slice(i, i + 30);
-            const q = query(usersCollection, where('__name__', 'in', chunk));
-            promises.push(getDocs(q));
-        }
-        const snapshots = await Promise.all(promises);
-        const users: User[] = [];
-        snapshots.forEach(snapshot => { snapshot.docs.forEach(doc => { users.push({ id: doc.id, ...doc.data() } as User); }); });
-        return users;
     },
     updateUser: (uid: string, data: Partial<User>) => updateDoc(doc(db, 'users', uid), data),
     updateMemberAndUserProfile: async (userId: string, memberId: string, userUpdateData: Partial<User>, memberUpdateData: Partial<Member>) => {
@@ -155,15 +129,14 @@ export const api = {
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile));
     },
+    getUsersByUids: async (uids: string[]): Promise<User[]> => {
+        if (uids.length === 0) return [];
+        const q = query(usersCollection, where('__name__', 'in', uids.slice(0, 30)));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User));
+    },
     searchUsers: async (searchQuery: string, currentUser: User): Promise<PublicUserProfile[]> => {
         if (!searchQuery.trim()) return [];
-        
-        // If searching for a UBT address, do exact match
-        if (searchQuery.startsWith('UBT-')) {
-            const user = await api.getUserByPublicKey(searchQuery);
-            return user ? [user as PublicUserProfile] : [];
-        }
-
         const lowerCaseQuery = searchQuery.toLowerCase();
         const q = query(usersCollection, where('name_lowercase', '>=', lowerCaseQuery), where('name_lowercase', '<=', lowerCaseQuery + '\uf8ff'), limit(15));
         const snapshot = await getDocs(q);
@@ -171,85 +144,122 @@ export const api = {
     },
     resolveNodeIdentity: async (identifier: string): Promise<PublicUserProfile | null> => {
         if (!identifier) return null;
-        
-        // Handle Direct UBT Anchor
-        if (identifier.startsWith('UBT-')) {
-            return await api.getUserByPublicKey(identifier) as PublicUserProfile;
-        }
-
         const directDoc = await getDoc(doc(db, 'users', identifier));
         if (directDoc.exists()) return { id: directDoc.id, ...directDoc.data() } as PublicUserProfile;
-        
         const vaultDoc = await getDoc(doc(vaultsCollection, identifier));
         if (vaultDoc.exists()) return { id: vaultDoc.id, name: vaultDoc.data()?.name, ubtBalance: vaultDoc.data()?.balance, role: 'admin', circle: 'TREASURY' } as any;
         return null;
     },
 
-    // --- PROTOCOL TRANSACTIONS & LEDGER ---
+    // Blockchain Ledger & Treasury
+    initializeTreasury: async (admin: Admin) => {
+        return runTransaction(db, async (t) => {
+            const genesisRef = doc(vaultsCollection, 'GENESIS');
+            const floatRef = doc(vaultsCollection, 'FLOAT');
+            const genesisDoc = await t.get(genesisRef);
+            if (genesisDoc.exists()) throw new Error("Genesis Block already indexed.");
+
+            t.set(genesisRef, { id: 'GENESIS', name: "Genesis Node", balance: 14000000, type: 'GENESIS', isLocked: true, createdAt: serverTimestamp() });
+            t.set(floatRef, { id: 'FLOAT', name: "Liquidity Float", balance: 1000000, type: 'FLOAT', isLocked: false, createdAt: serverTimestamp() });
+
+            t.set(doc(ledgerCollection, 'BLOCK_ZERO'), {
+                id: 'BLOCK_ZERO', senderId: 'SYSTEM', receiverId: 'GENESIS', amount: 15000000, timestamp: Date.now(), type: 'SYSTEM_MINT', protocol_mode: 'MAINNET', serverTimestamp: serverTimestamp()
+            });
+        });
+    },
+
     processUbtTransaction: async (transaction: UbtTransaction) => {
         return runTransaction(db, async (t) => {
             const senderRef = doc(usersCollection, transaction.senderId);
             const receiverRef = doc(usersCollection, transaction.receiverId);
             const senderDoc = await t.get(senderRef);
-            if (!senderDoc.exists()) throw new Error("Sender node offline.");
-            const currentBalance = senderDoc.data().ubtBalance || 0;
-            if (currentBalance < transaction.amount) throw new Error("Insufficient node liquidity.");
-            const isValid = cryptoService.verifySignature(transaction.hash, transaction.signature, transaction.senderPublicKey || "");
-            if (!isValid) throw new Error("Protocol Signature Fault.");
+            if (!senderDoc.exists()) throw new Error("Origin node offline.");
+            if ((senderDoc.data().ubtBalance || 0) < transaction.amount) throw new Error("Insufficient liquidity.");
 
             t.update(senderRef, { ubtBalance: increment(-transaction.amount) });
             t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
-            const ledgerRef = doc(ledgerCollection, transaction.id);
-            t.set(ledgerRef, { ...transaction, serverTimestamp: serverTimestamp() });
-            
-            const senderTxRef = doc(collection(db, 'users', transaction.senderId, 'transactions'), transaction.id);
-            const receiverTxRef = doc(collection(db, 'users', transaction.receiverId, 'transactions'), transaction.id);
-            t.set(senderTxRef, { type: 'p2p_sent', amount: transaction.amount, reason: 'Dispatched UBT', timestamp: serverTimestamp(), actorId: transaction.senderId, txHash: transaction.id, protocol_mode: 'MAINNET' });
-            t.set(receiverTxRef, { type: 'p2p_received', amount: transaction.amount, reason: 'Synced UBT', timestamp: serverTimestamp(), actorId: transaction.senderId, txHash: transaction.id, protocol_mode: 'MAINNET' });
+            t.set(doc(ledgerCollection, transaction.id), { ...transaction, serverTimestamp: serverTimestamp() });
         });
     },
+
+    approveUbtPurchase: (admin: Admin, p: PendingUbtPurchase) => runTransaction(db, async t => {
+        const purchaseRef = doc(db, 'pending_ubt_purchases', p.id);
+        const userRef = doc(db, 'users', p.userId);
+        const floatRef = doc(db, 'treasury_vaults', 'FLOAT');
+
+        const floatDoc = await t.get(floatRef);
+        if (!floatDoc.exists()) throw new Error("FLOAT vault offline.");
+        if (floatDoc.data().balance < p.amountUbt) throw new Error("Reserve depleted.");
+
+        t.update(purchaseRef, { status: 'VERIFIED', verifiedAt: serverTimestamp() });
+        t.update(userRef, { ubtBalance: increment(p.amountUbt) });
+        t.update(floatRef, { balance: increment(-p.amountUbt) });
+
+        const txId = `bridge-${Date.now().toString(36)}`;
+        t.set(doc(db, 'ledger', txId), {
+            id: txId, senderId: 'FLOAT', receiverId: p.userId, amount: p.amountUbt, timestamp: Date.now(), type: 'FIAT_BRIDGE', protocol_mode: 'MAINNET', serverTimestamp: serverTimestamp()
+        });
+    }),
+
+    rejectUbtPurchase: (id: string) => updateDoc(doc(db, 'pending_ubt_purchases', id), { status: 'REJECTED' }),
+
     processAdminHandshake: async (vaultId: string, receiverId: string | null, amount: number, transaction: UbtTransaction) => {
         return runTransaction(db, async (t) => {
             const vaultRef = doc(vaultsCollection, vaultId);
             const vaultDoc = await t.get(vaultRef);
-            if (!vaultDoc.exists()) throw new Error("Origin vault offline.");
-            if ((vaultDoc.data()?.balance || 0) < amount) throw new Error("Insufficient assets.");
+            if (!vaultDoc.exists()) throw new Error("Vault offline.");
+            if (vaultDoc.data().balance < amount) throw new Error("Insufficient reserve.");
+
             t.update(vaultRef, { balance: increment(-amount) });
             if (receiverId && receiverId !== 'EXTERNAL_NODE') {
-                const receiverRef = doc(usersCollection, receiverId);
-                t.update(receiverRef, { ubtBalance: increment(amount) });
-                const receiverTxRef = doc(collection(db, 'users', receiverId, 'transactions'), transaction.id);
-                t.set(receiverTxRef, { type: 'p2p_received', amount, reason: 'Treasury Allocation', timestamp: serverTimestamp(), actorId: 'TREASURY', txHash: transaction.id, protocol_mode: 'MAINNET' });
+                t.update(doc(usersCollection, receiverId), { ubtBalance: increment(amount) });
             }
             t.set(doc(ledgerCollection, transaction.id), { ...transaction, serverTimestamp: serverTimestamp() });
         });
     },
+
     getPublicLedger: async (limitCount: number = 200): Promise<UbtTransaction[]> => {
         const q = query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(limitCount));
-        const snapshot = await getDocs(q);
-        return snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() } as UbtTransaction))
-            .filter(tx => {
-                if (tx.protocol_mode === 'TESTNET') return false;
-                if (tx.id.startsWith('sim-') || tx.id.startsWith('test-')) return false;
-                if (tx.senderId === 'PROTOCOL_ROOT' || tx.senderPublicKey === 'SYSTEM_SIMULATOR') return false;
-                if (tx.amount === 10000 && (tx.receiverId === 'bDKcFBzV2VdCGb2m1DPOph0WCHk1' || tx.receiverId === 'BWy31FSiXgWIjqHoUsJ378yTOLj2')) return false;
-                return true;
-            });
+        const s = await getDocs(q);
+        return s.docs.map(doc => ({ id: doc.id, ...doc.data() } as UbtTransaction));
     },
+
+    listenToVaults: (callback: (v: TreasuryVault[]) => void, onError: (error: Error) => void) => 
+        onSnapshot(vaultsCollection, s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), onError),
+
+    toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
+
+    syncInternalVaults: (admin: Admin, from: TreasuryVault, to: TreasuryVault, amt: number, reason: string) => runTransaction(db, async t => {
+        t.update(doc(vaultsCollection, from.id), { balance: increment(-amt) });
+        t.update(doc(vaultsCollection, to.id), { balance: increment(amt) });
+    }),
+
     listenForUserTransactions: (userId: string, callback: (txs: Transaction[]) => void, onError: (error: Error) => void) => 
         onSnapshot(query(collection(db, 'users', userId, 'transactions'), orderBy('timestamp', 'desc'), limit(50)), (s) => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))), onError),
+
+    // Economy Global State
     listenForGlobalEconomy: (callback: (economy: GlobalEconomy | null) => void, onError: (error: Error) => void) => 
         onSnapshot(doc(globalsCollection, 'economy'), (s) => callback(s.exists() ? s.data() as GlobalEconomy : null), onError),
+    
+    setGlobalEconomy: (admin: User, data: Partial<GlobalEconomy>) => setDoc(doc(globalsCollection, 'economy'), data, { merge: true }),
+    
+    updateUbtRedemptionWindow: (admin: User, open: boolean) => {
+        const docRef = doc(globalsCollection, 'economy');
+        if (open) {
+            const now = Timestamp.now();
+            const closesAt = new Date(now.toDate());
+            closesAt.setDate(closesAt.getDate() + 5);
+            return setDoc(docRef, { ubtRedemptionWindowOpen: true, ubtRedemptionWindowStartedAt: now, ubtRedemptionWindowClosesAt: Timestamp.fromDate(closesAt) }, { merge: true });
+        } else {
+            return setDoc(docRef, { ubtRedemptionWindowOpen: false, ubtRedemptionWindowClosesAt: null }, { merge: true });
+        }
+    },
 
-    // --- SOCIAL & NETWORK ---
+    // Social
     followUser: async (follower: User, targetUserId: string) => {
         const batch = writeBatch(db);
         batch.update(doc(usersCollection, follower.id), { following: arrayUnion(targetUserId) });
         batch.update(doc(usersCollection, targetUserId), { followers: arrayUnion(follower.id) });
-        batch.set(doc(collection(db, 'users', targetUserId, 'notifications')), {
-            userId: targetUserId, message: `${follower.name} started following you.`, link: follower.id, read: false, timestamp: serverTimestamp(), type: 'NEW_FOLLOWER', causerId: follower.id
-        });
         await batch.commit();
     },
     unfollowUser: async (followerId: string, targetUserId: string) => {
@@ -270,16 +280,11 @@ export const api = {
     },
     listenForActivity: (circle: string, callback: (acts: Activity[]) => void, onError: (error: Error) => void) => 
         onSnapshot(query(activityCollection, where('causerCircle', '==', circle), orderBy('timestamp', 'desc'), limit(10)), (s) => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), onError),
+    reportUser: (reporter: User, reported: User, reason: string, details: string) => addDoc(reportsCollection, { reporterId: reporter.id, reporterName: reporter.name, reportedUserId: reported.id, reportedUserName: reported.name, reason, details, date: new Date().toISOString(), status: 'new' }),
 
-    reportUser: (reporter: User, reportedUser: PublicUserProfile, reason: string, details: string) => 
-        addDoc(reportsCollection, { reporterId: reporter.id, reporterName: reporter.name, reportedUserId: reportedUser.id, reportedUserName: reportedUser.name, reason, details, date: new Date().toISOString(), status: 'new' }),
-
-    // --- CHAT & COMMS ---
+    // Chat
     listenForConversations: (userId: string, callback: (convos: Conversation[]) => void, onError: (error: Error) => void) => 
-        onSnapshot(query(conversationsCollection, where('members', 'array-contains', userId)), (s) => {
-            const convos = s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation));
-            callback(convos.sort((a, b) => getMillis(b.lastMessageTimestamp) - getMillis(a.lastMessageTimestamp)));
-        }, onError),
+        onSnapshot(query(conversationsCollection, where('members', 'array-contains', userId)), (s) => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation))), onError),
     startChat: async (currentUser: User, targetUser: PublicUserProfile): Promise<Conversation> => {
         const convoId = [currentUser.id, targetUser.id].sort().join('_');
         const snap = await getDoc(doc(conversationsCollection, convoId));
@@ -298,25 +303,24 @@ export const api = {
         await batch.commit();
     },
     markConversationAsRead: (convoId: string, userId: string) => updateDoc(doc(conversationsCollection, convoId), { readBy: arrayUnion(userId) }),
-    getGroupMembers: async (memberIds: string[]): Promise<MemberUser[]> => api.getUsersByUids(memberIds) as any,
-    updateGroupMembers: (id: string, members: string[], names: any) => updateDoc(doc(conversationsCollection, id), { members, memberNames: names }),
-    leaveGroup: (id: string, userId: string) => updateDoc(doc(conversationsCollection, id), { members: arrayRemove(userId) }),
+    getGroupMembers: async (memberIds: string[]): Promise<MemberUser[]> => {
+        if (memberIds.length === 0) return [];
+        const q = query(usersCollection, where('__name__', 'in', memberIds));
+        const snapshot = await getDocs(q);
+        return snapshot.docs.map((d => ({ id: d.id, ...d.data()}) as MemberUser));
+    },
+    updateGroupMembers: (convoId: string, newMemberIds: string[], newMemberNames: {[key: string]: string}) => updateDoc(doc(conversationsCollection, convoId), { members: newMemberIds, memberNames: newMemberNames }),
+    leaveGroup: (convoId: string, userId: string) => updateDoc(doc(conversationsCollection, convoId), { members: arrayRemove(userId) }),
 
-    // --- POSTS & CONTENT ---
+    // Content
     createPost: async (user: User, content: string, type: Post['types'], ccapAward: number, skills: string[] = []) => {
-        const docRef = await addDoc(postsCollection, { authorId: user.id, authorName: user.name, authorCircle: user.circle, authorRole: user.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: skills, commentCount: 0, repostCount: 0 });
-        if (ccapAward > 0) await updateDoc(doc(usersCollection, user.id), { ccap: increment(ccapAward) });
+        await addDoc(postsCollection, { authorId: user.id, authorName: user.name, authorCircle: user.circle, authorRole: user.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: skills, commentCount: 0, repostCount: 0, ccapAwarded: ccapAward });
     },
     repostPost: async (original: Post, user: User, comment: string) => {
         const batch = writeBatch(db);
-        const repostRef = doc(postsCollection);
-        batch.set(repostRef, { authorId: user.id, authorName: user.name, authorCircle: user.circle, authorRole: user.role, content: comment, date: new Date().toISOString(), upvotes: [], types: 'general', repostedFrom: { authorId: original.authorId, authorName: original.authorName, authorCircle: original.authorCircle, content: original.content, date: original.date } });
+        batch.set(doc(postsCollection), { authorId: user.id, authorName: user.name, authorCircle: user.circle, authorRole: user.role, content: comment, date: new Date().toISOString(), upvotes: [], types: 'general', repostedFrom: { authorId: original.authorId, authorName: original.authorName, authorCircle: original.authorCircle, content: original.content, date: original.date } });
         batch.update(doc(postsCollection, original.id), { repostCount: increment(1) });
         await batch.commit();
-    },
-    sendDistressPost: async (user: MemberUser, content: string) => {
-        await addDoc(postsCollection, { authorId: user.id, authorName: "Anonymous Member", authorCircle: user.circle, authorRole: user.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress' });
-        await updateDoc(doc(usersCollection, user.id), { distress_calls_available: increment(-1) });
     },
     deletePost: (id: string) => _deletePostAndSubcollections(id),
     updatePost: (id: string, content: string) => updateDoc(doc(postsCollection, id), { content }),
@@ -333,23 +337,27 @@ export const api = {
         return s.docs.map(d => ({ id: d.id, ...d.data() } as Post));
     },
     fetchRegularPosts: async (count: number, filter: string, isAdmin: boolean, start?: any, currentUser?: User) => {
-        const types = ['general', 'proposal', 'offer', 'opportunity'];
         let q;
-        if (filter === 'all' || filter === 'foryou') {
-            q = query(postsCollection, where('types', 'in', isAdmin ? [...types, 'distress'] : types), orderBy('date', 'desc'), limit(count));
-        } else if (filter === 'following' && currentUser?.following?.length) {
-            q = query(postsCollection, where('authorId', 'in', currentUser.following.slice(0, 10)), orderBy('date', 'desc'), limit(count));
-        } else {
-            q = query(postsCollection, where('types', '==', filter), orderBy('date', 'desc'), limit(count));
+        if (filter === 'all') q = query(postsCollection, orderBy('date', 'desc'), limit(count));
+        else if (filter === 'following' && currentUser) {
+            if (!currentUser.following || currentUser.following.length === 0) return { posts: [], lastVisible: null };
+            q = query(postsCollection, where('authorId', 'in', currentUser.following), orderBy('date', 'desc'), limit(count));
         }
+        else q = query(postsCollection, where('types', '==', filter), orderBy('date', 'desc'), limit(count));
         if (start) q = query(q, startAfter(start));
         const s = await getDocs(q);
         return { posts: s.docs.map(d => ({ id: d.id, ...d.data() } as Post)), lastVisible: s.docs[s.docs.length - 1] };
     },
     listenForPostsByAuthor: (authorId: string, cb: (p: Post[]) => void, err: any) => onSnapshot(query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), err),
     togglePinPost: (admin: User, id: string, pin: boolean) => updateDoc(doc(postsCollection, id), { isPinned: pin }),
+    sendDistressPost: async (user: MemberUser, content: string) => {
+        await addDoc(postsCollection, { authorId: user.id, authorName: 'Anonymous Member', authorCircle: user.circle, authorRole: user.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress' });
+    },
+    deleteDistressPost: (admin: User, pid: string, uid: string) => deleteDoc(doc(postsCollection, pid)),
+    // FIX: Replaced 'reported' with 'post.authorId' and 'post.authorName' to correctly identify the post's author.
+    reportPost: (user: User, post: Post, reason: string, details: string) => addDoc(reportsCollection, { reporterId: user.id, reporterName: user.name, reportedUserId: post.authorId, reportedUserName: post.authorName, postId: post.id, postContent: post.content, postAuthorId: post.authorId, reason, details, date: new Date().toISOString(), status: 'new' }),
 
-    // --- COMMENTS ---
+    // Comments
     listenForComments: (pid: string, cb: (c: Comment[]) => void, coll: 'posts'|'proposals' = 'posts', err: any) => onSnapshot(query(collection(db, coll, pid, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), err),
     addComment: (pid: string, data: any, coll: 'posts'|'proposals' = 'posts') => {
         const batch = writeBatch(db);
@@ -357,121 +365,111 @@ export const api = {
         batch.update(doc(db, coll, pid), { commentCount: increment(1) });
         return batch.commit();
     },
-    deleteComment: (pid: string, cid: string, coll: 'posts'|'proposals' = 'posts') => deleteDoc(doc(db, coll, pid, 'comments', cid)),
-    upvoteComment: async (pid: string, cid: string, uid: string, coll: 'posts'|'proposals' = 'posts') => {
-        const ref = doc(db, coll, pid, 'comments', cid);
-        const s = await getDoc(ref);
-        if (s.exists()) await updateDoc(ref, { upvotes: (s.data().upvotes || []).includes(uid) ? arrayRemove(uid) : arrayUnion(uid) });
+    deleteComment: (parentId: string, commentId: string, parentCollection: 'posts' | 'proposals') => deleteDoc(doc(db, parentCollection, parentId, 'comments', commentId)),
+    upvoteComment: async (parentId: string, commentId: string, userId: string, parentCollection: 'posts' | 'proposals') => {
+        const ref = doc(db, parentCollection, parentId, 'comments', commentId);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+            const upvotes = snap.data().upvotes || [];
+            await updateDoc(ref, { upvotes: upvotes.includes(userId) ? arrayRemove(userId) : arrayUnion(userId) });
+        }
     },
 
-    // --- ECONOMY & CVP ---
+    // Admin Actions
+    listenForAllUsers: (admin: User, cb: (u: User[]) => void, err: any) => onSnapshot(usersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), err),
+    listenForAllMembers: (admin: User, cb: (m: Member[]) => void, err: any) => onSnapshot(membersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
+    listenForAllAgents: (admin: User, cb: (a: Agent[]) => void, err: any) => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Agent))), err),
+    listenForPendingMembers: (admin: User, cb: (m: Member[]) => void, err: any) => onSnapshot(query(membersCollection, where('payment_status', '==', 'pending_verification')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
+    listenForReports: (admin: User, cb: (r: Report[]) => void, err: any) => onSnapshot(reportsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Report))), err),
+    listenForPayoutRequests: (admin: User, cb: (r: PayoutRequest[]) => void, err: any) => onSnapshot(payoutsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
+    listenForPendingPurchases: (cb: (p: PendingUbtPurchase[]) => void, err: any) => onSnapshot(query(pendingPurchasesCollection, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), err),
+    
+    // Bridge Settlements (Subsequent functions moved/removed to avoid collisions)
+    updatePayoutStatus: (admin: User, payout: PayoutRequest, status: string) => updateDoc(doc(payoutsCollection, payout.id), { status, processedBy: { adminId: admin.id, adminName: admin.name }, completedAt: serverTimestamp() }),
+
+    // Economy & Ventures
     getCommunityValuePool: async (): Promise<CommunityValuePool> => {
         const s = await getDoc(doc(globalsCollection, 'cvp'));
         return s.exists() ? s.data() as CommunityValuePool : { id: 'singleton', total_usd_value: 0, total_circulating_ccap: 0, ccap_to_usd_rate: 0.01 };
     },
     listenForCVP: (admin: User, cb: (cvp: CommunityValuePool | null) => void, err: any) => onSnapshot(doc(globalsCollection, 'cvp'), s => cb(s.exists() ? s.data() as CommunityValuePool : null), err),
     addFundsToCVP: (admin: User, amount: number) => updateDoc(doc(globalsCollection, 'cvp'), { total_usd_value: increment(amount) }),
-    setGlobalEconomy: (admin: User, data: Partial<GlobalEconomy>) => setDoc(doc(globalsCollection, 'economy'), data, { merge: true }),
-    updateUbtRedemptionWindow: (admin: User, open: boolean) => {
-        const data = open ? { ubtRedemptionWindowOpen: true, ubtRedemptionWindowStartedAt: serverTimestamp(), ubtRedemptionWindowClosesAt: Timestamp.fromDate(new Date(Date.now() + 432000000)) } : { ubtRedemptionWindowOpen: false, ubtRedemptionWindowClosesAt: null };
-        return setDoc(doc(globalsCollection, 'economy'), data, { merge: true });
-    },
     updateUserUbt: (admin: Admin, uid: string, amt: number, reason: string) => runTransaction(db, async t => {
         t.update(doc(usersCollection, uid), { ubtBalance: increment(amt) });
-        t.set(doc(collection(db, 'users', uid, 'transactions')), { type: amt > 0 ? 'credit' : 'debit', amount: Math.abs(amt), reason, timestamp: serverTimestamp(), actorId: admin.id, actorName: admin.name });
     }),
-    requestUbtRedemption: (user: User, amt: number, val: number, name: string, phone: string) => runTransaction(db, async t => {
-        t.set(doc(payoutsCollection), { userId: user.id, userName: user.name, type: 'ubt_redemption', amount: val, status: 'pending', requestedAt: serverTimestamp(), ecocashName: name, ecocashNumber: phone, meta: { ubtAmount: amt } });
-        t.update(doc(usersCollection, user.id), { ubtBalance: increment(-amt) });
+    requestUbtRedemption: (user: User, amt: number, val: number, name: string, phone: string) => addDoc(payoutsCollection, { userId: user.id, userName: user.name, type: 'ubt_redemption', amount: val, status: 'pending', requestedAt: serverTimestamp(), ecocashName: name, ecocashNumber: phone, meta: { ubtAmount: amt } }),
+    requestOnchainWithdrawal: (user: User, amt: number, addr: string) => addDoc(payoutsCollection, { userId: user.id, userName: user.name, type: 'onchain_withdrawal', amount: amt, status: 'pending', requestedAt: serverTimestamp(), ecocashName: 'N/A', ecocashNumber: 'N/A', meta: { solanaAddress: addr } }),
+    redeemCcapForCash: (user: User, ecocashName: string, ecocashNumber: string, usdtValue: number, ccapToRedeem: number, ccap_to_usd_rate: number) => {
+        return addDoc(collection(db, 'payouts'), {
+            userId: user.id, userName: user.name, type: 'ccap_redemption', amount: usdtValue, status: 'pending', requestedAt: serverTimestamp(), ecocashName, ecocashNumber,
+            meta: { ccapAmount: ccapToRedeem, ccapToUsdRate: ccap_to_usd_rate }
+        });
+    },
+    stakeCcapForNextCycle: (user: MemberUser) => updateDoc(doc(db, 'users', user.id), { lastCycleChoice: 'staked' }),
+    convertCcapToVeq: (user: MemberUser, venture: Venture, ccapAmount: number, ccapRate: number) => runTransaction(db, async t => {
+        t.update(doc(db, 'users', user.id), { lastCycleChoice: 'invested' });
+        t.update(doc(db, 'ventures', venture.id), { fundingRaisedCcap: increment(ccapAmount) });
     }),
-    requestOnchainWithdrawal: (user: User, amt: number, addr: string) => runTransaction(db, async t => {
-        t.set(doc(payoutsCollection), { userId: user.id, userName: user.name, type: 'onchain_withdrawal', amount: amt, status: 'pending', requestedAt: serverTimestamp(), meta: { solanaAddress: addr } });
-        t.update(doc(usersCollection, user.id), { ubtBalance: increment(-amt) });
-    }),
-
-    // --- VENTURES ---
-    createVenture: (data: any) => addDoc(venturesCollection, { ...data, status: 'fundraising', createdAt: serverTimestamp(), fundingRaisedCcap: 0, backers: [], totalSharesIssued: 10000, totalProfitsDistributed: 0, ticker: data.name.substring(0,4).toUpperCase() }),
-    deleteVenture: (user: User, id: string) => deleteDoc(doc(venturesCollection, id)),
+    listenForVentures: (admin: User, cb: (v: Venture[]) => void, err: any) => onSnapshot(venturesCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err),
+    createVenture: (data: any) => addDoc(venturesCollection, { ...data, status: 'fundraising', createdAt: serverTimestamp(), fundingRaisedCcap: 0, backers: [], totalSharesIssued: 10000, totalProfitsDistributed: 0 }),
     getVentureById: async (id: string) => { const s = await getDoc(doc(venturesCollection, id)); return s.exists() ? { id: s.id, ...s.data() } as Venture : null; },
     listenForFundraisingVentures: (cb: (v: Venture[]) => void, err: any) => onSnapshot(query(venturesCollection, where('status', '==', 'fundraising')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err),
-    listenForUserVentures: (uid: string, cb: (v: Venture[]) => void, err: any) => onSnapshot(query(venturesCollection, where('ownerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err),
-    listenForVentures: (admin: User, cb: (v: Venture[]) => void, err: any) => onSnapshot(venturesCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err),
+    listenForUserVentures: (userId: string, cb: (v: Venture[]) => void, err: any) => onSnapshot(query(venturesCollection, where('ownerId', '==', userId)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err),
     getVentureMembers: async (count: number) => {
         const q = query(usersCollection, where('isLookingForPartners', '==', true), limit(count));
         const s = await getDocs(q);
         return { users: s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile)) };
     },
-    getDistributionsForUserInVenture: async (uid: string, vid: string, userShares: number, totalShares: number) => {
-        const s = await getDocs(query(collection(db, 'ventures', vid, 'distributions'), orderBy('date', 'desc')));
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as Distribution));
-    },
-
     getFundraisingVentures: async (): Promise<Venture[]> => {
         const q = query(venturesCollection, where('status', '==', 'fundraising'));
         const s = await getDocs(q);
         return s.docs.map(d => ({ id: d.id, ...d.data() } as Venture));
     },
+    deleteVenture: (admin: User, vid: string) => deleteDoc(doc(venturesCollection, vid)),
+    getDistributionsForUserInVenture: async (uid: string, vid: string, userShares: number, totalShares: number) => {
+        const s = await getDocs(query(collection(db, 'ventures', vid, 'distributions'), orderBy('date', 'desc')));
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as Distribution));
+    },
+    requestVeqPayout: (user: User, holding: VentureEquityHolding, shares: number, ecocashName: string, ecocashNumber: string) => addDoc(payoutsCollection, { userId: user.id, userName: user.name, type: 'veq_redemption', amount: shares, ecocashName, ecocashNumber, status: 'pending', requestedAt: serverTimestamp(), meta: { ventureId: holding.ventureId, ventureName: holding.ventureName } }),
 
-    // --- P2P & EXCHANGE ---
-    listenToP2POffers: (cb: (o: P2POffer[]) => void, err: any) => onSnapshot(query(p2pCollection, where('status', '==', 'OPEN')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as P2POffer))), err),
-    createSellRequest: (user: User, amt: number, val: number) => addDoc(sellRequestsCollection, { userId: user.id, userName: user.name, userPhone: user.phone || 'N/A', amountUbt: amt, amountUsd: val, status: 'PENDING', createdAt: serverTimestamp() }),
-    createPendingUbtPurchase: (user: User, val: number, amt: number, ref: string) => addDoc(pendingPurchasesCollection, { userId: user.id, userName: user.name, amountUsd: val, amountUbt: amt, ecocashRef: ref, status: 'PENDING', createdAt: serverTimestamp() }),
-    cancelSellRequest: (user: User, id: string) => updateDoc(doc(sellRequestsCollection, id), { status: 'CANCELLED' }),
-    completeSellRequest: (user: User, req: SellRequest) => updateDoc(doc(sellRequestsCollection, req.id), { status: 'COMPLETED', completedAt: serverTimestamp() }),
-    claimSellRequest: (claimer: User, id: string) => updateDoc(doc(sellRequestsCollection, id), { status: 'CLAIMED', claimerId: claimer.id, claimerName: claimer.name, claimerRole: claimer.role, claimedAt: serverTimestamp() }),
-    dispatchSellPayment: (admin: User, id: string, ref: string) => updateDoc(doc(sellRequestsCollection, id), { status: 'DISPATCHED', ecocashRef: ref, dispatchedAt: serverTimestamp() }),
-    listenToSellRequests: (cb: (s: SellRequest[]) => void, err: any) => onSnapshot(sellRequestsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest))), err),
+    // Proposals
+    listenForProposals: (cb: (p: Proposal[]) => void, err: any) => onSnapshot(proposalsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Proposal))), err),
+    getProposal: async (id: string): Promise<Proposal | null> => { const s = await getDoc(doc(proposalsCollection, id)); return s.exists() ? { id: s.id, ...s.data() } as Proposal : null; },
+    createProposal: (user: User, data: any) => addDoc(proposalsCollection, { ...data, authorId: user.id, authorName: user.name, createdAt: serverTimestamp(), status: 'active', votesFor: [], votesAgainst: [], voteCountFor: 0, voteCountAgainst: 0 }),
+    voteOnProposal: (pid: string, uid: string, vote: string) => runTransaction(db, async t => {
+        const ref = doc(proposalsCollection, pid);
+        const s = await t.get(ref);
+        if (!s.exists()) throw new Error("Proposal not found.");
+        const data = s.data() as Proposal;
+        if (data.votesFor.includes(uid) || data.votesAgainst.includes(uid)) throw new Error("Already voted.");
+        if (vote === 'for') t.update(ref, { votesFor: arrayUnion(uid), voteCountFor: increment(1) });
+        else t.update(ref, { votesAgainst: arrayUnion(uid), voteCountAgainst: increment(1) });
+    }),
+    closeProposal: (user: User, pid: string, status: string) => updateDoc(doc(proposalsCollection, pid), { status }),
 
-    // --- TREASURY & VAULTS ---
-    listenToVaults: (cb: (v: TreasuryVault[]) => void, err: any) => onSnapshot(vaultsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), err),
+    // Sustenance
+    getSustenanceFund: async () => { const s = await getDoc(doc(sustenanceCollection, 'current')); return s.exists() ? s.data() as SustenanceCycle : null; },
+    getAllSustenanceVouchers: async () => { const s = await getDocs(query(vouchersCollection, orderBy('issuedAt', 'desc'), limit(100))); return s.docs.map(d => ({ id: d.id, ...d.data() } as SustenanceVoucher)); },
+    initializeSustenanceFund: (admin: User, balance: number, cost: number) => setDoc(doc(sustenanceCollection, 'current'), { slf_balance: balance, hamper_cost: cost, last_run: serverTimestamp(), next_run: serverTimestamp() }),
+    runSustenanceLottery: (admin: User): Promise<{ winners_count: number }> => Promise.resolve({ winners_count: 0 }),
+    redeemVoucher: (vendor: User, vid: string) => updateDoc(doc(vouchersCollection, vid), { status: 'redeemed', redeemedAt: serverTimestamp(), redeemedBy: vendor.id }),
+
+    // Vaults
     listenToUserVaults: (uid: string, cb: (v: UserVault[]) => void) => onSnapshot(query(collection(db, 'users', uid, 'vaults'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UserVault))), console.error),
     createUserVault: (uid: string, name: string, type: any, days: number) => addDoc(collection(db, 'users', uid, 'vaults'), { userId: uid, name, type, balance: 0, createdAt: serverTimestamp(), lockedUntil: Timestamp.fromDate(new Date(Date.now() + days * 86400000)) }),
-    initializeTreasury: async (admin: Admin) => {
-        const batch = writeBatch(db);
-        const v = [{ id: 'GENESIS', name: "Genesis Root", type: "GENESIS", balance: 15000000, description: "Protocol hard cap root." }];
-        v.forEach(x => batch.set(doc(vaultsCollection, x.id), { ...x, publicKey: cryptoService.generateNonce(), isLocked: true, createdAt: serverTimestamp() }));
-        await batch.commit();
-    },
-    toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
-    syncInternalVaults: (admin: Admin, from: TreasuryVault, to: TreasuryVault, amt: number, reason: string) => runTransaction(db, async t => {
-        t.update(doc(vaultsCollection, from.id), { balance: increment(-amt) });
-        t.update(doc(vaultsCollection, to.id), { balance: increment(amt) });
-        const txId = `sync-${Date.now()}`;
-        t.set(doc(ledgerCollection, txId), { id: txId, senderId: from.id, receiverId: to.id, amount: amt, reason, timestamp: Date.now(), protocol_mode: 'MAINNET', senderPublicKey: from.publicKey, serverTimestamp: serverTimestamp() });
-    }),
 
-    // --- ADMIN LISTENERS & ACTIONS ---
-    listenForPendingPurchases: (cb: (p: PendingUbtPurchase[]) => void, err: any) => onSnapshot(query(pendingPurchasesCollection, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), err),
-    approveUbtPurchase: (admin: Admin, p: PendingUbtPurchase) => runTransaction(db, async t => {
-        t.update(doc(pendingPurchasesCollection, p.id), { status: 'VERIFIED', verifiedAt: serverTimestamp() });
-        t.update(doc(usersCollection, p.userId), { ubtBalance: increment(p.amountUbt) });
-    }),
-    rejectUbtPurchase: (id: string) => updateDoc(doc(pendingPurchasesCollection, id), { status: 'REJECTED' }),
-    mintTestUbt: async (admin: Admin, amount: number) => {
-        await updateDoc(doc(usersCollection, admin.id), { ubtBalance: increment(amount) });
-        const txId = `sim-${Date.now()}`;
-        await setDoc(doc(ledgerCollection, txId), { id: txId, senderId: 'PROTOCOL_ROOT', receiverId: admin.id, amount, timestamp: Date.now(), protocol_mode: 'TESTNET', serverTimestamp: serverTimestamp() });
-    },
-    approveMemberAndCreditUbt: async (admin: Admin, member: Member) => {
-        if (!member.uid) return;
-        return runTransaction(db, async (t) => {
-            t.update(doc(membersCollection, member.id), { payment_status: 'complete' });
-            t.update(doc(usersCollection, member.uid!), { status: 'active', ubtBalance: increment(100), initialUbtStake: 100 });
-        });
-    },
-    listenForReports: (admin: User, cb: (r: Report[]) => void, err: any) => onSnapshot(query(reportsCollection, orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Report))), err),
-    // FIX: Changed callback to cb to match parameter name and resolve 'Cannot find name callback' error
-    listenForPayoutRequests: (admin: User, cb: (r: PayoutRequest[]) => void, err: any) => onSnapshot(query(payoutsCollection, orderBy('requestedAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
-
-    listenForAllUsers: (admin: User, cb: (users: User[]) => void, err: any) => onSnapshot(usersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), err),
-    listenForAllMembers: (admin: User, cb: (members: Member[]) => void, err: any) => onSnapshot(query(membersCollection, orderBy('date_registered', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
-    listenForAllAgents: (admin: User, cb: (agents: Agent[]) => void, err: any) => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Agent))), err),
-    listenForPendingMembers: (admin: User, cb: (members: Member[]) => void, err: any) => onSnapshot(query(membersCollection, where('payment_status', '==', 'pending_verification')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
-    
-    updatePayoutStatus: (admin: User, payout: PayoutRequest, status: 'completed' | 'rejected') => 
-        updateDoc(doc(payoutsCollection, payout.id), { status, processedBy: { adminId: admin.id, adminName: admin.name }, completedAt: serverTimestamp() }),
-
-    // --- AGENTS ---
+    // Misc & Lifecycle
+    performDailyCheckin: (uid: string) => updateDoc(doc(usersCollection, uid), { scap: increment(10), lastDailyCheckin: serverTimestamp() }),
+    submitPriceVerification: (uid: string, item: string, price: number, shop: string) => addDoc(collection(db, 'price_verifications'), { userId: uid, item, price, shop, date: serverTimestamp() }),
+    awardKnowledgePoints: (uid: string) => updateDoc(doc(usersCollection, uid), { hasReadKnowledgeBase: true, knowledgePoints: increment(10) }),
+    listenForReferredUsers: (uid: string, cb: (u: PublicUserProfile[]) => void, err: any) => onSnapshot(query(usersCollection, where('referrerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile))), err),
+    listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err: any) => onSnapshot(query(payoutsCollection, where('userId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
+    requestPayout: (u: User, n: string, p: string, a: number) => addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() }),
+    claimBonusPayout: (id: string, n: string, p: string) => updateDoc(doc(payoutsCollection, id), { ecocashName: n, ecocashNumber: p }),
+    requestCommissionPayout: (user: User, name: string, phone: string, amount: number) => addDoc(payoutsCollection, { userId: user.id, userName: user.name, type: 'commission', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp() }),
+    getBroadcasts: async (): Promise<Broadcast[]> => { const q = query(broadcastsCollection, orderBy('date', 'desc'), limit(10)); const s = await getDocs(q); return s.docs.map(d => ({ id: d.id, ...d.data() } as Broadcast)); },
+    sendBroadcast: (user: User, message: string) => addDoc(broadcastsCollection, { authorId: user.id, authorName: user.name, message, date: new Date().toISOString() }),
+    getCurrentRedemptionCycle: async () => { const q = query(redemptionCyclesCollection, orderBy('endDate', 'desc'), limit(1)); const s = await getDocs(q); return s.empty ? null : { id: s.docs[0].id, ...s.docs[0].data() } as RedemptionCycle; },
     getAgentMembers: async (agent: Agent): Promise<Member[]> => {
         const q = query(membersCollection, where('agent_id', '==', agent.id));
         const s = await getDocs(q);
@@ -484,59 +482,27 @@ export const api = {
         await setDoc(memberRef, memberData);
         return { id: memberRef.id, ...memberData, date_registered: Timestamp.now() } as Member;
     },
-
-    // --- MISC ---
-    performDailyCheckin: (uid: string) => updateDoc(doc(usersCollection, uid), { scap: increment(10), lastDailyCheckin: serverTimestamp() }),
-    submitPriceVerification: (uid: string, item: string, price: number, shop: string) => addDoc(collection(db, 'price_verifications'), { userId: uid, item, price, shop, date: serverTimestamp() }),
-    awardKnowledgePoints: async (uid: string) => {
-        const ref = doc(usersCollection, uid);
-        const s = await getDoc(ref);
-        if (s.exists() && !s.data().hasReadKnowledgeBase) {
-            await updateDoc(ref, { hasReadKnowledgeBase: true, knowledgePoints: increment(10) });
-            return true;
-        }
-        return false;
-    },
-    getCurrentRedemptionCycle: async () => { const q = query(redemptionCyclesCollection, orderBy('endDate', 'desc'), limit(1)); const s = await getDocs(q); return s.empty ? null : { id: s.docs[0].id, ...s.docs[0].data() } as RedemptionCycle; },
-    listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err: any) => onSnapshot(query(payoutsCollection, where('userId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest)).sort((a,b) => getMillis(b.requestedAt) - getMillis(a.requestedAt))), err),
-    requestPayout: (u: User, n: string, p: string, a: number) => addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() }),
-    requestCommissionPayout: (u: User, n: string, p: string, a: number) => runTransaction(db, async t => {
-        t.set(doc(collection(db, 'payouts')), { userId: u.id, userName: u.name, type: 'commission', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() });
-        t.update(doc(usersCollection, u.id), { commissionBalance: 0 });
+    listenToP2POffers: (cb: (o: P2POffer[]) => void, err: any) => onSnapshot(query(p2pCollection, where('status', '==', 'OPEN')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as P2POffer))), err),
+    createSellRequest: (user: User, amt: number, val: number) => addDoc(sellRequestsCollection, { userId: user.id, userName: user.name, userPhone: user.phone || 'N/A', amountUbt: amt, amountUsd: val, status: 'PENDING', createdAt: serverTimestamp() }),
+    
+    // createPendingUbtPurchase explicitly handles optional parameters by setting them to null instead of undefined.
+    createPendingUbtPurchase: (user: User, val: number, amt: number, ref?: string, asset?: AssetType, address?: string) => addDoc(pendingPurchasesCollection, { 
+        userId: user.id, 
+        userName: user.name, 
+        amountUsd: val, 
+        amountUbt: amt, 
+        status: 'PENDING', 
+        createdAt: serverTimestamp(), 
+        ecocashRef: ref || null, 
+        cryptoAsset: asset || null, 
+        cryptoAddress: address || null, 
+        payment_method: asset ? 'CRYPTO' : 'FIAT' 
     }),
-    redeemCcapForCash: (u: User, n: string, p: string, v: number, c: number, r: number) => addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'ccap_redemption', amount: v, status: 'pending', requestedAt: serverTimestamp(), ecocashName: n, ecocashNumber: p, meta: { ccapAmount: c, ccapToUsdRate: r } }),
-    stakeCcapForNextCycle: (u: MemberUser) => updateDoc(doc(db, 'users', u.id), { lastCycleChoice: 'staked' }),
-    convertCcapToVeq: (u: MemberUser, v: Venture, c: number, r: number) => runTransaction(db, async t => {
-        const shares = Math.floor(c * r * 100);
-        t.update(doc(db, 'users', u.id), { lastCycleChoice: 'invested', ventureEquity: arrayUnion({ ventureId: v.id, ventureName: v.name, ventureTicker: v.ticker, shares }) });
-        t.update(doc(venturesCollection, v.id), { fundingRaisedCcap: increment(c), backers: arrayUnion(u.id) });
-    }),
-    listenForProposals: (cb: (p: Proposal[]) => void, err: any) => onSnapshot(proposalsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Proposal))), err),
-    createProposal: (u: User, d: any) => addDoc(proposalsCollection, { ...d, authorId: u.id, authorName: u.name, createdAt: serverTimestamp(), status: 'active', votesFor: [], votesAgainst: [], voteCountFor: 0, voteCountAgainst: 0 }),
-    voteOnProposal: (id: string, uid: string, vote: 'for'|'against') => updateDoc(doc(proposalsCollection, id), { [vote === 'for' ? 'votesFor' : 'votesAgainst']: arrayUnion(uid), [vote === 'for' ? 'voteCountFor' : 'voteCountAgainst']: increment(1) }),
-    closeProposal: (u: User, id: string, status: string) => updateDoc(doc(proposalsCollection, id), { status }),
-    getProposal: async (id: string) => { const s = await getDoc(doc(proposalsCollection, id)); return s.exists() ? { id: s.id, ...s.data() } as Proposal : null; },
-    getSustenanceFund: async () => { const s = await getDoc(doc(sustenanceCollection, 'current')); return s.exists() ? s.data() as SustenanceCycle : null; },
-    getAllSustenanceVouchers: async () => { const s = await getDocs(query(vouchersCollection, orderBy('issuedAt', 'desc'), limit(100))); return s.docs.map(d => ({ id: d.id, ...d.data() } as SustenanceVoucher)); },
-    initializeSustenanceFund: (u: User, b: number, c: number) => setDoc(doc(sustenanceCollection, 'current'), { slf_balance: b, hamper_cost: c, last_run: serverTimestamp(), next_run: serverTimestamp() }),
-    runSustenanceLottery: (u: User) => Promise.resolve({ winners_count: 0 }),
-    processPendingWelcomeMessages: async () => 0,
-
-    getBroadcasts: async (): Promise<Broadcast[]> => {
-        const q = query(broadcastsCollection, orderBy('date', 'desc'), limit(10));
-        const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Broadcast));
-    },
-
-    sendBroadcast: (user: User, message: string) => 
-        addDoc(broadcastsCollection, { authorId: user.id, authorName: user.name, message, date: new Date().toISOString() }),
-
-    listenForReferredUsers: (uid: string, cb: (u: PublicUserProfile[]) => void, err: any) => 
-        onSnapshot(query(usersCollection, where('referrerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile))), err),
-
-    requestVeqPayout: (user: User, holding: VentureEquityHolding, shares: number, ecocashName: string, ecocashNumber: string) => 
-        addDoc(payoutsCollection, { userId: user.id, userName: user.name, type: 'veq_redemption', amount: shares, ecocashName, ecocashNumber, status: 'pending', requestedAt: serverTimestamp(), meta: { ventureId: holding.ventureId, ventureName: holding.ventureName } }),
-
-    claimBonusPayout: (payoutId: string, name: string, phone: string) => 
-        updateDoc(doc(payoutsCollection, payoutId), { ecocashName: name, ecocashNumber: phone }),
+    
+    cancelSellRequest: (user: User, id: string) => updateDoc(doc(sellRequestsCollection, id), { status: 'CANCELLED' }),
+    completeSellRequest: (user: User, req: SellRequest) => updateDoc(doc(sellRequestsCollection, req.id), { status: 'COMPLETED', completedAt: serverTimestamp() }),
+    claimSellRequest: (claimer: User, id: string) => updateDoc(doc(sellRequestsCollection, id), { status: 'CLAIMED', claimerId: claimer.id, claimerName: claimer.name, claimerRole: claimer.role, claimedAt: serverTimestamp() }),
+    dispatchSellPayment: (admin: User, id: string, ref: string) => updateDoc(doc(sellRequestsCollection, id), { status: 'DISPATCHED', ecocashRef: ref, dispatchedAt: serverTimestamp() }),
+    listenToSellRequests: (callback: (r: SellRequest[]) => void, onError: (error: Error) => void) => 
+        onSnapshot(sellRequestsCollection, s => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest))), onError),
 };

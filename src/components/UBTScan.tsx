@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import QRCode from 'qrcode';
 import { Html5QrcodeScanner } from 'html5-qrcode';
@@ -158,6 +159,7 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
             // Use a safer ID generation for compatibility
             const txId = Date.now().toString(36) + Math.random().toString(36).substring(2);
             
+            // FIX: Added missing properties to UbtTransaction object
             const transaction: UbtTransaction = {
                 id: txId, 
                 senderId: currentUser.id,
@@ -166,7 +168,10 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
                 timestamp: timestamp,
                 nonce: nonce,
                 signature: signature,
-                hash: payloadToSign // Send the payload string for verification
+                hash: payloadToSign,
+                senderPublicKey: currentUser.publicKey || "",
+                parentHash: 'GENESIS_SCAN',
+                protocol_mode: 'MAINNET'
             };
 
             // 4. Sync to Server (The "Node")

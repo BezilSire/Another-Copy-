@@ -82,6 +82,7 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
             const signature = cryptoService.signTransaction(payloadToSign);
             const txId = Date.now().toString(36) + Math.random().toString(36).substring(2);
             
+            // FIX: Added missing properties to UbtTransaction object
             const transaction: UbtTransaction = {
                 id: txId,
                 senderId: currentUser.id,
@@ -90,7 +91,10 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
                 timestamp: timestamp,
                 nonce: nonce,
                 signature: signature,
-                hash: payloadToSign
+                hash: payloadToSign,
+                senderPublicKey: currentUser.publicKey || "",
+                parentHash: 'GENESIS_P2P',
+                protocol_mode: 'MAINNET'
             };
 
             await api.processUbtTransaction(transaction);

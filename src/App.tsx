@@ -29,21 +29,66 @@ import { UbtVerificationPage } from './components/UbtVerificationPage';
 import { usePushNotifications } from './hooks/usePushNotifications';
 import { NotificationPermissionBanner } from './components/NotificationPermissionBanner';
 import { RadarModal } from './components/RadarModal';
+import { UBTScan } from './components/UBTScan';
+import { LogoIcon } from './components/icons/LogoIcon';
+import { LoaderIcon } from './components/icons/LoaderIcon';
+import { PinVaultLogin } from './components/PinVaultLogin';
+import { RecoveryProtocol } from './components/RecoveryProtocol';
+import { cryptoService } from './services/cryptoService';
 
+const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
+  const [logs, setLogs] = useState<string[]>([]);
+  const sequence = [
+    "> INITIALIZING UBUNTIUM OS...",
+    "> LOADING IDENTITY_VAULT...",
+    "> SYNC GLOBAL_LEDGER... [ OK ]",
+    "> ESTABLISHING ENCRYPTED TUNNEL...",
+    "> PROTOCOL HANDSHAKE READY.",
+    "> ACCESS GRANTED."
+  ];
 
-type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge' | 'wallet';
+  useEffect(() => {
+    let i = 0;
+    const interval = setInterval(() => {
+      if (i < sequence.length) {
+        setLogs(prev => [...prev, sequence[i]]);
+        i++;
+      } else {
+        clearInterval(interval);
+        setTimeout(onComplete, 150);
+      }
+    }, 120); 
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <div className="fixed inset-0 bg-black z-[200] flex flex-col items-center justify-center p-8 font-mono text-brand-gold">
+      <div className="w-24 h-24 mb-12 relative">
+        <LogoIcon className="w-full h-full text-brand-gold animate-pulse" />
+        <div className="absolute inset-0 border border-brand-gold/10 rounded-full animate-ping scale-150 opacity-20"></div>
+      </div>
+      <div className="w-full max-w-xs space-y-2 border-l border-brand-gold/20 pl-6">
+        {logs.map((log, idx) => (
+          <div key={idx} className="text-[10px] tracking-widest font-black uppercase text-brand-gold/90">{log}</div>
+        ))}
+        <div className="w-2.5 h-3.5 bg-brand-gold animate-terminal-cursor mt-2 shadow-[0_0_10px_#D4AF37]"></div>
+      </div>
+    </div>
+  );
+};
 
 const App: React.FC = () => {
-  const { currentUser, isLoadingAuth, logout, updateUser, firebaseUser } = useAuth();
+  const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser, isSovereignLocked, unlockSovereignSession } = useAuth();
+  const [isBooting, setIsBooting] = useState(true);
+  const [isRecovering, setIsRecovering] = useState(false);
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const { addToast } = useToast();
   const isOnline = useOnlineStatus();
-  const [hasSyncedOnConnect, setHasSyncedOnConnect] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
 
   // UI State
-  const [agentView, setAgentView] = useState<AgentView>('dashboard');
+  const [agentView, setAgentView] = useState<any>('dashboard');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<Conversation | 'main' | null>(null);
@@ -51,6 +96,7 @@ const App: React.FC = () => {
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [isNewGroupModalOpen, setIsNewGroupModalOpen] = useState(false);
   const [isRadarOpen, setIsRadarOpen] = useState(false);
+  const [isScanOpen, setIsScanOpen] = useState(false);
 
   useProfileCompletionReminder(currentUser);
   const { permission, requestPermission } = usePushNotifications(currentUser);
@@ -62,53 +108,16 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    const fetchBroadcasts = async () => {
-      try {
-        const initialBroadcasts = await api.getBroadcasts();
-        setBroadcasts(initialBroadcasts);
-      } catch (error) {
-        addToast('Could not load broadcasts.', 'error');
-      }
-    };
-
     if (currentUser) {
-        fetchBroadcasts();
+        api.getBroadcasts().then(setBroadcasts).catch(() => {});
         const unsubNotifications = api.listenForNotifications(currentUser.id, (notifications) => {
             setUnreadNotificationCount(notifications.filter(n => !n.read).length);
-            
-            notifications.forEach(notif => {
-                if (notif.type === 'NEW_CHAT' && !notif.read) {
-                    const convoId = notif.link;
-                    if (convoId && !currentUser.conversationIds?.includes(convoId)) {
-                        console.log(`Discovered new chat ${convoId}, adding to user profile.`);
-                        updateUser({ conversationIds: arrayUnion(convoId) as any });
-                        api.markNotificationAsRead(currentUser.id, notif.id);
-                    }
-                }
-            });
-
         }, (error) => {
-            console.error('Error listening for notifications:', error);
+            console.error('Notification error:', error);
         });
         return () => unsubNotifications();
     }
-  }, [currentUser, addToast, updateUser]);
-
-  useEffect(() => {
-    if (isOnline && !hasSyncedOnConnect) {
-      addToast("You're back online! Syncing data...", "info");
-      if (currentUser?.role === 'admin') {
-        api.processPendingWelcomeMessages().then(count => {
-          if (count > 0) {
-            addToast(`Successfully generated ${count} welcome message(s) for newly synced members.`, 'success');
-          }
-        });
-      }
-      setHasSyncedOnConnect(true);
-    } else if (!isOnline) {
-      setHasSyncedOnConnect(false);
-    }
-  }, [isOnline, hasSyncedOnConnect, addToast, currentUser]);
+  }, [currentUser]);
 
   const requestLogout = () => setIsLogoutConfirmOpen(true);
   const confirmLogout = async () => {
@@ -118,116 +127,43 @@ const App: React.FC = () => {
   
   const handleOpenChat = (target?: Conversation | 'main') => setChatTarget(target || 'main');
   
-  const handleStartChatFromProfile = async (targetUserId: string) => {
-    if (!currentUser) return;
-    try {
-        const targetUser = await api.getPublicUserProfile(targetUserId);
-        if (!targetUser) {
-            addToast("Could not find user to chat with.", "error");
-            return;
-        }
-        const newConvo = await api.startChat(currentUser, targetUser);
-        setViewingProfileId(null); // Close profile view
-        handleOpenChat(newConvo); // Open chat view
-    } catch (error) {
-        addToast("Failed to start chat.", "error");
-        console.error("Failed to start chat from profile:", error);
-    }
-  };
-  
-  const handleNewChatSelect = (newConversation: Conversation) => {
-    setChatTarget(newConversation);
-    setIsNewChatModalOpen(false);
-  };
-
   const handleViewProfile = (userId: string | null) => {
-    setChatTarget(null); // Close chat if open
+    setChatTarget(null);
     setViewingProfileId(userId);
   };
   
-  const handleProfileComplete = async (updatedData: Partial<User>) => {
-    if (!currentUser) return;
-
-    if (currentUser.role !== 'member') {
-        const updatePayload: Partial<User> = {
-            name_lowercase: currentUser.name.toLowerCase(),
-            phone: updatedData.phone,
-            address: updatedData.address,
-            bio: updatedData.bio,
-            id_card_number: updatedData.id_card_number,
-            isProfileComplete: true,
-        };
-        if (currentUser.role === 'agent') {
-            updatePayload.circle = updatedData.circle;
-        }
-        await updateUser({ ...updatePayload, isCompletingProfile: true });
-        addToast('Profile complete! Welcome to the commons.', 'success');
-        return;
-    }
-
-    const memberUser = currentUser as MemberUser;
-    if (!memberUser.member_id) {
-        addToast("Cannot complete profile: Member ID is missing.", "error");
-        return;
-    }
-
-    const skillsAsArray = updatedData.skills || [];
-    const interestsAsArray = updatedData.interests || [];
-    const passionsAsArray = updatedData.passions || [];
-    
-    const skillsLowercase = skillsAsArray.map(s => s.toLowerCase());
-
-    const userUpdateData: Partial<User> = {
-        name_lowercase: currentUser.name.toLowerCase(),
-        phone: updatedData.phone,
-        address: updatedData.address,
-        bio: updatedData.bio,
-        profession: updatedData.profession,
-        skills: skillsAsArray,
-        interests: interestsAsArray,
-        passions: passionsAsArray,
-        skills_lowercase: skillsLowercase,
-        gender: updatedData.gender,
-        age: updatedData.age,
-        circle: updatedData.circle,
-        id_card_number: updatedData.id_card_number,
-        isLookingForPartners: updatedData.isLookingForPartners,
-        lookingFor: updatedData.lookingFor,
-        businessIdea: updatedData.businessIdea,
-        isProfileComplete: true,
-    };
-
-    const memberUpdateData: Partial<Member> = {
-        phone: updatedData.phone,
-        address: updatedData.address,
-        bio: updatedData.bio,
-        profession: updatedData.profession,
-        skills: skillsAsArray,
-        interests: interestsAsArray,
-        passions: passionsAsArray,
-        gender: updatedData.gender,
-        age: updatedData.age,
-        circle: updatedData.circle,
-        national_id: updatedData.id_card_number,
-        isLookingForPartners: updatedData.isLookingForPartners,
-        lookingFor: updatedData.lookingFor,
-        businessIdea: updatedData.businessIdea,
-        skills_lowercase: skillsLowercase,
-    };
-    
-    try {
-        await api.updateMemberAndUserProfile(memberUser.id, memberUser.member_id, userUpdateData, memberUpdateData);
-        addToast('Profile complete! Welcome to the commons.', 'success');
-    } catch (error: any) {
-        console.error("Profile completion failed:", error);
-        const errorMessage = error.message || 'Failed to update profile. Please try again.';
-        addToast(errorMessage, 'error');
-    }
-  };
-
   const renderContent = () => {
-    if (isLoadingAuth) {
-      return <div className="text-center p-10 text-gray-400">Loading...</div>;
+    if (isLoadingAuth || isProcessingAuth) {
+      return (
+        <div className="fixed inset-0 bg-black flex flex-col items-center justify-center p-10 font-mono">
+            <LoaderIcon className="h-8 w-8 animate-spin text-brand-gold mb-4 opacity-50" />
+            <div className="text-[10px] uppercase tracking-[0.6em] text-brand-gold/60 animate-pulse">Syncing Node Identity...</div>
+        </div>
+      );
+    }
+
+    // Sovereign Gate
+    if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
+        if (isRecovering) {
+            return (
+                <div className="min-h-screen bg-black flex flex-col justify-center items-center px-4">
+                    <RecoveryProtocol 
+                        onBack={() => setIsRecovering(false)} 
+                        onComplete={async (m, p) => { 
+                            await cryptoService.saveVault({mnemonic: m}, p); 
+                            setIsRecovering(false); 
+                            addToast("Vault Reset Successful.", "success");
+                        }} 
+                    />
+                </div>
+            );
+        }
+        return (
+            <div className="min-h-screen bg-black flex flex-col justify-center items-center px-4">
+                <div className="absolute inset-0 blueprint-grid opacity-[0.05] pointer-events-none"></div>
+                <PinVaultLogin onUnlock={unlockSovereignSession} onReset={() => setIsRecovering(true)} />
+            </div>
+        );
     }
 
     if (!currentUser) {
@@ -253,7 +189,14 @@ const App: React.FC = () => {
           userId={viewingProfileId}
           currentUser={currentUser}
           onBack={() => setViewingProfileId(null)}
-          onStartChat={handleStartChatFromProfile}
+          onStartChat={async (id) => {
+             const target = await api.getPublicUserProfile(id);
+             if (target) {
+               const convo = await api.startChat(currentUser, target);
+               setViewingProfileId(null);
+               setChatTarget(convo);
+             }
+          }}
           onViewProfile={handleViewProfile}
           isAdminView={currentUser.role === 'admin'}
         />
@@ -269,7 +212,7 @@ const App: React.FC = () => {
     }
 
     if (!currentUser.isProfileComplete) {
-        return <div className="p-4 sm:p-6 lg:p-8"><CompleteProfilePage user={currentUser} onProfileComplete={handleProfileComplete} /></div>;
+        return <div className="p-4 sm:p-6 lg:p-8"><CompleteProfilePage user={currentUser} onProfileComplete={() => {}} /></div>;
     }
     
     if (currentUser.role === 'admin') {
@@ -314,7 +257,6 @@ const App: React.FC = () => {
       );
     }
     
-    // Default to member dashboard
     return (
         <div className="p-4 sm:p-6 lg:p-8">
             <MemberDashboard 
@@ -327,58 +269,77 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 text-white dark">
-      <Header 
-        user={currentUser} 
-        onLogout={requestLogout} 
-        onViewProfile={handleViewProfile} 
-        onChatClick={() => handleOpenChat('main')}
-        onRadarClick={() => setIsRadarOpen(true)} 
-      />
-      {renderContent()}
+    <div className="min-h-screen bg-black text-white selection:bg-brand-gold selection:text-black">
+      {isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
       
-      {currentUser && (
-         <NotificationPermissionBanner permission={permission} onRequestPermission={requestPermission} />
-      )}
+      {!isBooting && (
+          <div className="animate-fade-in">
+            {!isSovereignLocked && currentUser && (
+                <Header 
+                    user={currentUser} 
+                    onLogout={requestLogout} 
+                    onViewProfile={handleViewProfile} 
+                    onChatClick={() => handleOpenChat('main')}
+                    onRadarClick={() => setIsRadarOpen(true)} 
+                    onScanClick={() => setIsScanOpen(true)}
+                />
+            )}
+            {renderContent()}
+            
+            {currentUser && !isSovereignLocked && (
+                <NotificationPermissionBanner permission={permission} onRequestPermission={requestPermission} />
+            )}
 
-      {currentUser && isRadarOpen && (
-        <RadarModal 
-            isOpen={isRadarOpen}
-            onClose={() => setIsRadarOpen(false)}
-            currentUser={currentUser}
-            onViewProfile={handleViewProfile}
-            onStartChat={handleStartChatFromProfile}
-        />
-      )}
+            {currentUser && isRadarOpen && (
+                <RadarModal 
+                    isOpen={isRadarOpen}
+                    onClose={() => setIsRadarOpen(false)}
+                    currentUser={currentUser}
+                    onViewProfile={handleViewProfile}
+                    onStartChat={async (id) => {
+                    const target = await api.getPublicUserProfile(id);
+                    if (target) {
+                        const convo = await api.startChat(currentUser, target);
+                        setIsRadarOpen(false);
+                        setChatTarget(convo);
+                    }
+                    }}
+                />
+            )}
 
-      {currentUser && isNewChatModalOpen && (
-        <MemberSearchModal 
-            isOpen={isNewChatModalOpen} 
-            onClose={() => setIsNewChatModalOpen(false)}
-            currentUser={currentUser}
-            onSelectUser={handleNewChatSelect}
-        />
+            {currentUser && isScanOpen && (
+                <UBTScan
+                    currentUser={currentUser}
+                    onTransactionComplete={() => {}}
+                    onClose={() => setIsScanOpen(false)}
+                />
+            )}
+
+            {currentUser && isNewChatModalOpen && (
+                <MemberSearchModal 
+                    isOpen={isNewChatModalOpen} 
+                    onClose={() => setIsNewChatModalOpen(false)}
+                    currentUser={currentUser}
+                    onSelectUser={(convo) => {
+                    setChatTarget(convo);
+                    setIsNewChatModalOpen(false);
+                    }}
+                />
+            )}
+            
+            <ToastContainer />
+            <AppInstallBanner />
+            <AndroidApkBanner />
+            <ConfirmationDialog
+                isOpen={isLogoutConfirmOpen}
+                onClose={() => setIsLogoutConfirmOpen(false)}
+                onConfirm={confirmLogout}
+                title="Disconnect Node"
+                message="Terminate secure session and exit the sovereign protocol?"
+                confirmButtonText="Terminate"
+            />
+          </div>
       )}
-      
-      {currentUser && isNewGroupModalOpen && (
-        <CreateGroupModal
-            isOpen={isNewGroupModalOpen}
-            onClose={() => setIsNewGroupModalOpen(false)}
-            currentUser={currentUser}
-        />
-      )}
-      
-      <ToastContainer />
-      <AppInstallBanner />
-      <AndroidApkBanner />
-       <ConfirmationDialog
-        isOpen={isLogoutConfirmOpen}
-        onClose={() => setIsLogoutConfirmOpen(false)}
-        onConfirm={confirmLogout}
-        title="Confirm Logout"
-        message="Are you sure you want to log out?"
-        confirmButtonText="Logout"
-      />
     </div>
   );
 };

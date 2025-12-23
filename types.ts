@@ -1,9 +1,11 @@
+
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
 export type UserStatus = 'active' | 'pending' | 'suspended' | 'ousted';
 export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress' | 'foryou' | 'following';
 export type ProtocolMode = 'MAINNET' | 'TESTNET';
+export type AssetType = 'SOL' | 'USDT' | 'USDC';
 
 export interface User {
   id: string;
@@ -90,8 +92,8 @@ export interface UbtTransaction {
     senderPublicKey: string;
     parentHash: string;
     status?: 'pending' | 'verified' | 'failed';
-    type?: 'P2P_HANDSHAKE' | 'REDEMPTION' | 'SYSTEM_MINT' | 'VAULT_SYNC' | 'SIMULATION_MINT';
-    protocol_mode: ProtocolMode; // MAINNET or TESTNET
+    type?: 'P2P_HANDSHAKE' | 'REDEMPTION' | 'SYSTEM_MINT' | 'VAULT_SYNC' | 'SIMULATION_MINT' | 'FIAT_BRIDGE' | 'CRYPTO_BRIDGE';
+    protocol_mode: ProtocolMode; 
 }
 
 export interface Agent extends User {
@@ -405,6 +407,9 @@ export interface GlobalEconomy {
     ubtRedemptionWindowClosesAt?: Timestamp;
     total_ubt_supply?: number;
     ubt_in_cvp?: number;
+    system_sol_address?: string;
+    system_usdt_address?: string;
+    system_usdc_address?: string;
 }
 
 export interface Transaction {
@@ -451,8 +456,11 @@ export interface PendingUbtPurchase {
     userName: string;
     amountUsd: number;
     amountUbt: number;
-    ecocashRef: string;
-    status: 'PENDING' | 'VERIFIED' | 'REJECTED';
+    ecocashRef?: string; // For Fiat
+    cryptoAsset?: AssetType; // For Crypto
+    cryptoAddress?: string; // Generated child-address for user
+    payment_method: 'FIAT' | 'CRYPTO';
+    status: 'PENDING' | 'AWAITING_CONFIRMATION' | 'VERIFIED' | 'REJECTED';
     createdAt: Timestamp;
     verifiedAt?: Timestamp;
 }

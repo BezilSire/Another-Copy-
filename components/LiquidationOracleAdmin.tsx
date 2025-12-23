@@ -23,8 +23,9 @@ export const LiquidationOracleAdmin: React.FC<LiquidationOracleAdminProps> = ({ 
         try {
             await api.claimSellRequest(adminUser, requestId);
             addToast("Protocol claimed by Treasury.", "success");
-        } catch (e) {
-            addToast("Claim failed.", "error");
+        } catch (e: any) {
+            console.error("Claim error:", e);
+            addToast(`AUTHORIZATION FAILED: ${e.message || 'Protocol failure.'}`, "error");
         } finally {
             setProcessingId(null);
         }
@@ -40,8 +41,9 @@ export const LiquidationOracleAdmin: React.FC<LiquidationOracleAdminProps> = ({ 
         try {
             await api.dispatchSellPayment(adminUser, requestId, ref);
             addToast("Funds dispatched from Treasury. Awaiting member verify.", "success");
-        } catch (e) {
-            addToast("Dispatch failed.", "error");
+        } catch (e: any) {
+            console.error("Dispatch error:", e);
+            addToast(`SETTLEMENT FAILED: ${e.message || 'Protocol failure.'}`, "error");
         } finally {
             setProcessingId(null);
         }
@@ -85,7 +87,7 @@ export const LiquidationOracleAdmin: React.FC<LiquidationOracleAdminProps> = ({ 
                                 <button 
                                     onClick={() => handleClaim(req.id)}
                                     disabled={!!processingId}
-                                    className="w-full px-8 py-4 bg-slate-900 border border-brand-gold/20 hover:border-brand-gold text-white font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg"
+                                    className="w-full px-8 py-4 bg-slate-900 border border-brand-gold/20 hover:border-brand-gold text-white font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-lg disabled:opacity-50"
                                 >
                                     {processingId === req.id ? <LoaderIcon className="h-4 w-4 animate-spin"/> : "Claim as Treasury"}
                                 </button>
@@ -101,7 +103,7 @@ export const LiquidationOracleAdmin: React.FC<LiquidationOracleAdminProps> = ({ 
                                     <button 
                                         onClick={() => handleDispatch(req.id)}
                                         disabled={!!processingId}
-                                        className="w-full py-4 bg-red-600 hover:bg-red-500 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2"
+                                        className="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all shadow-lg flex items-center justify-center gap-2 disabled:opacity-50"
                                     >
                                         {processingId === req.id ? <LoaderIcon className="h-4 w-4 animate-spin"/> : "Settle & Notify"}
                                     </button>

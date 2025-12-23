@@ -4,8 +4,9 @@ import { Timestamp } from 'firebase/firestore';
 export type UserRole = 'member' | 'agent' | 'admin';
 export type UserStatus = 'active' | 'pending' | 'suspended' | 'ousted';
 export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress' | 'foryou' | 'following';
+export type ProtocolMode = 'MAINNET' | 'TESTNET';
+export type AssetType = 'SOL' | 'USDT' | 'USDC';
 
-// Base User
 export interface User {
   id: string;
   name: string;
@@ -48,20 +49,53 @@ export interface User {
   stakedCcap?: number;
   currentCycleCcap?: number;
   lastCycleChoice?: 'redeemed' | 'staked' | 'invested';
-  name_lowercase?: string; // For case-insensitive search
-  skills_lowercase?: string[]; // For case-insensitive search
-  ubtBalance?: number; // UBT Wallet Balance
-  initialUbtStake?: number; // The initial UBT stake for verification
-  fcmToken?: string; // Firebase Cloud Messaging Token
-  publicKey?: string; // Ed25519 Public Key
-  
-  // Social & Network
-  followers?: string[]; // Array of User IDs
-  following?: string[]; // Array of User IDs
-  socialLinks?: { title: string; url: string }[]; // Max 4 links
+  name_lowercase?: string;
+  skills_lowercase?: string[];
+  ubtBalance?: number; // Mirror of Hot Wallet
+  initialUbtStake?: number;
+  fcmToken?: string;
+  publicKey?: string;
+  followers?: string[];
+  following?: string[];
+  socialLinks?: { title: string; url: string }[];
 }
 
-// Specific User Roles
+export interface UserVault {
+    id: string;
+    userId: string;
+    name: string;
+    balance: number;
+    type: 'HOT' | 'LOCKED' | 'BUSINESS';
+    lockedUntil?: Timestamp;
+    createdAt: Timestamp;
+}
+
+export interface TreasuryVault {
+    id: string;
+    name: string;
+    description: string;
+    balance: number;
+    publicKey: string;
+    type: 'GENESIS' | 'SUSTENANCE' | 'DISTRESS' | 'VENTURE' | 'FLOAT';
+    isLocked: boolean;
+}
+
+export interface UbtTransaction {
+    id: string;
+    senderId: string;
+    receiverId: string;
+    amount: number;
+    timestamp: number;
+    nonce: string;
+    signature: string;
+    hash: string;
+    senderPublicKey: string;
+    parentHash: string;
+    status?: 'pending' | 'verified' | 'failed';
+    type?: 'P2P_HANDSHAKE' | 'REDEMPTION' | 'SYSTEM_MINT' | 'VAULT_SYNC' | 'SIMULATION_MINT' | 'FIAT_BRIDGE' | 'CRYPTO_BRIDGE';
+    protocol_mode: ProtocolMode; 
+}
+
 export interface Agent extends User {
   role: 'agent';
   agent_code: string;
@@ -80,7 +114,6 @@ export interface Admin extends User {
   role: 'admin';
 }
 
-// From 'members' collection
 export interface Member {
   id: string;
   full_name: string;
@@ -94,10 +127,9 @@ export interface Member {
   date_registered: Timestamp;
   welcome_message: string;
   membership_card_id: string;
-  uid?: string; // Link to user ID in 'users' collection
-  is_duplicate_email?: boolean;
-  status?: UserStatus; // Denormalized from User profile
-  distress_calls_available?: number; // Denormalized
+  uid?: string;
+  status?: UserStatus;
+  distress_calls_available?: number;
   address?: string;
   national_id?: string;
   bio?: string;
@@ -111,10 +143,10 @@ export interface Member {
   isLookingForPartners?: boolean;
   lookingFor?: string[];
   businessIdea?: string;
-  skills_lowercase?: string[]; // For case-insensitive search
+  skills_lowercase?: string[];
+  is_duplicate_email?: boolean;
 }
 
-// For registering a new member
 export interface NewMember {
   full_name: string;
   phone: string;
@@ -130,16 +162,14 @@ export interface NewPublicMemberData {
     referralCode?: string;
 }
 
-// Broadcasts
 export interface Broadcast {
   id: string;
   authorId: string;
   authorName: string;
   message: string;
-  date: string; // ISO string
+  date: string;
 }
 
-// Posts
 export interface Post {
   id: string;
   authorId: string;
@@ -148,13 +178,13 @@ export interface Post {
   authorRole: UserRole;
   authorInterests?: string[];
   content: string;
-  date: string; // ISO string
+  date: string;
   upvotes: string[];
   types: 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress';
   commentCount?: number;
   repostCount?: number;
   isPinned?: boolean;
-  requiredSkills?: string[]; // For 'opportunity' posts to match collaborators
+  requiredSkills?: string[];
   repostedFrom?: {
     authorId: string;
     authorName: string;
@@ -164,7 +194,6 @@ export interface Post {
   }
 }
 
-// Comments
 export interface Comment {
     id: string;
     parentId: string;
@@ -175,7 +204,6 @@ export interface Comment {
     timestamp: Timestamp;
 }
 
-// Reports
 export interface Report {
     id: string;
     reporterId: string;
@@ -187,11 +215,10 @@ export interface Report {
     postAuthorId?: string;
     reason: string;
     details?: string;
-    date: string; // ISO string
+    date: string;
     status: 'new' | 'resolved';
 }
 
-// Conversations
 export interface Conversation {
     id: string;
     members: string[];
@@ -201,10 +228,9 @@ export interface Conversation {
     lastMessageSenderId: string;
     readBy: string[];
     isGroup: boolean;
-    name?: string; // For group chats
+    name?: string;
 }
 
-// Messages
 export interface Message {
     id: string;
     senderId: string;
@@ -213,7 +239,6 @@ export interface Message {
     timestamp: Timestamp;
 }
 
-// Notifications & Activity
 export interface Notification {
     id: string;
     userId: string;
@@ -238,7 +263,6 @@ export interface Activity {
 
 export type NotificationItem = (Notification | Activity) & { itemType: 'notification' | 'activity' };
 
-// Public User Profile (for security, only expose some fields)
 export interface PublicUserProfile extends Partial<User> {
     id: string;
     name: string;
@@ -266,7 +290,6 @@ export interface PublicUserProfile extends Partial<User> {
     ubtBalance?: number;
 }
 
-// Proposals
 export interface Proposal {
     id: string;
     title: string;
@@ -281,7 +304,6 @@ export interface Proposal {
     voteCountAgainst: number;
 }
 
-// Economy
 export interface RedemptionCycle {
     id: string;
     startDate: Timestamp;
@@ -309,6 +331,8 @@ export interface PayoutRequest {
         ventureName?: string;
         ubtAmount?: number;
         ubtToUsdRate?: number;
+        ccapAmount?: number;
+        ccapToUsdRate?: number;
     };
     processedBy?: {
         adminId: string;
@@ -381,11 +405,16 @@ export interface GlobalEconomy {
     ubtRedemptionWindowOpen?: boolean;
     ubtRedemptionWindowStartedAt?: Timestamp;
     ubtRedemptionWindowClosesAt?: Timestamp;
+    total_ubt_supply?: number;
+    ubt_in_cvp?: number;
+    system_sol_address?: string;
+    system_usdt_address?: string;
+    system_usdc_address?: string;
 }
 
 export interface Transaction {
     id: string;
-    type: 'credit' | 'debit' | 'p2p_sent' | 'p2p_received';
+    type: 'credit' | 'debit' | 'p2p_sent' | 'p2p_received' | 'amm_swap' | 'liquidation_lock' | 'liquidation_settled' | 'INTERNAL_SYNC';
     amount: number;
     reason: string;
     timestamp: Timestamp;
@@ -396,21 +425,60 @@ export interface Transaction {
     balanceBefore?: number;
     balanceAfter?: number;
     txHash?: string;
-}
-
-export interface UbtTransaction {
-    id: string; // UUID
-    senderId: string;
-    receiverId: string;
-    amount: number;
-    timestamp: number;
-    nonce: string; // Random nonce to prevent replay
-    signature: string; // Base64 encoded signature
-    hash: string; // The data that was signed
-    status?: 'pending' | 'verified' | 'failed';
+    protocol_mode?: ProtocolMode;
 }
 
 export interface LedgerViewParams {
     type: 'tx' | 'address';
     value: string;
+}
+
+export interface P2POffer {
+    id: string;
+    sellerId: string;
+    sellerName: string;
+    type: 'BUY' | 'SELL';
+    amount: number;
+    pricePerUnit: number;
+    totalPrice: number;
+    paymentMethod: string;
+    status: 'OPEN' | 'LOCKED' | 'COMPLETED' | 'CANCELLED';
+    buyerId?: string;
+    buyerName?: string;
+    createdAt: Timestamp;
+    lockedAt?: Timestamp;
+    escrowTxId?: string;
+}
+
+export interface PendingUbtPurchase {
+    id: string;
+    userId: string;
+    userName: string;
+    amountUsd: number;
+    amountUbt: number;
+    ecocashRef?: string; // For Fiat
+    cryptoAsset?: AssetType; // For Crypto
+    cryptoAddress?: string; // Generated child-address for user
+    payment_method: 'FIAT' | 'CRYPTO';
+    status: 'PENDING' | 'AWAITING_CONFIRMATION' | 'VERIFIED' | 'REJECTED';
+    createdAt: Timestamp;
+    verifiedAt?: Timestamp;
+}
+
+export interface SellRequest {
+    id: string;
+    userId: string;
+    userName: string;
+    userPhone: string;
+    amountUbt: number;
+    amountUsd: number;
+    status: 'PENDING' | 'CLAIMED' | 'DISPATCHED' | 'COMPLETED' | 'CANCELLED';
+    createdAt: Timestamp;
+    claimerId?: string;
+    claimerName?: string;
+    claimerRole?: UserRole;
+    ecocashRef?: string;
+    claimedAt?: Timestamp;
+    dispatchedAt?: Timestamp;
+    completedAt?: Timestamp;
 }
