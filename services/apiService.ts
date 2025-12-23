@@ -157,13 +157,26 @@ export const api = {
             const genesisRef = doc(vaultsCollection, 'GENESIS');
             const floatRef = doc(vaultsCollection, 'FLOAT');
             const genesisDoc = await t.get(genesisRef);
-            if (genesisDoc.exists()) throw new Error("Genesis Block already indexed.");
+            if (genesisDoc.exists()) throw new Error("Genesis Node already active.");
 
-            t.set(genesisRef, { id: 'GENESIS', name: "Genesis Node", balance: 14000000, type: 'GENESIS', isLocked: true, createdAt: serverTimestamp() });
-            t.set(floatRef, { id: 'FLOAT', name: "Liquidity Float", balance: 1000000, type: 'FLOAT', isLocked: false, createdAt: serverTimestamp() });
-
-            t.set(doc(ledgerCollection, 'BLOCK_ZERO'), {
-                id: 'BLOCK_ZERO', senderId: 'SYSTEM', receiverId: 'GENESIS', amount: 15000000, timestamp: Date.now(), type: 'SYSTEM_MINT', protocol_mode: 'MAINNET', serverTimestamp: serverTimestamp()
+            // Mints the supply directly into the vaults. No ledger entry created to avoid clutter.
+            t.set(genesisRef, { 
+                id: 'GENESIS', 
+                name: "Genesis Node", 
+                balance: 14000000, 
+                type: 'GENESIS', 
+                isLocked: true, 
+                createdAt: serverTimestamp(),
+                publicKey: 'ROOT_AUTHORITY_CHAIN'
+            });
+            t.set(floatRef, { 
+                id: 'FLOAT', 
+                name: "Liquidity Float", 
+                balance: 1000000, 
+                type: 'FLOAT', 
+                isLocked: false, 
+                createdAt: serverTimestamp(),
+                publicKey: 'LIQUIDITY_FLOAT_CHAIN'
             });
         });
     },
@@ -182,22 +195,30 @@ export const api = {
         });
     },
 
-    approveUbtPurchase: (admin: Admin, p: PendingUbtPurchase) => runTransaction(db, async t => {
+    // Bridge Settlements: Allows Admin to choose source node (GENESIS or FLOAT)
+    approveUbtPurchase: (admin: Admin, p: PendingUbtPurchase, sourceVaultId: 'FLOAT' | 'GENESIS' = 'FLOAT') => runTransaction(db, async t => {
         const purchaseRef = doc(db, 'pending_ubt_purchases', p.id);
         const userRef = doc(db, 'users', p.userId);
-        const floatRef = doc(db, 'treasury_vaults', 'FLOAT');
+        const sourceRef = doc(db, 'treasury_vaults', sourceVaultId);
 
-        const floatDoc = await t.get(floatRef);
-        if (!floatDoc.exists()) throw new Error("FLOAT vault offline.");
-        if (floatDoc.data().balance < p.amountUbt) throw new Error("Reserve depleted.");
+        const sourceDoc = await t.get(sourceRef);
+        if (!sourceDoc.exists()) throw new Error(`${sourceVaultId} node offline.`);
+        if ((sourceDoc.data()?.balance || 0) < p.amountUbt) throw new Error("Insufficient reserve in selected node.");
 
         t.update(purchaseRef, { status: 'VERIFIED', verifiedAt: serverTimestamp() });
         t.update(userRef, { ubtBalance: increment(p.amountUbt) });
-        t.update(floatRef, { balance: increment(-p.amountUbt) });
+        t.update(sourceRef, { balance: increment(-p.amountUbt) });
 
         const txId = `bridge-${Date.now().toString(36)}`;
         t.set(doc(db, 'ledger', txId), {
-            id: txId, senderId: 'FLOAT', receiverId: p.userId, amount: p.amountUbt, timestamp: Date.now(), type: 'FIAT_BRIDGE', protocol_mode: 'MAINNET', serverTimestamp: serverTimestamp()
+            id: txId, 
+            senderId: sourceVaultId, 
+            receiverId: p.userId, 
+            amount: p.amountUbt, 
+            timestamp: Date.now(), 
+            type: p.payment_method === 'CRYPTO' ? 'CRYPTO_BRIDGE' : 'FIAT_BRIDGE', 
+            protocol_mode: 'MAINNET', 
+            serverTimestamp: serverTimestamp()
         });
     }),
 
@@ -354,7 +375,6 @@ export const api = {
         await addDoc(postsCollection, { authorId: user.id, authorName: 'Anonymous Member', authorCircle: user.circle, authorRole: user.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress' });
     },
     deleteDistressPost: (admin: User, pid: string, uid: string) => deleteDoc(doc(postsCollection, pid)),
-    // FIX: Replaced 'reported' with 'post.authorId' and 'post.authorName' to correctly identify the post's author.
     reportPost: (user: User, post: Post, reason: string, details: string) => addDoc(reportsCollection, { reporterId: user.id, reporterName: user.name, reportedUserId: post.authorId, reportedUserName: post.authorName, postId: post.id, postContent: post.content, postAuthorId: post.authorId, reason, details, date: new Date().toISOString(), status: 'new' }),
 
     // Comments
@@ -383,8 +403,6 @@ export const api = {
     listenForReports: (admin: User, cb: (r: Report[]) => void, err: any) => onSnapshot(reportsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Report))), err),
     listenForPayoutRequests: (admin: User, cb: (r: PayoutRequest[]) => void, err: any) => onSnapshot(payoutsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
     listenForPendingPurchases: (cb: (p: PendingUbtPurchase[]) => void, err: any) => onSnapshot(query(pendingPurchasesCollection, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), err),
-    
-    // Bridge Settlements (Subsequent functions moved/removed to avoid collisions)
     updatePayoutStatus: (admin: User, payout: PayoutRequest, status: string) => updateDoc(doc(payoutsCollection, payout.id), { status, processedBy: { adminId: admin.id, adminName: admin.name }, completedAt: serverTimestamp() }),
 
     // Economy & Ventures
@@ -485,7 +503,6 @@ export const api = {
     listenToP2POffers: (cb: (o: P2POffer[]) => void, err: any) => onSnapshot(query(p2pCollection, where('status', '==', 'OPEN')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as P2POffer))), err),
     createSellRequest: (user: User, amt: number, val: number) => addDoc(sellRequestsCollection, { userId: user.id, userName: user.name, userPhone: user.phone || 'N/A', amountUbt: amt, amountUsd: val, status: 'PENDING', createdAt: serverTimestamp() }),
     
-    // createPendingUbtPurchase explicitly handles optional parameters by setting them to null instead of undefined.
     createPendingUbtPurchase: (user: User, val: number, amt: number, ref?: string, asset?: AssetType, address?: string) => addDoc(pendingPurchasesCollection, { 
         userId: user.id, 
         userName: user.name, 

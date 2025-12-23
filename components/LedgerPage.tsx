@@ -91,10 +91,13 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
         window.scrollTo(0, 0);
     };
 
+    // Filtered Transactions: Hide System/Simulation Mints to keep ledger clean
     const filteredTransactions = useMemo(() => {
-        if (view === 'ledger') return transactions;
+        let list = transactions.filter(tx => tx.type !== 'SYSTEM_MINT' && tx.type !== 'SIMULATION_MINT');
+        
+        if (view === 'ledger') return list;
         if (view === 'account') {
-            return transactions.filter(tx => 
+            return list.filter(tx => 
                 tx.senderId === targetValue || 
                 tx.receiverId === targetValue || 
                 tx.senderPublicKey === targetValue ||
@@ -102,9 +105,9 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
             );
         }
         if (view === 'transaction') {
-            return transactions.filter(tx => tx.id === targetValue || tx.hash === targetValue);
+            return list.filter(tx => tx.id === targetValue || tx.hash === targetValue);
         }
-        return transactions;
+        return list;
     }, [transactions, view, targetValue, accountData]);
 
     const ubtToUsd = (amt: number) => (amt * (economy?.ubt_to_usd_rate || 1.0)).toFixed(2);
