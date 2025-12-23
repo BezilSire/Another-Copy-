@@ -118,6 +118,7 @@ export const api = {
         return { id: userDoc.id, ...userDoc.data() } as User;
     },
     getUserByPublicKey: async (publicKey: string): Promise<User | null> => {
+        // Enforce exact UBT- prefix matching in registry
         const q = query(usersCollection, where('publicKey', '==', publicKey), limit(1));
         const snapshot = await getDocs(q);
         if (snapshot.empty) return null;
@@ -156,6 +157,13 @@ export const api = {
     },
     searchUsers: async (searchQuery: string, currentUser: User): Promise<PublicUserProfile[]> => {
         if (!searchQuery.trim()) return [];
+        
+        // If searching for a UBT address, do exact match
+        if (searchQuery.startsWith('UBT-')) {
+            const user = await api.getUserByPublicKey(searchQuery);
+            return user ? [user as PublicUserProfile] : [];
+        }
+
         const lowerCaseQuery = searchQuery.toLowerCase();
         const q = query(usersCollection, where('name_lowercase', '>=', lowerCaseQuery), where('name_lowercase', '<=', lowerCaseQuery + '\uf8ff'), limit(15));
         const snapshot = await getDocs(q);
@@ -163,11 +171,15 @@ export const api = {
     },
     resolveNodeIdentity: async (identifier: string): Promise<PublicUserProfile | null> => {
         if (!identifier) return null;
+        
+        // Handle Direct UBT Anchor
+        if (identifier.startsWith('UBT-')) {
+            return await api.getUserByPublicKey(identifier) as PublicUserProfile;
+        }
+
         const directDoc = await getDoc(doc(db, 'users', identifier));
         if (directDoc.exists()) return { id: directDoc.id, ...directDoc.data() } as PublicUserProfile;
-        const q = query(usersCollection, where('publicKey', '==', identifier), limit(1));
-        const snapshot = await getDocs(q);
-        if (!snapshot.empty) return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as PublicUserProfile;
+        
         const vaultDoc = await getDoc(doc(vaultsCollection, identifier));
         if (vaultDoc.exists()) return { id: vaultDoc.id, name: vaultDoc.data()?.name, ubtBalance: vaultDoc.data()?.balance, role: 'admin', circle: 'TREASURY' } as any;
         return null;
@@ -448,10 +460,11 @@ export const api = {
         });
     },
     listenForReports: (admin: User, cb: (r: Report[]) => void, err: any) => onSnapshot(query(reportsCollection, orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Report))), err),
+    // FIX: Changed callback to cb to match parameter name and resolve 'Cannot find name callback' error
     listenForPayoutRequests: (admin: User, cb: (r: PayoutRequest[]) => void, err: any) => onSnapshot(query(payoutsCollection, orderBy('requestedAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
 
     listenForAllUsers: (admin: User, cb: (users: User[]) => void, err: any) => onSnapshot(usersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), err),
-    listenForAllMembers: (admin: User, cb: (members: Member[]) => void, err: any) => onSnapshot(membersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
+    listenForAllMembers: (admin: User, cb: (members: Member[]) => void, err: any) => onSnapshot(query(membersCollection, orderBy('date_registered', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
     listenForAllAgents: (admin: User, cb: (agents: Agent[]) => void, err: any) => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Agent))), err),
     listenForPendingMembers: (admin: User, cb: (members: Member[]) => void, err: any) => onSnapshot(query(membersCollection, where('payment_status', '==', 'pending_verification')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
     

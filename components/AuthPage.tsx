@@ -4,6 +4,7 @@ import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
 import { ForgotPasswordForm } from './ForgotPasswordForm';
 import { GenesisNodeFlow } from './GenesisNodeFlow';
+import { RecoveryProtocol } from './RecoveryProtocol';
 import { useAuth } from '../contexts/AuthContext';
 import { PrivacyPolicyModal } from './PrivacyPolicyModal';
 import { PublicRegistrationPage } from './PublicRegistrationPage';
@@ -11,7 +12,7 @@ import { cryptoService } from '../services/cryptoService';
 import { UploadCloudIcon } from './icons/UploadCloudIcon';
 import { useToast } from '../contexts/ToastContext';
 
-type AuthView = 'selector' | 'login' | 'agentSignup' | 'publicSignup' | 'forgotPassword' | 'genesis' | 'restore_file' | 'restore_words';
+type AuthView = 'selector' | 'login' | 'agentSignup' | 'publicSignup' | 'forgotPassword' | 'genesis' | 'restore_file' | 'recovery';
 
 export const AuthPage: React.FC = () => {
   const { login, agentSignup, publicMemberSignup, sendPasswordReset, isProcessingAuth } = useAuth();
@@ -29,17 +30,17 @@ export const AuthPage: React.FC = () => {
             const content = event.target?.result as string;
             const data = JSON.parse(content);
             if (data.mnemonic) {
-                const pin = prompt("Enter the 6-digit PIN used to encrypt this file:");
-                if (pin) {
+                const pin = prompt("Enter a new 6-digit PIN for this session:");
+                if (pin && pin.length === 6) {
                     await cryptoService.saveVault(data, pin);
-                    addToast("Identity Restored. Please log in.", "success");
+                    addToast("Node Successfully Re-anchored.", "success");
                     setView('login');
                 }
             } else {
-                throw new Error("Invalid file format");
+                throw new Error("Invalid format");
             }
         } catch (err) {
-            addToast("Could not read backup file.", "error");
+            addToast("Identity File Corrupt.", "error");
         }
     };
     reader.readAsText(file);
@@ -63,38 +64,14 @@ export const AuthPage: React.FC = () => {
                         <button onClick={() => setView('login')} className="w-full py-6 bg-white/5 border border-white/10 text-white font-black rounded-3xl uppercase tracking-[0.4em] text-[10px] hover:bg-white/10 transition-all">
                             Connect Node
                         </button>
-                        <button onClick={() => setView('restore_file')} className="w-full py-3 text-[9px] font-black uppercase text-gray-600 hover:text-brand-gold transition-colors tracking-[0.3em]">
-                            Restore from Backup File
+                        <button onClick={() => setView('recovery')} className="w-full py-3 text-[9px] font-black uppercase text-gray-600 hover:text-brand-gold transition-colors tracking-[0.3em]">
+                            Lost Node Access? Recover
                         </button>
                     </div>
                 </div>
             );
-        case 'restore_file':
-            return (
-                <div className="module-frame glass-module p-10 rounded-[3rem] text-center space-y-8 animate-fade-in max-w-md">
-                    <div className="p-6 bg-brand-gold/10 rounded-full w-24 h-24 mx-auto flex items-center justify-center border border-brand-gold/20">
-                        <UploadCloudIcon className="h-10 w-10 text-brand-gold" />
-                    </div>
-                    <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Upload Backup</h3>
-                    <p className="text-xs text-gray-500 uppercase font-black tracking-widest leading-loose">
-                        Select your <code>.json</code> identity file to restore your node.
-                    </p>
-                    <input 
-                        type="file" 
-                        accept=".json"
-                        onChange={handleRestoreFromFile}
-                        className="hidden" 
-                        id="backup-upload" 
-                    />
-                    <label 
-                        htmlFor="backup-upload"
-                        className="block w-full py-5 bg-white/5 border border-white/10 text-white font-black rounded-2xl uppercase tracking-[0.2em] text-xs cursor-pointer hover:bg-white/10 transition-all"
-                    >
-                        Select JSON File
-                    </label>
-                    <button onClick={() => setView('selector')} className="text-[9px] font-black text-gray-700 uppercase tracking-widest">Cancel</button>
-                </div>
-            );
+        case 'recovery':
+            return <RecoveryProtocol onBack={() => setView('selector')} onComplete={async (m, p) => { await cryptoService.saveVault({mnemonic: m}, p); addToast("Identity Restored.", "success"); setView('login'); }} />;
         case 'genesis':
             return <GenesisNodeFlow onComplete={(m, p) => { cryptoService.saveVault({mnemonic: m}, p); setView('publicSignup'); }} onBack={() => setView('selector')} />;
         case 'login':

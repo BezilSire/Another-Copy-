@@ -94,9 +94,9 @@ export const PinVaultLogin: React.FC<PinVaultLoginProps> = ({ onUnlock, onReset 
                             disabled={status === 'unlocking' || status === 'success'}
                             onChange={(e) => handleInput(e.target.value, i)}
                             onKeyDown={(e) => handleKeyDown(e, i)}
-                            className={`w-10 h-14 bg-black border-2 rounded-xl text-center text-2xl font-black text-white focus:outline-none transition-all
-                                ${status === 'error' ? 'border-red-500/50' : digit ? 'border-brand-gold shadow-glow-gold' : 'border-white/5'}
-                                ${status === 'success' ? 'border-emerald-500 shadow-glow-matrix' : ''}
+                            className={`w-10 h-14 bg-white border-2 rounded-xl text-center text-2xl font-black text-slate-900 focus:outline-none transition-all
+                                ${status === 'error' ? 'border-red-500 bg-red-50' : digit ? 'border-brand-gold ring-4 ring-brand-gold/20' : 'border-slate-200'}
+                                ${status === 'success' ? 'border-emerald-500 bg-emerald-50 shadow-glow-matrix' : ''}
                             `}
                         />
                     ))}
@@ -108,15 +108,15 @@ export const PinVaultLogin: React.FC<PinVaultLoginProps> = ({ onUnlock, onReset 
                     ) : status === 'success' ? (
                         <CheckCircleIcon className="h-6 w-6 text-emerald-500" />
                     ) : status === 'error' ? (
-                        <p className="text-red-500 text-[9px] font-black uppercase tracking-widest">Invalid PIN</p>
+                        <p className="text-red-500 text-[9px] font-black uppercase tracking-widest">Invalid Security PIN</p>
                     ) : (
                         <p className="text-[8px] text-gray-600 uppercase font-black tracking-widest">Secure Handshake Active</p>
                     )}
                 </div>
             </div>
 
-            <button onClick={onReset} className="mt-8 text-[8px] font-black text-gray-700 hover:text-brand-gold uppercase tracking-[0.4em]">
-                Lost PIN? Restore from JSON Backup
+            <button onClick={onReset} className="mt-8 text-[9px] font-black text-gray-500 hover:text-brand-gold uppercase tracking-[0.3em] transition-colors border-b border-gray-800 pb-1">
+                Forgotten PIN? Reset Access
             </button>
         </div>
     );

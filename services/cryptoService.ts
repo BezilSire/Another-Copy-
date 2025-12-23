@@ -46,8 +46,12 @@ export const cryptoService = {
         return bip39.generateMnemonic();
     },
 
+    validateMnemonic: (mnemonic: string): boolean => {
+        return bip39.validateMnemonic(mnemonic.trim().toLowerCase());
+    },
+
     mnemonicToKeyPair: (mnemonic: string) => {
-        const seed = bip39.mnemonicToSeedSync(mnemonic);
+        const seed = bip39.mnemonicToSeedSync(mnemonic.trim().toLowerCase());
         const secretKey = seed.slice(0, 32);
         const keyPair = nacl.sign.keyPair.fromSeed(secretKey);
         
@@ -156,7 +160,6 @@ export const cryptoService = {
 
     verifySignature: (payload: string, signatureBase64: string, publicKeyBase64WithPrefix: string): boolean => {
         try {
-            // Strip UBT- prefix if present for raw verification
             const publicKeyBase64 = publicKeyBase64WithPrefix.startsWith('UBT-') 
                 ? publicKeyBase64WithPrefix.substring(4) 
                 : publicKeyBase64WithPrefix;

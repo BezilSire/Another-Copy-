@@ -33,6 +33,7 @@ import { UBTScan } from './components/UBTScan';
 import { LogoIcon } from './components/icons/LogoIcon';
 import { LoaderIcon } from './components/icons/LoaderIcon';
 import { PinVaultLogin } from './components/PinVaultLogin';
+import { RecoveryProtocol } from './components/RecoveryProtocol';
 import { cryptoService } from './services/cryptoService';
 
 const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
@@ -79,6 +80,7 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 const App: React.FC = () => {
   const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser, isSovereignLocked, unlockSovereignSession } = useAuth();
   const [isBooting, setIsBooting] = useState(true);
+  const [isRecovering, setIsRecovering] = useState(false);
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const { addToast } = useToast();
   const isOnline = useOnlineStatus();
@@ -131,7 +133,6 @@ const App: React.FC = () => {
   };
   
   const renderContent = () => {
-    // 1. Initial Identity Syncing or background auto-login
     if (isLoadingAuth || isProcessingAuth) {
       return (
         <div className="fixed inset-0 bg-black flex flex-col items-center justify-center p-10 font-mono">
@@ -141,23 +142,34 @@ const App: React.FC = () => {
       );
     }
 
-    // 2. Sovereign PIN Gate - STICKY PERSISTENCE
-    // If hasVault is true, we ONLY allow the user to see the PIN login.
+    // Sovereign Gate
     if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
+        if (isRecovering) {
+            return (
+                <div className="min-h-screen bg-black flex flex-col justify-center items-center px-4">
+                    <RecoveryProtocol 
+                        onBack={() => setIsRecovering(false)} 
+                        onComplete={async (m, p) => { 
+                            await cryptoService.saveVault({mnemonic: m}, p); 
+                            setIsRecovering(false); 
+                            addToast("Vault Reset Successful.", "success");
+                        }} 
+                    />
+                </div>
+            );
+        }
         return (
             <div className="min-h-screen bg-black flex flex-col justify-center items-center px-4">
                 <div className="absolute inset-0 blueprint-grid opacity-[0.05] pointer-events-none"></div>
-                <PinVaultLogin onUnlock={unlockSovereignSession} onReset={() => addToast("Restoration protocol available via identity anchor.", "info")} />
+                <PinVaultLogin onUnlock={unlockSovereignSession} onReset={() => setIsRecovering(true)} />
             </div>
         );
     }
 
-    // 3. Cloud Gate (Email Login)
     if (!currentUser) {
       return <AuthPage />;
     }
 
-    // 4. Feature Routing
     if (chatTarget) {
       return (
         <ChatsPage
