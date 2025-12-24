@@ -7,6 +7,7 @@ export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity
 export type ProtocolMode = 'MAINNET' | 'TESTNET';
 export type AssetType = 'SOL' | 'USDT' | 'USDC';
 
+// FIX: Comprehensive User interface including all required fields for various roles
 export interface User {
   id: string;
   name: string;
@@ -51,25 +52,29 @@ export interface User {
   lastCycleChoice?: 'redeemed' | 'staked' | 'invested';
   name_lowercase?: string;
   skills_lowercase?: string[];
-  ubtBalance?: number; // Mirror of Hot Wallet
+  ubtBalance?: number; 
   initialUbtStake?: number;
   fcmToken?: string;
   publicKey?: string;
+  vouchCount?: number;
+  credibility_score?: number;
   followers?: string[];
   following?: string[];
   socialLinks?: { title: string; url: string }[];
 }
 
+// FIX: Added missing UserVault interface
 export interface UserVault {
     id: string;
     userId: string;
     name: string;
     balance: number;
-    type: 'HOT' | 'LOCKED' | 'BUSINESS';
+    type: 'HOT' | 'LOCKED' | 'BUSINESS' | 'LIQUID';
     lockedUntil?: Timestamp;
     createdAt: Timestamp;
 }
 
+// FIX: Added missing TreasuryVault interface
 export interface TreasuryVault {
     id: string;
     name: string;
@@ -78,6 +83,40 @@ export interface TreasuryVault {
     publicKey: string;
     type: 'GENESIS' | 'SUSTENANCE' | 'DISTRESS' | 'VENTURE' | 'FLOAT';
     isLocked: boolean;
+}
+
+// FIX: Added missing CitizenResource interface
+export interface CitizenResource {
+    id: string;
+    name: string;
+    type: 'ENERGY' | 'WATER' | 'FOOD' | 'LAND' | 'EQUIPMENT';
+    circle: string;
+    location: string;
+    status: 'OPTIMAL' | 'WARNING' | 'MAINTENANCE' | 'DEPLETED';
+    capacity: string;
+    managedBy: string;
+    createdAt: Timestamp;
+    signature: string;
+    nonce: string;
+    signerKey: string;
+}
+
+// FIX: Added missing Dispute interface
+export interface Dispute {
+    id: string;
+    claimantId: string;
+    claimantName: string;
+    respondentId: string;
+    respondentName: string;
+    reason: string;
+    evidence: string;
+    status: 'TRIBUNAL' | 'RESOLVED' | 'DISMISSED';
+    juryIds: string[];
+    votesForClaimant: number;
+    votesForRespondent: number;
+    timestamp: Timestamp;
+    resolvedAt?: Timestamp;
+    signedVotes: { [userId: string]: string };
 }
 
 export interface UbtTransaction {
@@ -92,10 +131,28 @@ export interface UbtTransaction {
     senderPublicKey: string;
     parentHash: string;
     status?: 'pending' | 'verified' | 'failed';
-    type?: 'P2P_HANDSHAKE' | 'REDEMPTION' | 'SYSTEM_MINT' | 'VAULT_SYNC' | 'SIMULATION_MINT' | 'FIAT_BRIDGE' | 'CRYPTO_BRIDGE';
+    type?: 'P2P_HANDSHAKE' | 'VOUCH_ANCHOR' | 'REDEMPTION' | 'SYSTEM_MINT' | 'VAULT_SYNC' | 'SIMULATION_MINT' | 'FIAT_BRIDGE' | 'CRYPTO_BRIDGE';
     protocol_mode: ProtocolMode; 
 }
 
+// FIX: Added missing Transaction interface (different from UbtTransaction)
+export interface Transaction {
+    id: string;
+    type: 'credit' | 'debit' | 'p2p_sent' | 'p2p_received' | 'amm_swap' | 'liquidation_lock' | 'liquidation_settled' | 'INTERNAL_SYNC';
+    amount: number;
+    reason: string;
+    timestamp: Timestamp;
+    actorId: string;
+    actorName: string;
+    relatedUserId?: string;
+    relatedUserName?: string;
+    balanceBefore?: number;
+    balanceAfter?: number;
+    txHash?: string;
+    protocol_mode?: ProtocolMode;
+}
+
+// FIX: Added missing Agent interface
 export interface Agent extends User {
   role: 'agent';
   agent_code: string;
@@ -110,10 +167,12 @@ export interface MemberUser extends User {
   last_distress_call?: Timestamp | null;
 }
 
+// FIX: Added missing Admin interface
 export interface Admin extends User {
   role: 'admin';
 }
 
+// FIX: Added missing Member interface
 export interface Member {
   id: string;
   full_name: string;
@@ -147,6 +206,7 @@ export interface Member {
   is_duplicate_email?: boolean;
 }
 
+// FIX: Added missing NewMember interface
 export interface NewMember {
   full_name: string;
   phone: string;
@@ -156,12 +216,14 @@ export interface NewMember {
   payment_status: 'pending' | 'complete' | 'installment';
 }
 
+// FIX: Added missing NewPublicMemberData interface
 export interface NewPublicMemberData {
     full_name: string;
     email: string;
     referralCode?: string;
 }
 
+// FIX: Added missing Broadcast interface
 export interface Broadcast {
   id: string;
   authorId: string;
@@ -170,6 +232,7 @@ export interface Broadcast {
   date: string;
 }
 
+// FIX: Added missing Post interface
 export interface Post {
   id: string;
   authorId: string;
@@ -194,6 +257,7 @@ export interface Post {
   }
 }
 
+// FIX: Added missing Comment interface
 export interface Comment {
     id: string;
     parentId: string;
@@ -204,6 +268,7 @@ export interface Comment {
     timestamp: Timestamp;
 }
 
+// FIX: Added missing Report interface
 export interface Report {
     id: string;
     reporterId: string;
@@ -237,8 +302,12 @@ export interface Message {
     senderName: string;
     text: string;
     timestamp: Timestamp;
+    signature?: string; 
+    hash?: string;      
+    nonce?: string;     
 }
 
+// FIX: Added missing Notification interface
 export interface Notification {
     id: string;
     userId: string;
@@ -250,6 +319,7 @@ export interface Notification {
     causerId?: string;
 }
 
+// FIX: Added missing Activity interface
 export interface Activity {
     id: string;
     type: string;
@@ -261,6 +331,7 @@ export interface Activity {
     link: string;
 }
 
+// FIX: Added missing NotificationItem type
 export type NotificationItem = (Notification | Activity) & { itemType: 'notification' | 'activity' };
 
 export interface PublicUserProfile extends Partial<User> {
@@ -281,15 +352,12 @@ export interface PublicUserProfile extends Partial<User> {
     scap?: number;
     ccap?: number;
     createdAt?: Timestamp;
-    pitchDeckTitle?: string;
-    pitchDeckSlides?: { title: string; content: string }[];
-    followers?: string[];
-    following?: string[];
-    socialLinks?: { title: string; url: string }[];
     publicKey?: string;
     ubtBalance?: number;
+    vouchCount?: number;
 }
 
+// FIX: Added missing Proposal interface
 export interface Proposal {
     id: string;
     title: string;
@@ -302,6 +370,7 @@ export interface Proposal {
     votesAgainst: string[];
     voteCountFor: number;
     voteCountAgainst: number;
+    commentCount?: number;
 }
 
 export interface RedemptionCycle {
@@ -315,6 +384,7 @@ export interface RedemptionCycle {
     cvp_usd_total: number;
 }
 
+// FIX: Added missing PayoutRequest interface
 export interface PayoutRequest {
     id: string;
     userId: string;
@@ -341,6 +411,7 @@ export interface PayoutRequest {
     completedAt?: Timestamp;
 }
 
+// FIX: Added missing SustenanceCycle interface
 export interface SustenanceCycle {
     slf_balance: number;
     hamper_cost: number;
@@ -360,6 +431,7 @@ export interface SustenanceVoucher {
     redeemedBy?: string;
 }
 
+// FIX: Added missing Venture interface
 export interface Venture {
     id: string;
     name: string;
@@ -379,6 +451,7 @@ export interface Venture {
     totalProfitsDistributed: number;
 }
 
+// FIX: Added missing CommunityValuePool interface
 export interface CommunityValuePool {
     id: string;
     total_usd_value: number;
@@ -393,6 +466,7 @@ export interface VentureEquityHolding {
     shares: number;
 }
 
+// FIX: Added missing Distribution interface
 export interface Distribution {
     id: string;
     date: Timestamp;
@@ -400,6 +474,7 @@ export interface Distribution {
     notes: string;
 }
 
+// FIX: Added missing GlobalEconomy interface
 export interface GlobalEconomy {
     ubt_to_usd_rate: number;
     ubtRedemptionWindowOpen?: boolean;
@@ -412,27 +487,13 @@ export interface GlobalEconomy {
     system_usdc_address?: string;
 }
 
-export interface Transaction {
-    id: string;
-    type: 'credit' | 'debit' | 'p2p_sent' | 'p2p_received' | 'amm_swap' | 'liquidation_lock' | 'liquidation_settled' | 'INTERNAL_SYNC';
-    amount: number;
-    reason: string;
-    timestamp: Timestamp;
-    actorId: string;
-    actorName: string;
-    relatedUserId?: string;
-    relatedUserName?: string;
-    balanceBefore?: number;
-    balanceAfter?: number;
-    txHash?: string;
-    protocol_mode?: ProtocolMode;
-}
-
+// FIX: Added missing LedgerViewParams interface
 export interface LedgerViewParams {
     type: 'tx' | 'address';
     value: string;
 }
 
+// FIX: Added missing P2POffer interface
 export interface P2POffer {
     id: string;
     sellerId: string;
@@ -450,6 +511,7 @@ export interface P2POffer {
     escrowTxId?: string;
 }
 
+// FIX: Added missing PendingUbtPurchase interface
 export interface PendingUbtPurchase {
     id: string;
     userId: string;
@@ -465,6 +527,7 @@ export interface PendingUbtPurchase {
     verifiedAt?: Timestamp;
 }
 
+// FIX: Added missing SellRequest interface
 export interface SellRequest {
     id: string;
     userId: string;

@@ -14,12 +14,7 @@ export const CheckAllIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => 
     strokeLinejoin="round"
     {...props}
   >
-    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14" />
-    <polyline points="22 4 12 14.01 9 11.01" />
-    <path d="m15 4 6.7 6.7" />
-    <path d="m19 6.7-6.7 6.7" />
-    {/* Simplified double check representation */}
-    <path d="M7 12l5 5L22 7" />
-    <path d="M2 12l5 5m5-5l5-5" transform="translate(-5, 0)" opacity="0.5"/> 
+    <path d="M18 6 7 17l-5-5" />
+    <path d="m22 10-7.5 7.5L13 16" />
   </svg>
 );
