@@ -93,7 +93,7 @@ const App: React.FC = () => {
   };
   
   const renderMainContent = () => {
-    // 1. Loading States - If auth is still loading OR we have a session but NO profile yet, show loading.
+    // 1. HARD LOADING GATE: If we are syncing auth OR if there's a user but no profile yet, wait.
     if (isLoadingAuth || isProcessingAuth || (firebaseUser && !currentUser)) {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-black">
@@ -103,7 +103,7 @@ const App: React.FC = () => {
       );
     }
 
-    // 2. Sovereign PIN Gate
+    // 2. SOVEREIGN GATE: PIN Protection
     if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
         if (isRecovering) {
             return (
@@ -125,14 +125,16 @@ const App: React.FC = () => {
         );
     }
 
-    // 3. Login Page - Only show if we explicitly have NO firebase session and NO current user
+    // 3. AUTH GATE: Login Page
     if (!firebaseUser && !currentUser) return <AuthPage />;
 
-    // 4. Overlays & Modals
+    // 4. OVERLAYS: Chat & Public Profiles
+    const user = currentUser!; // Safe to assert now
+    
     if (chatTarget) {
       return (
         <ChatsPage
-          user={currentUser!}
+          user={user}
           initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null}
           onClose={() => setChatTarget(null)}
           onViewProfile={handleViewProfile}
@@ -147,25 +149,24 @@ const App: React.FC = () => {
         <div className="main-container py-10">
             <PublicProfile
                 userId={viewingProfileId}
-                currentUser={currentUser!}
+                currentUser={user}
                 onBack={() => setViewingProfileId(null)}
                 onStartChat={async (id) => {
                     const target = await api.getPublicUserProfile(id);
                     if (target) {
-                        const convo = await api.startChat(currentUser!, target);
+                        const convo = await api.startChat(user, target);
                         setViewingProfileId(null);
                         setChatTarget(convo);
                     }
                 }}
                 onViewProfile={handleViewProfile}
-                isAdminView={currentUser!.role === 'admin'}
+                isAdminView={user.role === 'admin'}
             />
         </div>
       );
     }
 
-    // 5. User Induction & Verification Blocks
-    const user = currentUser!;
+    // 5. INDUCTION & VERIFICATION FLOWS
     const isLegacyOrSpecial = user.role === 'admin' || user.role === 'agent' || user.status === 'active';
     
     if (!isLegacyOrSpecial) {
@@ -182,7 +183,7 @@ const App: React.FC = () => {
         }
     }
     
-    // 6. Dashboards
+    // 6. DASHBOARDS
     if (user.role === 'admin') {
       return (
         <div className="main-container py-8">

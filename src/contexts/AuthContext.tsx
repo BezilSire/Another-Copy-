@@ -40,9 +40,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
 
   const { addToast } = useToast();
-  
-  // Track if we are actively waiting for a document to arrive after an auth action
-  const isWaitingForProfile = useRef(false);
 
   useEffect(() => {
     let userDocListener: (() => void) | undefined;
@@ -56,7 +53,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (user && !user.isAnonymous) {
-        // Always set loading to true when a session is detected
+        // WE HAVE A SESSION: Force loading to true until Firestore provides the profile
         setIsLoadingAuth(true);
 
         const userDocRef = doc(db, 'users', user.uid);
@@ -83,26 +80,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               }
             }
           } else {
+            // Document doesn't exist yet (could be a fresh registration)
             setCurrentUser(null);
           }
           
-          // ONLY release loading states once the document has been processed
+          // DATA ARRIVED: Now we can safely unlock the UI
           setIsLoadingAuth(false);
           setIsProcessingAuth(false);
-          isWaitingForProfile.current = false;
         }, (error) => {
-          console.error("User doc listener error:", error);
+          console.error("Profile synchronization error:", error);
           setIsLoadingAuth(false);
           setIsProcessingAuth(false);
-          isWaitingForProfile.current = false;
         });
         
         api.setupPresence(user.uid);
       } else {
+        // NO SESSION: Unauthenticated state
         setCurrentUser(null);
         setIsLoadingAuth(false);
         setIsProcessingAuth(false);
-        isWaitingForProfile.current = false;
       }
     });
 
@@ -114,7 +110,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     setIsProcessingAuth(true);
-    isWaitingForProfile.current = true;
     try {
       await api.login(credentials.email, credentials.password);
       
@@ -122,13 +117,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (pin) {
         await cryptoService.updateVaultCredentials(credentials.email, credentials.password, pin);
       }
-
-      // CRITICAL: We do NOT set isProcessingAuth(false) here.
-      // We let the onSnapshot listener in the useEffect handle it once the data actually arrives.
+      
+      // Note: We do NOT set isProcessingAuth(false) here. 
+      // The onSnapshot listener in the useEffect above will handle it.
     } catch (error: any) {
-      // If login itself fails, we must release the lock
       setIsProcessingAuth(false);
-      isWaitingForProfile.current = false;
       addToast(error.message || 'Handshake failed', 'error');
       throw error;
     }
@@ -136,7 +129,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const unlockSovereignSession = useCallback(async (data: VaultData, pin: string) => {
       setIsProcessingAuth(true);
-      isWaitingForProfile.current = true;
       try {
           sessionStorage.setItem('ugc_temp_pin', pin);
           sessionStorage.setItem('ugc_node_unlocked', 'true');
@@ -147,10 +139,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           
           setIsSovereignLocked(false);
           addToast("Identity Reconstituted.", "success");
+          // loading handled by listener
       } catch (err) {
           setIsSovereignLocked(false); 
           setIsProcessingAuth(false);
-          isWaitingForProfile.current = false;
           addToast("Cloud Sync Offline. Manual auth required.", "info");
       }
   }, [addToast]);
@@ -166,7 +158,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const agentSignup = useCallback(async (credentials: AgentSignupCredentials) => {
     setIsProcessingAuth(true);
-    isWaitingForProfile.current = true;
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
       const { user } = userCredential;
@@ -198,9 +189,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await setDoc(doc(db, 'users', user.uid), newAgent);
       await sendEmailVerification(user);
       addToast(`Facilitator Node Created. Verify email.`, 'success');
+      // loading handled by listener
     } catch (error: any) {
       setIsProcessingAuth(false);
-      isWaitingForProfile.current = false;
       addToast(`Protocol error: ${error.message}`, 'error');
       throw error;
     }
@@ -208,7 +199,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   
   const publicMemberSignup = useCallback(async (memberData: NewPublicMemberData, password: string) => {
     setIsProcessingAuth(true);
-    isWaitingForProfile.current = true;
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, memberData.email, password);
         const { user } = userCredential;
@@ -266,9 +256,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await batch.commit();
         await sendEmailVerification(user);
         addToast('Identity anchored. Verify email.', 'success');
+        // loading handled by listener
     } catch (error: any) {
         setIsProcessingAuth(false);
-        isWaitingForProfile.current = false;
         addToast(`Deployment error: ${error.message}`, 'error');
         throw error;
     }
