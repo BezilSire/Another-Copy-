@@ -12,7 +12,6 @@ import { generateReferralCode, generateAgentCode } from '../utils';
 type LoginCredentials = { email: string; password: string };
 type AgentSignupCredentials = Pick<Agent, 'name' | 'email' | 'circle'> & { password: string };
 
-// FIX: Added isSovereignLocked and unlockSovereignSession to AuthContextType
 interface AuthContextType {
   currentUser: User | null;
   firebaseUser: FirebaseUser | null;
@@ -36,17 +35,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isProcessingAuth, setIsProcessingAuth] = useState(false);
   
-  // FIX: Initializing isSovereignLocked based on local vault presence and session status
   const [isSovereignLocked, setIsSovereignLocked] = useState(
     cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked')
   );
 
   const { addToast } = useToast();
-  const isProcessingAuthRef = useRef(isProcessingAuth);
-
-  useEffect(() => {
-    isProcessingAuthRef.current = isProcessingAuth;
-  }, [isProcessingAuth]);
+  // Using a ref to track processing state without triggering unnecessary renders in listeners
+  const isProcessingRef = useRef(false);
 
   useEffect(() => {
     let userDocListener: (() => void) | undefined;
@@ -59,6 +54,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setFirebaseUser(user);
 
       if (user && !user.isAnonymous) {
+        // If we're already processing a login, don't flip the global loading flag yet
+        if (!isProcessingRef.current) {
+            setIsLoadingAuth(true);
+        }
+
         const userDocRef = doc(db, 'users', user.uid);
         
         userDocListener = onSnapshot(userDocRef, async (userDoc) => {
@@ -66,39 +66,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
 
             if (userData.status === 'ousted') {
-              addToast('Your account has been suspended.', 'error');
+              addToast('Node terminated by authority.', 'error');
               api.logout();
+              setCurrentUser(null);
             } else {
               setCurrentUser(userData);
               
-              // Stabilize Identity Anchor
-              // FIX: Syncing public key to Firestore if the node is unlocked
+              // Identity Anchor Sync
               const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
               const hasVault = cryptoService.hasVault();
 
               if (!hasVault || isUnlocked) {
                   const localPubKey = cryptoService.getPublicKey();
                   if (localPubKey && userData.publicKey !== localPubKey) {
-                      if (!isProcessingAuthRef.current) {
-                          await api.updateUser(user.uid, { publicKey: localPubKey });
-                      }
+                      await api.updateUser(user.uid, { publicKey: localPubKey });
                   }
               }
             }
           } else {
-            if (!isProcessingAuthRef.current) {
-              setCurrentUser(null);
-            }
+            setCurrentUser(null);
           }
+          
+          // CRITICAL: release both loading flags once document is successfully read
           setIsLoadingAuth(false);
+          setIsProcessingAuth(false);
+          isProcessingRef.current = false;
         }, (error) => {
+          console.error("User doc listener error:", error);
           setIsLoadingAuth(false);
+          setIsProcessingAuth(false);
+          isProcessingRef.current = false;
         });
         
         api.setupPresence(user.uid);
       } else {
         setCurrentUser(null);
         setIsLoadingAuth(false);
+        setIsProcessingAuth(false);
+        isProcessingRef.current = false;
       }
     });
 
@@ -110,24 +115,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     setIsProcessingAuth(true);
+    isProcessingRef.current = true;
     try {
       await api.login(credentials.email, credentials.password);
-      // FIX: Updating vault credentials if a temporary PIN is set in session
+      
       const pin = sessionStorage.getItem('ugc_temp_pin');
       if (pin) {
         await cryptoService.updateVaultCredentials(credentials.email, credentials.password, pin);
       }
+
+      // NOTE: We do NOT set isProcessingAuth(false) here. 
+      // We let the onSnapshot listener above handle it once the user data actually arrives.
+      // This bridges the gap and prevents the login screen from flickering back.
     } catch (error: any) {
+      setIsProcessingAuth(false);
+      isProcessingRef.current = false;
       addToast(error.message || 'Handshake failed', 'error');
       throw error;
-    } finally {
-      setIsProcessingAuth(false);
     }
   }, [addToast]);
 
-  // FIX: Implemented unlockSovereignSession to reconstitute identity and handle automatic login
   const unlockSovereignSession = useCallback(async (data: VaultData, pin: string) => {
       setIsProcessingAuth(true);
+      isProcessingRef.current = true;
       try {
           sessionStorage.setItem('ugc_temp_pin', pin);
           sessionStorage.setItem('ugc_node_unlocked', 'true');
@@ -140,9 +150,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           addToast("Identity Reconstituted.", "success");
       } catch (err) {
           setIsSovereignLocked(false); 
-          addToast("Cloud Sync Offline. Manual auth required.", "info");
-      } finally {
           setIsProcessingAuth(false);
+          isProcessingRef.current = false;
+          addToast("Cloud Sync Offline. Manual auth required.", "info");
       }
   }, [addToast]);
 
@@ -157,6 +167,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const agentSignup = useCallback(async (credentials: AgentSignupCredentials) => {
     setIsProcessingAuth(true);
+    isProcessingRef.current = true;
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
       const { user } = userCredential;
@@ -189,15 +200,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await sendEmailVerification(user);
       addToast(`Facilitator Node Created. Verify email.`, 'success');
     } catch (error: any) {
+      setIsProcessingAuth(false);
+      isProcessingRef.current = false;
       addToast(`Protocol error: ${error.message}`, 'error');
       throw error;
-    } finally {
-      setIsProcessingAuth(false);
     }
   }, [addToast]);
   
   const publicMemberSignup = useCallback(async (memberData: NewPublicMemberData, password: string) => {
     setIsProcessingAuth(true);
+    isProcessingRef.current = true;
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, memberData.email, password);
         const { user } = userCredential;
@@ -256,10 +268,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await sendEmailVerification(user);
         addToast('Identity anchored. Verify email.', 'success');
     } catch (error: any) {
+        setIsProcessingAuth(false);
+        isProcessingRef.current = false;
         addToast(`Deployment error: ${error.message}`, 'error');
         throw error;
-    } finally {
-        setIsProcessingAuth(false);
     }
   }, [addToast]);
 
