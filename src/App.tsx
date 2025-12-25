@@ -5,33 +5,19 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { MemberDashboard } from './components/MemberDashboard';
 import { AuthPage } from './components/AuthPage';
 import { Header } from './components/Header';
-import { User, Agent, Broadcast, MemberUser, Admin, Conversation, Member } from './types';
+import { User, Agent, MemberUser, Admin, Conversation } from './types';
 import { useToast } from './contexts/ToastContext';
 import { ToastContainer } from './components/Toast';
 import { api } from './services/apiService';
-import { Sidebar } from './components/Sidebar';
-import { BottomNavBar } from './components/BottomNavBar';
 import { useAuth } from './contexts/AuthContext';
-import { useOnlineStatus } from './hooks/useOnlineStatus';
-import { AppInstallBanner } from './components/AppInstallBanner';
-import { useProfileCompletionReminder } from './hooks/useProfileCompletionReminder';
 import { CompleteProfilePage } from './components/CompleteProfilePage';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
 import { VerifyEmailPage } from './components/VerifyEmailPage';
 import { ChatsPage } from './components/ChatsPage';
 import { PublicProfile } from './components/PublicProfile';
-import { MemberSearchModal } from './components/MemberSearchModal';
-import { CreateGroupModal } from './components/CreateGroupModal';
-import { arrayUnion } from 'firebase/firestore';
-import { AndroidApkBanner } from './components/AndroidApkBanner';
-import { WalletPage } from './components/WalletPage';
 import { UbtVerificationPage } from './components/UbtVerificationPage';
-import { usePushNotifications } from './hooks/usePushNotifications';
-import { NotificationPermissionBanner } from './components/NotificationPermissionBanner';
-import { RadarModal } from './components/RadarModal';
-import { UBTScan } from './components/UBTScan';
 import { LogoIcon } from './components/icons/LogoIcon';
-import { LoaderIcon } from './icons/LoaderIcon';
+import { LoaderIcon } from './components/icons/LoaderIcon';
 import { PinVaultLogin } from './components/PinVaultLogin';
 import { RecoveryProtocol } from './components/RecoveryProtocol';
 import { cryptoService } from './services/cryptoService';
@@ -39,12 +25,12 @@ import { cryptoService } from './services/cryptoService';
 const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [logs, setLogs] = useState<string[]>([]);
   const sequence = [
-    "> INITIALIZING UBUNTIUM OS...",
-    "> LOADING IDENTITY_VAULT...",
-    "> SYNC GLOBAL_LEDGER... [ OK ]",
-    "> ESTABLISHING ENCRYPTED TUNNEL...",
-    "> PROTOCOL HANDSHAKE READY.",
-    "> ACCESS GRANTED."
+    "> BOOTING UBUNTIUM_KERNEL_v4.5.2...",
+    "> MOUNTING ENCRYPTED_VAULT... [ SUCCESS ]",
+    "> CONNECTING TO GLOBAL_DAG_MAINNET...",
+    "> VERIFYING SOVEREIGN_IDENTITY_ROOT...",
+    "> HANDSHAKE PROTOCOL STABILIZED.",
+    "> ACCESS GRANTED. WELCOME CITIZEN."
   ];
 
   useEffect(() => {
@@ -55,21 +41,21 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
         i++;
       } else {
         clearInterval(interval);
-        setTimeout(onComplete, 150);
+        setTimeout(onComplete, 400);
       }
-    }, 120); 
+    }, 180);
     return () => clearInterval(interval);
-  }, []);
+  }, [onComplete]);
 
   return (
-    <div className="fixed inset-0 bg-black z-[200] flex flex-col items-center justify-center p-8 font-mono text-brand-gold">
-      <div className="w-24 h-24 mb-12 relative">
+    <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-8 font-mono text-brand-gold">
+      <div className="w-24 h-24 mb-16 relative">
         <LogoIcon className="w-full h-full text-brand-gold animate-pulse" />
         <div className="absolute inset-0 border border-brand-gold/10 rounded-full animate-ping scale-150 opacity-20"></div>
       </div>
       <div className="w-full max-w-xs space-y-2 border-l border-brand-gold/20 pl-6">
         {logs.map((log, idx) => (
-          <div key={idx} className="text-[10px] tracking-widest font-black uppercase text-brand-gold/90">{log}</div>
+          <div key={idx} className="text-[10px] tracking-widest font-black uppercase text-brand-gold/90 animate-fade-in">{log}</div>
         ))}
         <div className="w-2.5 h-3.5 bg-brand-gold animate-terminal-cursor mt-2 shadow-[0_0_10px_#D4AF37]"></div>
       </div>
@@ -78,153 +64,130 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 };
 
 const App: React.FC = () => {
-  const { currentUser, firebaseUser, isLoadingAuth, isProcessingAuth, logout, updateUser, isSovereignLocked, unlockSovereignSession } = useAuth();
+  const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser, isSovereignLocked, unlockSovereignSession } = useAuth();
   const [isBooting, setIsBooting] = useState(true);
   const [isRecovering, setIsRecovering] = useState(false);
-  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
-  const { addToast } = useToast();
-  const isOnline = useOnlineStatus();
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
-  const [isDesktop, setIsDesktop] = useState(window.innerWidth >= 768);
-
-  // UI State
-  const [agentView, setAgentView] = useState<any>('dashboard');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<Conversation | 'main' | null>(null);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
-  const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
-  const [isNewGroupModalOpen, setIsNewGroupModalOpen] = useState(false);
-  const [isRadarOpen, setIsRadarOpen] = useState(false);
-  const [isScanOpen, setIsScanOpen] = useState(false);
-
-  useProfileCompletionReminder(currentUser);
-  const { permission, requestPermission } = usePushNotifications(currentUser);
-
-  useEffect(() => {
-    const handleResize = () => setIsDesktop(window.innerWidth >= 768);
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
 
   useEffect(() => {
     if (currentUser) {
-        api.getBroadcasts().then(setBroadcasts).catch(() => {});
-        const unsubNotifications = api.listenForNotifications(currentUser.id, (notifications) => {
+        const unsubNotifs = api.listenForNotifications(currentUser.id, (notifications) => {
             setUnreadNotificationCount(notifications.filter(n => !n.read).length);
-        }, (error) => {
-            console.error('Notification error:', error);
-        });
-        return () => unsubNotifications();
+        }, () => {});
+        return () => unsubNotifs();
     }
   }, [currentUser]);
 
-  const requestLogout = () => setIsLogoutConfirmOpen(true);
   const confirmLogout = async () => {
     await logout();
     setIsLogoutConfirmOpen(false);
   };
   
-  const handleOpenChat = (target?: Conversation | 'main') => setChatTarget(target || 'main');
-  
+  const handleOpenChat = () => setChatTarget('main');
   const handleViewProfile = (userId: string | null) => {
     setChatTarget(null);
     setViewingProfileId(userId);
   };
   
-  const renderContent = () => {
-    // 1. Loading States - If auth is loading OR there's a Firebase user but no profile yet, stay in sync mode.
+  const renderMainContent = () => {
+    // 1. Loading States - If auth is still loading OR we have a session but NO profile yet, show loading.
     if (isLoadingAuth || isProcessingAuth || (firebaseUser && !currentUser)) {
       return (
-        <div className="fixed inset-0 bg-black flex flex-col items-center justify-center p-10 font-mono">
-            <LoaderIcon className="h-8 w-8 animate-spin text-brand-gold mb-4 opacity-50" />
-            <div className="text-[10px] uppercase tracking-[0.6em] text-brand-gold/60 animate-pulse text-center">Synchronizing Protocol Node...</div>
+        <div className="flex flex-col items-center justify-center min-h-screen bg-black">
+            <LoaderIcon className="h-10 w-10 animate-spin text-brand-gold mb-4" />
+            <div className="text-[10px] uppercase font-black tracking-[0.4em] text-white/30">Synchronizing Ledger...</div>
         </div>
       );
     }
 
-    // 2. Sovereign Gate (PIN Security)
+    // 2. Sovereign PIN Gate
     if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
         if (isRecovering) {
             return (
-                <div className="min-h-screen bg-black flex flex-col justify-center items-center px-4">
+                <div className="flex-1 flex flex-col justify-center items-center px-4 min-h-screen bg-black">
                     <RecoveryProtocol 
                         onBack={() => setIsRecovering(false)} 
                         onComplete={async (m, p) => { 
                             await cryptoService.saveVault({mnemonic: m}, p); 
                             setIsRecovering(false); 
-                            addToast("Vault Reset Successful.", "success");
                         }} 
                     />
                 </div>
             );
         }
         return (
-            <div className="min-h-screen bg-black flex flex-col justify-center items-center px-4">
-                <div className="absolute inset-0 blueprint-grid opacity-[0.05] pointer-events-none"></div>
+            <div className="flex-1 flex flex-col justify-center items-center px-4 min-h-screen bg-black">
                 <PinVaultLogin onUnlock={unlockSovereignSession} onReset={() => setIsRecovering(true)} />
             </div>
         );
     }
 
-    // 3. Unauthenticated State
-    if (!currentUser) {
-      return <AuthPage />;
-    }
+    // 3. Login Page - Only show if we explicitly have NO firebase session and NO current user
+    if (!firebaseUser && !currentUser) return <AuthPage />;
 
-    // 4. Global Modals / Overlays (Full Screen)
+    // 4. Overlays & Modals
     if (chatTarget) {
       return (
         <ChatsPage
-          user={currentUser}
+          user={currentUser!}
           initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null}
           onClose={() => setChatTarget(null)}
           onViewProfile={handleViewProfile}
-          onNewMessageClick={() => setIsNewChatModalOpen(true)}
-          onNewGroupClick={() => setIsNewGroupModalOpen(true)}
+          onNewMessageClick={() => {}}
+          onNewGroupClick={() => {}}
         />
       );
     }
 
     if (viewingProfileId) {
       return (
-        <PublicProfile
-          userId={viewingProfileId}
-          currentUser={currentUser}
-          onBack={() => setViewingProfileId(null)}
-          onStartChat={async (id) => {
-             const target = await api.getPublicUserProfile(id);
-             if (target) {
-               const convo = await api.startChat(currentUser, target);
-               setViewingProfileId(null);
-               setChatTarget(convo);
-             }
-          }}
-          onViewProfile={handleViewProfile}
-          isAdminView={currentUser.role === 'admin'}
-        />
+        <div className="main-container py-10">
+            <PublicProfile
+                userId={viewingProfileId}
+                currentUser={currentUser!}
+                onBack={() => setViewingProfileId(null)}
+                onStartChat={async (id) => {
+                    const target = await api.getPublicUserProfile(id);
+                    if (target) {
+                        const convo = await api.startChat(currentUser!, target);
+                        setViewingProfileId(null);
+                        setChatTarget(convo);
+                    }
+                }}
+                onViewProfile={handleViewProfile}
+                isAdminView={currentUser!.role === 'admin'}
+            />
+        </div>
       );
     }
-    
-    // 5. Verification States
-    if (firebaseUser && !firebaseUser.emailVerified && currentUser.isProfileComplete) {
-        return <VerifyEmailPage user={currentUser} onLogout={requestLogout} />;
-    }
-    
-    if (currentUser.isProfileComplete && currentUser.status === 'pending' && currentUser.role === 'member') {
-        return <div className="p-4 sm:p-6 lg:p-8"><UbtVerificationPage user={currentUser} onLogout={requestLogout} /></div>;
-    }
 
-    if (!currentUser.isProfileComplete) {
-        return <div className="p-4 sm:p-6 lg:p-8"><CompleteProfilePage user={currentUser} onProfileComplete={() => {}} /></div>;
+    // 5. User Induction & Verification Blocks
+    const user = currentUser!;
+    const isLegacyOrSpecial = user.role === 'admin' || user.role === 'agent' || user.status === 'active';
+    
+    if (!isLegacyOrSpecial) {
+        if (firebaseUser && !firebaseUser.emailVerified && (user.isProfileComplete || user.status === 'pending')) {
+            return <VerifyEmailPage user={user} onLogout={() => setIsLogoutConfirmOpen(true)} />;
+        }
+        
+        if (user.status === 'pending' && user.role === 'member') {
+            return <UbtVerificationPage user={user} onLogout={() => setIsLogoutConfirmOpen(true)} />;
+        }
+
+        if (!user.isProfileComplete) {
+            return <div className="main-container py-12"><CompleteProfilePage user={user} onProfileComplete={() => {}} /></div>;
+        }
     }
     
-    // 6. Role Dashboards
-    if (currentUser.role === 'admin') {
+    // 6. Dashboards
+    if (user.role === 'admin') {
       return (
-        <div className="p-4 sm:p-6 lg:p-8">
+        <div className="main-container py-8">
             <AdminDashboard 
-                user={currentUser as Admin} 
+                user={user as Admin} 
                 onUpdateUser={updateUser}
                 unreadCount={unreadNotificationCount}
                 onOpenChat={handleOpenChat}
@@ -234,39 +197,23 @@ const App: React.FC = () => {
       );
     }
 
-    if (currentUser.role === 'agent') {
+    if (user.role === 'agent') {
       return (
-        <>
-            {isDesktop && (
-                <Sidebar 
-                    agent={currentUser as Agent} activeView={agentView} setActiveView={setAgentView}
-                    onLogout={requestLogout} isCollapsed={isSidebarCollapsed}
-                    onToggle={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                    unreadCount={unreadNotificationCount}
-                />
-            )}
-             <main className={`transition-all duration-300 ${isDesktop && !isSidebarCollapsed ? 'md:ml-64' : ''} ${isDesktop && isSidebarCollapsed ? 'md:ml-20' : ''} pb-24 md:pb-0`}>
-                <AgentDashboard 
-                    user={currentUser as Agent} broadcasts={broadcasts} onUpdateUser={updateUser} 
-                    activeView={agentView} setActiveView={setAgentView}
-                    onViewProfile={handleViewProfile}
-                />
-            </main>
-            {!isDesktop && (
-                <BottomNavBar 
-                    agent={currentUser as Agent} activeView={agentView} setActiveView={setAgentView}
-                    onLogout={requestLogout} unreadCount={unreadNotificationCount}
-                />
-            )}
-        </>
+        <div className="main-container py-8">
+            <AgentDashboard 
+                user={user as Agent} broadcasts={[]} onUpdateUser={updateUser} 
+                activeView="dashboard" setActiveView={() => {}}
+                onViewProfile={handleViewProfile}
+            />
+        </div>
       );
     }
     
     return (
-        <div className="p-4 sm:p-6 lg:p-8">
+        <div className="main-container">
             <MemberDashboard 
-                user={currentUser as MemberUser} onUpdateUser={updateUser}
-                unreadCount={unreadNotificationCount} onLogout={requestLogout}
+                user={user as MemberUser} onUpdateUser={updateUser}
+                unreadCount={unreadNotificationCount} onLogout={() => setIsLogoutConfirmOpen(true)}
                 onViewProfile={handleViewProfile}
             />
         </div>
@@ -274,73 +221,30 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-black text-white selection:bg-brand-gold selection:text-black">
+    <div className="flex flex-col min-h-screen bg-black">
       {isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
-      
       {!isBooting && (
-          <div className="animate-fade-in">
+          <div className="flex-1 flex flex-col animate-fade-in">
             {!isSovereignLocked && currentUser && (
                 <Header 
                     user={currentUser} 
-                    onLogout={requestLogout} 
+                    onLogout={() => setIsLogoutConfirmOpen(true)} 
                     onViewProfile={handleViewProfile} 
-                    onChatClick={() => handleOpenChat('main')}
-                    onRadarClick={() => setIsRadarOpen(true)} 
-                    onScanClick={() => setIsScanOpen(true)}
+                    onChatClick={() => handleOpenChat()}
                 />
             )}
-            {renderContent()}
             
-            {currentUser && !isSovereignLocked && (
-                <NotificationPermissionBanner permission={permission} onRequestPermission={requestPermission} />
-            )}
-
-            {currentUser && isRadarOpen && (
-                <RadarModal 
-                    isOpen={isRadarOpen}
-                    onClose={() => setIsRadarOpen(false)}
-                    currentUser={currentUser}
-                    onViewProfile={handleViewProfile}
-                    onStartChat={async (id) => {
-                    const target = await api.getPublicUserProfile(id);
-                    if (target) {
-                        const convo = await api.startChat(currentUser, target);
-                        setIsRadarOpen(false);
-                        setChatTarget(convo);
-                    }
-                    }}
-                />
-            )}
-
-            {currentUser && isScanOpen && (
-                <UBTScan
-                    currentUser={currentUser}
-                    onTransactionComplete={() => {}}
-                    onClose={() => setIsScanOpen(false)}
-                />
-            )}
-
-            {currentUser && isNewChatModalOpen && (
-                <MemberSearchModal 
-                    isOpen={isNewChatModalOpen} 
-                    onClose={() => setIsNewChatModalOpen(false)}
-                    currentUser={currentUser}
-                    onSelectUser={(convo) => {
-                    setChatTarget(convo);
-                    setIsNewChatModalOpen(false);
-                    }}
-                />
-            )}
+            <main className="flex-1">
+                {renderMainContent()}
+            </main>
             
             <ToastContainer />
-            <AppInstallBanner />
-            <AndroidApkBanner />
             <ConfirmationDialog
                 isOpen={isLogoutConfirmOpen}
                 onClose={() => setIsLogoutConfirmOpen(false)}
                 onConfirm={confirmLogout}
-                title="Disconnect Node"
-                message="Terminate secure session and exit the sovereign protocol?"
+                title="End Protocol Session"
+                message="Are you sure you want to terminate the secure handshake?"
                 confirmButtonText="Terminate"
             />
           </div>
