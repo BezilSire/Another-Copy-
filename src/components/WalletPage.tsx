@@ -28,7 +28,6 @@ import { HistoryIcon } from './icons/HistoryIcon';
 
 export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
-    // FIX: UserVault is now correctly imported from ../types
     const [vaults, setVaults] = useState<UserVault[]>([]);
     const [economy, setEconomy] = useState<GlobalEconomy | null>(null);
     const [activeTab, setActiveTab] = useState<'vaults' | 'ledger' | 'security'>('vaults');
@@ -54,7 +53,9 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
     };
 
     const hotBalance = user.ubtBalance || 0;
-    const usdValue = hotBalance * (economy?.ubt_to_usd_rate || 1.0);
+    // CRITICAL FIX: Calculating live USD approximation based on current Oracle price
+    const currentPrice = economy?.ubt_to_usd_rate || 0.001; 
+    const usdValue = hotBalance * currentPrice;
 
     return (
         <div className="max-w-6xl mx-auto space-y-10 animate-fade-in pb-32 px-4 font-sans">
@@ -77,8 +78,8 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                                 <span className="text-2xl font-black text-gray-700 font-mono tracking-widest uppercase">UBT</span>
                              </div>
                              <div className="flex items-center gap-3 pl-1">
-                                <span className="label-caps !text-[12px] text-gray-600">Protocol Equity Value</span>
-                                <span className="data-mono text-xl text-brand-gold font-bold">&approx; ${usdValue.toFixed(2)} internal</span>
+                                <span className="label-caps !text-[12px] text-gray-600">Calculated Value (Oracle)</span>
+                                <span className="data-mono text-xl text-brand-gold font-black">&approx; ${usdValue.toFixed(4)} USD</span>
                              </div>
                         </div>
                     </div>
@@ -96,7 +97,6 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                     </div>
                  </div>
 
-                 {/* Protocol Quick-Access Bar - Ecosystem Actions Only */}
                  <div className="relative z-10 grid grid-cols-2 sm:grid-cols-4 gap-4 mt-12 pt-10 border-t border-white/5">
                     <HUDButton onClick={() => setIsSendOpen(true)} icon={<SendIcon className="h-5 w-5" />} label="Dispatch" color="bg-brand-gold text-slate-950" />
                     <HUDButton onClick={() => setIsScanOpen(true)} icon={<QrCodeIcon className="h-5 w-5" />} label="Handshake" color="bg-white/5 text-gray-300" />
@@ -105,19 +105,15 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                  </div>
             </div>
 
-            {/* CONTROL SPECTRUM */}
             <div className="space-y-8">
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-6">
                     <nav className="flex p-1.5 bg-slate-950/80 rounded-[2rem] gap-1 border border-white/5 w-fit shadow-2xl">
                         <NavTab active={activeTab === 'vaults'} onClick={() => setActiveTab('vaults')} label="Protocol Vaults" />
-                        <NavTab active={activeTab === 'ledger'} onClick={() => setActiveTab('ledger')} label="Immutable Log" />
+                        <NavTab active={activeTab === 'ledger'} onClick={() => setActiveTab('ledger')} label="Audit Log" />
                         <NavTab active={activeTab === 'security'} onClick={() => setActiveTab('security')} label="Node Security" />
                     </nav>
                     
-                    <button 
-                        onClick={() => setIsAuditOpen(true)}
-                        className="flex items-center gap-3 px-6 py-3 bg-blue-500/10 border border-blue-500/20 rounded-2xl text-[10px] font-black uppercase tracking-widest text-blue-400 hover:bg-blue-500/20 transition-all"
-                    >
+                    <button onClick={() => setIsAuditOpen(true)} className="flex items-center gap-3 px-6 py-3 bg-blue-500/10 border border-blue-500/20 rounded-2xl text-[10px] font-black uppercase tracking-widest text-blue-400 hover:bg-blue-500/20 transition-all">
                         <HistoryIcon className="h-4 w-4" /> Run Temporal Audit
                     </button>
                 </div>
@@ -125,9 +121,9 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                 <div className="min-h-[400px]">
                     {activeTab === 'vaults' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
-                            <VaultCard name="Social Float" balance={hotBalance} type="LIQUID" description="Assets currently available for internal peer exchange." icon={<TrendingUpIcon className="h-6 w-6 text-emerald-400" />} color="border-emerald-500/20" />
+                            <VaultCard name="Social Float" balance={hotBalance} price={currentPrice} description="Assets currently available for internal peer exchange." icon={<TrendingUpIcon className="h-6 w-6 text-emerald-400" />} color="border-emerald-500/20" />
                             {vaults.map(v => (
-                                <VaultCard key={v.id} name={v.name} balance={v.balance} type={v.type} description={v.type === 'LOCKED' ? `Vested until ${v.lockedUntil?.toDate().toLocaleDateString()}` : "Operational venture assets."} icon={v.type === 'LOCKED' ? <LockIcon className="h-6 w-6 text-red-400" /> : <BriefcaseIcon className="h-6 w-6 text-blue-400" />} color={v.type === 'LOCKED' ? "border-red-500/20" : "border-blue-500/20"} />
+                                <VaultCard key={v.id} name={v.name} balance={v.balance} price={currentPrice} description={v.type === 'LOCKED' ? `Vested until ${v.lockedUntil?.toDate().toLocaleDateString()}` : "Operational venture assets."} icon={v.type === 'LOCKED' ? <LockIcon className="h-6 w-6 text-red-400" /> : <BriefcaseIcon className="h-6 w-6 text-blue-400" />} color={v.type === 'LOCKED' ? "border-red-500/20" : "border-blue-500/20"} />
                             ))}
                             <button onClick={() => api.createUserVault(user.id, "Savings Node", "LOCKED", 30)} className="p-10 rounded-[2.5rem] border-2 border-dashed border-white/5 flex flex-col items-center justify-center gap-5 hover:bg-white/[0.02] hover:border-brand-gold/20 transition-all text-gray-600 hover:text-brand-gold group">
                                 <div className="p-4 rounded-2xl bg-white/5 group-hover:bg-brand-gold/10 transition-colors"><PlusIcon className="h-8 w-8" /></div>
@@ -148,14 +144,15 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                                             <p className="text-[11px] font-black text-white uppercase tracking-widest leading-none mb-1.5">{tx.reason}</p>
                                             <div className="flex items-center gap-3">
                                                 <span className="label-caps !text-[7px] text-gray-600">{formatTimeAgo(tx.timestamp.toDate().toISOString())}</span>
-                                                <span className="text-[7px] font-black text-emerald-500/60 uppercase font-mono">Mainnet_Signed</span>
+                                                <span className="text-[7px] font-black text-emerald-500/60 uppercase font-mono">Ledger_Finalized</span>
                                             </div>
                                         </div>
                                     </div>
                                     <div className="text-right">
                                         <p className={`text-lg font-black font-mono tracking-tighter ${tx.type.includes('sent') || tx.type === 'debit' ? 'text-gray-400' : 'text-emerald-500'}`}>
-                                            {tx.type.includes('sent') ? '-' : '+'} {tx.amount.toFixed(2)}
+                                            {tx.type.includes('sent') ? '-' : '+'} {tx.amount.toLocaleString()}
                                         </p>
+                                        <p className="text-[9px] font-black text-gray-600 font-mono tracking-widest mt-1">≈ ${(tx.amount * currentPrice).toFixed(4)}</p>
                                     </div>
                                 </div>
                             ))}
@@ -190,11 +187,12 @@ const NavTab: React.FC<{ active: boolean; onClick: () => void; label: string }> 
     </button>
 );
 
-const VaultCard: React.FC<{ name: string; balance: number; type: string; description: string; icon: React.ReactNode; color: string }> = ({ name, balance, description, icon, color }) => (
+const VaultCard: React.FC<{ name: string; balance: number; price: number; type: string; description: string; icon: React.ReactNode; color: string }> = ({ name, balance, price, description, icon, color }) => (
     <div className={`glass-card p-8 rounded-[2.5rem] border-white/5 hover:border-brand-gold/20 transition-all duration-500 group relative overflow-hidden flex flex-col border-t-2 ${color}`}>
         <div className="absolute top-0 right-0 p-6 opacity-10 group-hover:opacity-40 transition-opacity">{icon}</div>
         <p className="label-caps !text-[8px] text-gray-500 mb-2">{name}</p>
-        <p className="text-4xl font-black text-white font-mono tracking-tighter leading-none mb-6">{balance.toLocaleString()}</p>
+        <p className="text-4xl font-black text-white font-mono tracking-tighter leading-none mb-2">{balance.toLocaleString()}</p>
+        <p className="text-sm font-black text-emerald-500 font-mono tracking-widest mb-6">≈ ${(balance * price).toFixed(4)} USD</p>
         <div className="mt-auto pt-6 border-t border-white/5">
              <p className="text-[10px] font-bold text-gray-600 uppercase tracking-widest leading-relaxed">{description}</p>
         </div>

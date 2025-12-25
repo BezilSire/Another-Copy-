@@ -56,7 +56,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
 
         <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
             <div className="space-y-2">
-                <label className="label-caps pl-1" htmlFor="full_name">Full Designation</label>
+                <label className="label-caps pl-1 !text-white" htmlFor="full_name">Full Designation</label>
                 <input 
                     type="text" 
                     name="full_name" 
@@ -70,7 +70,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                 />
             </div>
             <div className="space-y-2">
-                <label className="label-caps pl-1" htmlFor="email">Comms Address</label>
+                <label className="label-caps pl-1 !text-white" htmlFor="email">Comms Address</label>
                 <input 
                     type="email" 
                     name="email" 
@@ -84,7 +84,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                 />
             </div>
             <div className="space-y-2">
-                <label className="label-caps pl-1" htmlFor="password">Security Anchor</label>
+                <label className="label-caps pl-1 !text-white" htmlFor="password">Security Anchor</label>
                 <div className="relative">
                     <input
                         id="password"
@@ -108,7 +108,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
             </div>
             
             <div className="space-y-2">
-                <label className="label-caps pl-1" htmlFor="referralCode">Referral Node (Optional)</label>
+                <label className="label-caps pl-1 !text-white" htmlFor="referralCode">Referral Node (Optional)</label>
                 <input 
                     type="text" 
                     name="referralCode" 

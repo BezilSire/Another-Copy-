@@ -1,3 +1,4 @@
+
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -456,7 +457,6 @@ export interface Distribution {
 
 export interface GlobalEconomy {
     ubt_to_usd_rate: number;
-    // FIX: Added missing properties used in apiService.ts
     cvp_usd_backing: number;
     circulating_ubt: number;
     total_ubt_supply: number;

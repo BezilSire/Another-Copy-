@@ -41,7 +41,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, isProcessing, 
 
       <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
         <div className="space-y-2">
-          <label className="label-caps pl-1" htmlFor="name">Full Designation</label>
+          <label className="label-caps pl-1 !text-white" htmlFor="name">Full Designation</label>
           <input 
             id="name" 
             type="text" 
@@ -55,7 +55,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, isProcessing, 
         </div>
 
         <div className="space-y-2">
-          <label className="label-caps pl-1" htmlFor="email">Comms Address</label>
+          <label className="label-caps pl-1 !text-white" htmlFor="email">Comms Address</label>
           <input 
             id="email" 
             type="email" 
@@ -69,7 +69,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, isProcessing, 
         </div>
 
         <div className="space-y-2">
-          <label className="label-caps pl-1" htmlFor="circle">Operational Circle</label>
+          <label className="label-caps pl-1 !text-white" htmlFor="circle">Operational Circle</label>
           <input 
             id="circle" 
             type="text" 
@@ -83,7 +83,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, isProcessing, 
         </div>
 
         <div className="space-y-2">
-          <label className="label-caps pl-1" htmlFor="password">Security Anchor</label>
+          <label className="label-caps pl-1 !text-white" htmlFor="password">Security Anchor</label>
           <div className="relative">
             <input 
                 id="password" 

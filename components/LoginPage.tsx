@@ -46,7 +46,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isProcessing, onS
 
       <form onSubmit={handleSubmit} className="space-y-8 relative z-10">
         <div className="space-y-3">
-          <label className="label-caps pl-1" htmlFor="email">
+          <label className="label-caps pl-1 !text-white" htmlFor="email">
             Identity Address
           </label>
           <input
@@ -63,7 +63,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isProcessing, onS
 
         <div className="space-y-3">
           <div className="flex justify-between items-center px-1">
-              <label className="label-caps" htmlFor="password">
+              <label className="label-caps !text-white" htmlFor="password">
                 Security Anchor
               </label>
               <button

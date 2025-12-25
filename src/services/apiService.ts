@@ -49,7 +49,7 @@ import {
 const usersCollection = collection(db, 'users');
 const membersCollection = collection(db, 'members');
 const postsCollection = collection(db, 'posts');
-const reportsCollection = collection(db, 'reports');
+const reports = collection(db, 'reports');
 const conversationsCollection = collection(db, 'conversations');
 const activityCollection = collection(db, 'activity');
 const proposalsCollection = collection(db, 'proposals');
@@ -279,9 +279,10 @@ export const api = {
             const totalCap = 15000000;
             const floatInitial = 1000000;
 
-            t.set(genesisRef, { id: 'GENESIS', name: "Genesis Node", balance: totalCap - floatInitial, type: 'GENESIS', isLocked: true, createdAt: serverTimestamp(), publicKey: 'ROOT_AUTHORITY_CHAIN' });
-            t.set(floatRef, { id: 'FLOAT', name: "Liquidity Float", balance: floatInitial, type: 'FLOAT', isLocked: false, createdAt: serverTimestamp(), publicKey: 'LIQUIDITY_FLOAT_CHAIN' });
+            t.set(genesisRef, { id: 'GENESIS', name: "Genesis Node", balance: totalCap - floatInitial, type: 'GENESIS', isLocked: true, createdAt: serverTimestamp(), publicKey: 'ROOT_AUTHORITY_CHAIN', description: "Master Protocol Asset Reservoir" });
+            t.set(floatRef, { id: 'FLOAT', name: "Liquidity Float", balance: floatInitial, type: 'FLOAT', isLocked: false, createdAt: serverTimestamp(), publicKey: 'LIQUIDITY_FLOAT_CHAIN', description: "Public Pool for Secondary Market Buy/Sell" });
             
+            // Economy Root
             t.set(economyRef, {
                 total_ubt_supply: totalCap,
                 circulating_ubt: floatInitial,
@@ -295,14 +296,18 @@ export const api = {
     syncEconomyOracle: async () => {
         return runTransaction(db, async (t) => {
             const economyRef = doc(globalsCollection, 'economy');
-            const genesisRef = doc(vaultsCollection, 'GENESIS');
+            const floatRef = doc(vaultsCollection, 'FLOAT');
             
-            const [econSnap, genesisSnap] = await Promise.all([t.get(economyRef), t.get(genesisRef)]);
-            if (!econSnap.exists() || !genesisSnap.exists()) return;
+            const [econSnap, floatSnap] = await Promise.all([t.get(economyRef), t.get(floatRef)]);
+            if (!econSnap.exists() || !floatSnap.exists()) return;
 
             const econ = econSnap.data() as GlobalEconomy;
-            const genesisBal = genesisSnap.data()?.balance || 0;
-            const circulating = 15000000 - genesisBal;
+            const floatBal = floatSnap.data()?.balance || 0;
+            
+            // PROTOCOL RULE: Only UBT in the Liquidity Float is considered "In Circulation"
+            const circulating = floatBal;
+            
+            // Logic: Price = Backing Reserve / Liquidity Float
             const backing = econ.cvp_usd_backing || 1000;
             const newRate = backing / Math.max(1, circulating);
 
@@ -323,16 +328,24 @@ export const api = {
 
     processUbtTransaction: async (transaction: UbtTransaction) => {
         return runTransaction(db, async (t) => {
-            const senderRef = doc(usersCollection, transaction.senderId);
-            const receiverRef = doc(usersCollection, transaction.receiverId);
+            const isFloatSender = transaction.senderId === 'FLOAT';
+            const isFloatReceiver = transaction.receiverId === 'FLOAT';
+
+            const senderRef = isFloatSender ? doc(vaultsCollection, 'FLOAT') : doc(usersCollection, transaction.senderId);
+            const receiverRef = isFloatReceiver ? doc(vaultsCollection, 'FLOAT') : doc(usersCollection, transaction.receiverId);
+
             const senderDoc = await t.get(senderRef);
             if (!senderDoc.exists()) throw new Error("Origin node offline.");
-            if ((senderDoc.data().ubtBalance || 0) < transaction.amount) throw new Error("Insufficient liquidity.");
+            
+            const balKey = isFloatSender ? 'balance' : 'ubtBalance';
+            const currentBal = senderDoc.data()[balKey] || 0;
+            if (currentBal < transaction.amount) throw new Error("Insufficient liquidity.");
 
-            t.update(senderRef, { ubtBalance: increment(-transaction.amount) });
-            t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
+            t.update(senderRef, { [balKey]: increment(-transaction.amount) });
+            const recBalKey = isFloatReceiver ? 'balance' : 'ubtBalance';
+            t.update(receiverRef, { [recBalKey]: increment(transaction.amount) });
             t.set(doc(ledgerCollection, transaction.id), { ...transaction, serverTimestamp: serverTimestamp() });
-        });
+        }).then(() => api.syncEconomyOracle());
     },
 
     approveUbtPurchase: (admin: Admin, p: PendingUbtPurchase, sourceVaultId: 'FLOAT' | 'GENESIS' = 'FLOAT') => runTransaction(db, async t => {
@@ -382,7 +395,7 @@ export const api = {
                 t.update(doc(usersCollection, receiverId), { ubtBalance: increment(amount) });
             }
             t.set(doc(ledgerCollection, transaction.id), { ...transaction, serverTimestamp: serverTimestamp() });
-        });
+        }).then(() => api.syncEconomyOracle());
     },
 
     getPublicLedger: async (limitCount: number = 200): Promise<UbtTransaction[]> => {
@@ -408,7 +421,7 @@ export const api = {
     syncInternalVaults: (admin: Admin, from: TreasuryVault, to: TreasuryVault, amt: number, reason: string) => runTransaction(db, async t => {
         t.update(doc(vaultsCollection, from.id), { balance: increment(-amt) });
         t.update(doc(vaultsCollection, to.id), { balance: increment(amt) });
-    }),
+    }).then(() => api.syncEconomyOracle()),
 
     listenForUserTransactions: (userId: string, callback: (txs: Transaction[]) => void, onError: (error: Error) => void) => 
         onSnapshot(query(collection(db, 'users', userId, 'transactions'), orderBy('timestamp', 'desc'), limit(50)), (s) => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))), onError),
@@ -448,7 +461,7 @@ export const api = {
     },
     listenForActivity: (circle: string, callback: (acts: Activity[]) => void, onError: (error: Error) => void) => 
         onSnapshot(query(activityCollection, where('causerCircle', '==', circle), orderBy('timestamp', 'desc'), limit(10)), (s) => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), onError),
-    reportUser: (reporter: User, reported: User, reason: string, details: string) => addDoc(reportsCollection, { reporterId: reporter.id, reporterName: reporter.name, reportedUserId: reported.id, reportedUserName: reported.name, reason, details, date: new Date().toISOString(), status: 'new' }),
+    reportUser: (reporter: User, reported: User, reason: string, details: string) => addDoc(reports, { reporterId: reporter.id, reporterName: reporter.name, reportedUserId: reported.id, reportedUserName: reported.name, reason, details, date: new Date().toISOString(), status: 'new' }),
 
     listenForConversations: (userId: string, callback: (convos: Conversation[]) => void, onError: (error: Error) => void) => 
         onSnapshot(query(conversationsCollection, where('members', 'array-contains', userId)), (s) => callback(s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation))), onError),
@@ -516,7 +529,7 @@ export const api = {
         await addDoc(postsCollection, { authorId: user.id, authorName: 'Anonymous Member', authorCircle: user.circle, authorRole: user.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress' });
     },
     deleteDistressPost: (admin: User, pid: string, uid: string) => deleteDoc(doc(postsCollection, pid)),
-    reportPost: (user: User, post: Post, reason: string, details: string) => addDoc(reportsCollection, { reporterId: user.id, reporterName: user.name, reportedUserId: post.authorId, reportedUserName: post.authorName, postId: post.id, postContent: post.content, postAuthorId: post.authorId, reason, details, date: new Date().toISOString(), status: 'new' }),
+    reportPost: (user: User, post: Post, reason: string, details: string) => addDoc(reports, { reporterId: user.id, reporterName: user.name, reportedUserId: post.authorId, reportedUserName: post.authorName, postId: post.id, postContent: post.content, postAuthorId: post.authorId, reason, details, date: new Date().toISOString(), status: 'new' }),
 
     listenForComments: (pid: string, cb: (c: Comment[]) => void, coll: 'posts'|'proposals' = 'posts', err: any) => onSnapshot(
         query(collection(db, coll, pid, 'comments'), orderBy('timestamp', 'asc')), 
@@ -545,7 +558,7 @@ export const api = {
     listenForAllMembers: (admin: User, cb: (m: Member[]) => void, err: any) => onSnapshot(membersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
     listenForAllAgents: (admin: User, cb: (a: Agent[]) => void, err: any) => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Agent))), err),
     listenForPendingMembers: (admin: User, cb: (m: Member[]) => void, err: any) => onSnapshot(query(membersCollection, where('payment_status', '==', 'pending_verification')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
-    listenForReports: (admin: User, cb: (r: Report[]) => void, err: any) => onSnapshot(reportsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Report))), err),
+    listenForReports: (admin: User, cb: (r: Report[]) => void, err: any) => onSnapshot(reports, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Report))), err),
     listenForPayoutRequests: (admin: User, cb: (r: PayoutRequest[]) => void, err: any) => onSnapshot(payoutsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
     listenForPendingPurchases: (cb: (p: PendingUbtPurchase[]) => void, err: any) => onSnapshot(query(pendingPurchasesCollection, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), err),
     updatePayoutStatus: (admin: User, payout: PayoutRequest, status: string) => updateDoc(doc(payoutsCollection, payout.id), { status, processedBy: { adminId: admin.id, adminName: admin.name }, completedAt: serverTimestamp() }),
@@ -664,7 +677,7 @@ export const api = {
         return snap.docs.map(d => ({ id: d.id, ...d.data() } as Distribution));
     },
     redeemCcapForCash: (u: User, n: string, p: string, v: number, c: number, r: number) => runTransaction(db, async t => {
-        t.set(doc(payoutsCollection), { userId: u.id, userName: u.name, type: 'ccap_redemption', amount: v, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp(), meta: { ccapAmount: c, ccapToUsdRate: r } });
+        t.set(doc(payoutsCollection), { userId: u.id, userName: u.name, type: 'ccap_redemption', amount: v, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp(), meta: { ccapAmount: c, ccap_to_usd_rate: r } });
         t.update(doc(usersCollection, u.id), { currentCycleCcap: 0, lastCycleChoice: 'redeemed' });
     }),
     stakeCcapForNextCycle: (u: User) => updateDoc(doc(usersCollection, u.id), { currentCycleCcap: 0, stakedCcap: increment((u.currentCycleCcap || 0) * 1.1), lastCycleChoice: 'staked' }),
@@ -675,16 +688,4 @@ export const api = {
     }),
     requestVeqPayout: (u: User, h: VentureEquityHolding, s: number, n: string, p: string) => addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'veq_redemption', amount: s, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp(), meta: { ventureId: h.ventureId, ventureName: h.ventureName } }),
     claimBonusPayout: (id: string, n: string, p: string) => updateDoc(doc(payoutsCollection, id), { ecocashName: n, ecocashNumber: p, status: 'pending' }),
-    updateUserUbt: (admin: Admin, uid: string, amt: number, reason: string) => runTransaction(db, async t => {
-        t.update(doc(usersCollection, uid), { ubtBalance: increment(amt) });
-        t.set(doc(collection(db, 'users', uid, 'transactions')), { type: amt > 0 ? 'credit' : 'debit', amount: Math.abs(amt), reason, timestamp: serverTimestamp(), actorId: admin.id, actorName: admin.name });
-    }),
-    requestUbtRedemption: (u: User, amt: number, val: number, n: string, p: string) => runTransaction(db, async t => {
-        t.update(doc(usersCollection, u.id), { ubtBalance: increment(-amt) });
-        t.set(doc(payoutsCollection), { userId: u.id, userName: u.name, type: 'ubt_redemption', amount: val, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp(), meta: { ubtAmount: amt } });
-    }),
-    requestOnchainWithdrawal: (u: User, amt: number, addr: string) => runTransaction(db, async t => {
-        t.update(doc(usersCollection, u.id), { ubtBalance: increment(-amt) });
-        t.set(doc(payoutsCollection), { userId: u.id, userName: u.name, type: 'onchain_withdrawal', amount: amt, status: 'pending', requestedAt: serverTimestamp(), meta: { solanaAddress: addr }, ecocashName: 'ONCHAIN', ecocashNumber: 'SOLANA' });
-    }),
 };

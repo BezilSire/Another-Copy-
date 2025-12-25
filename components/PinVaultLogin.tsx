@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { cryptoService, VaultData } from '../services/cryptoService';
 import { LogoIcon } from './icons/LogoIcon';
@@ -79,7 +78,7 @@ export const PinVaultLogin: React.FC<PinVaultLoginProps> = ({ onUnlock, onReset 
             </div>
 
             <h2 className="text-xl font-black text-white uppercase tracking-tighter gold-text mb-1">Authorization Required</h2>
-            <p className="label-caps !text-[8px] !text-gray-500 mb-10">Enter your 6-digit Unlock PIN</p>
+            <p className="label-caps !text-[8px] !text-white/60 mb-10">Enter your 6-digit Unlock PIN</p>
 
             <div className="w-full">
                 <div className="flex justify-between gap-2 mb-10">
@@ -94,9 +93,9 @@ export const PinVaultLogin: React.FC<PinVaultLoginProps> = ({ onUnlock, onReset 
                             disabled={status === 'unlocking' || status === 'success'}
                             onChange={(e) => handleInput(e.target.value, i)}
                             onKeyDown={(e) => handleKeyDown(e, i)}
-                            className={`w-10 h-14 bg-white border-2 rounded-xl text-center text-2xl font-black text-slate-900 focus:outline-none transition-all
-                                ${status === 'error' ? 'border-red-500 bg-red-50' : digit ? 'border-brand-gold ring-4 ring-brand-gold/20' : 'border-slate-200'}
-                                ${status === 'success' ? 'border-emerald-500 bg-emerald-50 shadow-glow-matrix' : ''}
+                            className={`w-10 h-14 bg-slate-900 border-2 rounded-xl text-center text-2xl font-black text-white focus:outline-none transition-all
+                                ${status === 'error' ? 'border-red-500 bg-red-900/20' : digit ? 'border-brand-gold ring-4 ring-brand-gold/20' : 'border-white/10'}
+                                ${status === 'success' ? 'border-emerald-500 bg-emerald-900/20 shadow-glow-matrix' : ''}
                             `}
                         />
                     ))}
@@ -110,12 +109,12 @@ export const PinVaultLogin: React.FC<PinVaultLoginProps> = ({ onUnlock, onReset 
                     ) : status === 'error' ? (
                         <p className="text-red-500 text-[9px] font-black uppercase tracking-widest">Invalid Security PIN</p>
                     ) : (
-                        <p className="text-[8px] text-gray-600 uppercase font-black tracking-widest">Secure Handshake Active</p>
+                        <p className="text-[8px] text-white/40 uppercase font-black tracking-widest">Secure Handshake Active</p>
                     )}
                 </div>
             </div>
 
-            <button onClick={onReset} className="mt-8 text-[9px] font-black text-gray-500 hover:text-brand-gold uppercase tracking-[0.3em] transition-colors border-b border-gray-800 pb-1">
+            <button onClick={onReset} className="mt-8 text-[9px] font-black text-white/50 hover:text-brand-gold uppercase tracking-[0.3em] transition-colors border-b border-white/5 pb-1">
                 Forgotten PIN? Reset Access
             </button>
         </div>

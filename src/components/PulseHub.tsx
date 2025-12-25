@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, P2POffer, GlobalEconomy, CommunityValuePool, SellRequest, PendingUbtPurchase, AssetType, UbtTransaction } from '../types';
+import { User, P2POffer, GlobalEconomy, SellRequest, PendingUbtPurchase, UbtTransaction, TreasuryVault } from '../types';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
 import { LoaderIcon } from './icons/LoaderIcon';
@@ -7,15 +8,10 @@ import { TrendingUpIcon } from './icons/TrendingUpIcon';
 import { UsersIcon } from './icons/UsersIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
-import { PlusIcon } from './icons/PlusIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
-import { ClipboardIcon } from './icons/ClipboardIcon';
-import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
-import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
 import { onSnapshot, query, collection, where, Timestamp, doc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { ConfirmationDialog } from './ConfirmationDialog';
 import { LogoIcon } from './icons/LogoIcon';
 import { formatTimeAgo } from '../utils';
 
@@ -33,29 +29,76 @@ const getMillis = (val: any): number => {
     return isNaN(date.getTime()) ? 0 : date.getTime();
 };
 
-const PulseChart: React.FC<{ ledger: UbtTransaction[] }> = ({ ledger }) => {
-    const points = useMemo(() => {
-        const recent = ledger.slice(0, 10).reverse();
-        if (recent.length < 2) return "M0,80 Q50,70 100,85 T200,60 T300,40 T400,20";
-        return recent.map((tx, i) => {
-            const x = (i / (recent.length - 1)) * 400;
-            const y = 100 - (Math.min(tx.amount, 1000) / 1000) * 80;
-            return `${i === 0 ? 'M' : 'L'}${x},${y}`;
-        }).join(' ');
-    }, [ledger]);
+const PulseCandleChart: React.FC<{ ledger: UbtTransaction[], currentPrice: number }> = ({ ledger, currentPrice }) => {
+    const candles = useMemo(() => {
+        const candleCount = 14;
+        const processed = [];
+        let runningPrice = currentPrice;
+        
+        // Filter ledger to only show events affecting Float node (Market movements)
+        const marketEvents = ledger
+            .filter(tx => tx.senderId === 'FLOAT' || tx.receiverId === 'FLOAT')
+            .sort((a, b) => b.timestamp - a.timestamp);
+
+        for (let i = 0; i < candleCount; i++) {
+            const chunk = marketEvents.slice(i * 2, (i * 2) + 2);
+            const close = runningPrice;
+            
+            // Impact factor: larger volume moves price more. 
+            const impact = chunk.reduce((acc, tx) => {
+                const volFactor = tx.amount / 500000; // Normalized volume impact sensitivity
+                return tx.senderId === 'FLOAT' ? acc - volFactor : acc + volFactor;
+            }, 0) || (Math.random() - 0.5) * 0.00005; 
+
+            const open = close + impact;
+            const high = Math.max(open, close) + Math.abs(impact * 0.2);
+            const low = Math.min(open, close) - Math.abs(impact * 0.2);
+
+            processed.push({ open, high, low, close });
+            runningPrice = open; 
+        }
+
+        return processed.reverse();
+    }, [ledger, currentPrice]);
+
+    const minPrice = Math.min(...candles.map(c => c.low));
+    const maxPrice = Math.max(...candles.map(c => c.high));
+    const range = (maxPrice - minPrice) || 0.0001;
+
+    const getY = (p: number) => 100 - ((p - minPrice) / range) * 80 - 10;
 
     return (
-        <div className="w-full h-24 relative overflow-hidden mt-2">
-            <svg viewBox="0 0 400 100" className="w-full h-full opacity-40">
-                <path d={points} fill="none" stroke="#D4AF37" strokeWidth="3" className="drop-shadow-glow" />
-                <path d={`${points} L400,100 L0,100 Z`} fill="url(#lineGradient)" />
-                <defs>
-                    <linearGradient id="lineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                        <stop offset="0%" stopColor="#D4AF37" stopOpacity="0.3" />
-                        <stop offset="100%" stopColor="#D4AF37" stopOpacity="0" />
-                    </linearGradient>
-                </defs>
+        <div className="w-full h-40 relative overflow-hidden mt-8 bg-slate-950/60 rounded-3xl border border-white/5 shadow-inner group">
+            <div className="absolute inset-0 z-0 opacity-[0.03] pointer-events-none" 
+                 style={{ backgroundImage: 'linear-gradient(rgba(212,175,55,1) 1px, transparent 1px), linear-gradient(90deg, rgba(212,175,55,1) 1px, transparent 1px)', backgroundSize: '30px 30px' }}>
+            </div>
+
+            <svg viewBox="0 0 400 100" className="w-full h-full p-4 relative z-10 overflow-visible">
+                {candles.map((c, i) => {
+                    const x = (i / (candles.length - 1)) * 360 + 20;
+                    const isBullish = c.close >= c.open;
+                    const color = isBullish ? '#10b981' : '#ef4444';
+                    
+                    const yHigh = getY(c.high);
+                    const yLow = getY(c.low);
+                    const yOpen = getY(c.open);
+                    const yClose = getY(c.close);
+                    
+                    const bodyY = Math.min(yOpen, yClose);
+                    const bodyH = Math.max(Math.abs(yOpen - yClose), 1.5);
+
+                    return (
+                        <g key={i} className="animate-fade-in" style={{ animationDelay: `${i * 40}ms` }}>
+                            <line x1={x} y1={yHigh} x2={x} y2={yLow} stroke={color} strokeWidth="1" opacity="0.4" />
+                            <rect x={x - 6} y={bodyY} width="12" height={bodyH} fill={color} rx="1" className="transition-all duration-700" />
+                        </g>
+                    );
+                })}
             </svg>
+            <div className="absolute bottom-3 left-6 flex items-center gap-3">
+                <div className="w-1.5 h-1.5 rounded-full bg-brand-gold animate-pulse"></div>
+                <span className="text-[7px] font-black text-gray-600 uppercase tracking-[0.4em]">Spectrum_Oracle_Verified</span>
+            </div>
         </div>
     );
 };
@@ -64,30 +107,26 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
     const [view, setView] = useState<'swap' | 'p2p'>('swap');
     const [offers, setOffers] = useState<P2POffer[]>([]);
     const [economy, setEconomy] = useState<GlobalEconomy | null>(null);
-    const [cvp, setCvp] = useState<CommunityValuePool | null>(null);
+    const [vaults, setVaults] = useState<TreasuryVault[]>([]);
     const [ledger, setLedger] = useState<UbtTransaction[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const { addToast } = useToast();
 
     const [swapType, setSwapType] = useState<'BUY' | 'SELL'>('BUY');
-    const [paymentMode, setPaymentMode] = useState<'FIAT' | 'CRYPTO'>('FIAT');
-    const [cryptoAsset, setCryptoAsset] = useState<AssetType>('USDT');
     const [swapAmount, setSwapAmount] = useState('');
     const [isSwapping, setIsSwapping] = useState(false);
     
-    const [bridgeStep, setBridgeStep] = useState<'input' | 'ussd' | 'crypto_deposit' | 'reference' | 'sync'>('input');
+    const [bridgeStep, setBridgeStep] = useState<'input' | 'ussd' | 'reference' | 'sync'>('input');
     const [ecocashRef, setEcocashRef] = useState('');
     const [activePurchaseId, setActivePurchaseId] = useState<string | null>(null);
     const [syncLogs, setSyncLogs] = useState<string[]>([]);
-
     const [mySellRequests, setMySellRequests] = useState<SellRequest[]>([]);
 
     useEffect(() => {
         const unsubOffers = api.listenToP2POffers(setOffers, console.error);
         const unsubEcon = api.listenForGlobalEconomy(setEconomy, console.error);
-        const unsubCvp = api.listenForCVP(user, setCvp, console.error);
-        
-        api.getPublicLedger(20).then(setLedger);
+        const unsubVaults = api.listenToVaults(setVaults, console.error);
+        api.getPublicLedger(150).then(setLedger);
 
         const unsubSell = onSnapshot(query(collection(db, 'sell_requests'), where('userId', '==', user.id)), s => {
             const data = s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest));
@@ -95,52 +134,55 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
         });
 
         setIsLoading(false);
-        return () => { unsubOffers(); unsubEcon(); unsubCvp(); unsubSell(); };
+        return () => { unsubOffers(); unsubEcon(); unsubVaults(); unsubSell(); };
     }, [user.id]);
 
     useEffect(() => {
         if (!activePurchaseId) return;
         const unsub = onSnapshot(doc(db, 'pending_ubt_purchases', activePurchaseId), (snap) => {
-            if (snap.exists()) {
-                const data = snap.data() as PendingUbtPurchase;
-                if (data.status === 'VERIFIED') {
-                    setSyncLogs(prev => [...prev, "> [SUCCESS] BLOCK VERIFIED.", "> [SUCCESS] ASSETS RELEASED FROM ESCROW."]);
-                    setTimeout(() => {
-                        setActivePurchaseId(null);
-                        setBridgeStep('input');
-                        setSwapAmount('');
-                        setEcocashRef('');
-                    }, 5000);
-                } else if (data.status === 'REJECTED') {
-                    setSyncLogs(prev => [...prev, "> [ERROR] HANDSHAKE REJECTED.", "> [ERROR] EVIDENCE ANCHOR INVALID."]);
-                    setTimeout(() => { setActivePurchaseId(null); setBridgeStep('input'); }, 5000);
-                }
+            if (snap.exists() && snap.data()?.status === 'VERIFIED') {
+                setSyncLogs(prev => [...prev, "> BLOCK VERIFIED.", "> ASSETS RELEASED."]);
+                setTimeout(() => {
+                    setActivePurchaseId(null);
+                    setBridgeStep('input');
+                    setSwapAmount('');
+                    setEcocashRef('');
+                }, 4000);
             }
         });
         return () => unsub();
     }, [activePurchaseId]);
 
-    const ubtPrice = economy?.ubt_to_usd_rate || 1.0;
-    const estTotal = (parseFloat(swapAmount) || 0) * ubtPrice;
-    const merchantCode = "031068";
-    const ussdCommand = `*151*2*2*${merchantCode}*${Math.round(estTotal)}#`;
+    const metrics = useMemo(() => {
+        const floatVault = vaults.find(v => v.id === 'FLOAT');
+        const circulating = floatVault?.balance || 1000000;
+        const backing = economy?.cvp_usd_backing || 1000;
+        const price = backing / Math.max(1, circulating);
+        return { circulating, backing, price };
+    }, [vaults, economy]);
+
+    const estTotal = (parseFloat(swapAmount) || 0) * metrics.price;
+    const ussdCommand = `*151*2*2*031068*${Math.round(estTotal)}#`;
 
     const handleSwapInitiate = async () => {
         const amt = parseFloat(swapAmount);
-        if (isNaN(amt) || amt <= 0) {
-            addToast("Enter a valid volume.", "error");
-            return;
-        }
+        if (isNaN(amt) || amt <= 0) return;
         if (swapType === 'BUY') {
-            if (paymentMode === 'FIAT') setBridgeStep('ussd');
-            else setBridgeStep('crypto_deposit');
+            setBridgeStep('ussd');
+        } else {
+            setIsSwapping(true);
+            try {
+                await api.createSellRequest(user, amt, estTotal);
+                addToast("Redemption anchor created.", "success");
+                setSwapAmount('');
+            } finally { setIsSwapping(false); }
         }
     };
 
     const handleEcocashSubmit = async () => {
         if (!ecocashRef.trim()) return;
         setIsSwapping(true);
-        setSyncLogs(["> INITIALIZING_BRIDGE...", "> ESCROWING_ASSETS...", "> BROADCASTING_PROOF..."]);
+        setSyncLogs(["> INITIALIZING_BRIDGE...", "> ESCROWING...", "> BROADCASTING..."]);
         try {
             const purchaseRef = await api.createPendingUbtPurchase(user, estTotal, parseFloat(swapAmount), ecocashRef.toUpperCase());
             setActivePurchaseId(purchaseRef.id);
@@ -148,185 +190,135 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
         } catch (e) {
             addToast("Sync failure.", "error");
             setBridgeStep('input');
-        } finally {
-            setIsSwapping(false);
-        }
+        } finally { setIsSwapping(false); }
     };
 
     return (
         <div className="max-w-6xl mx-auto space-y-8 animate-fade-in pb-24 px-4 font-sans">
-            
-            {/* REAL-TIME TERMINAL HEADER */}
-            <div className="glass-card rounded-[2.5rem] p-8 border-white/5 flex flex-col md:flex-row justify-between items-center gap-8 relative overflow-hidden bg-slate-950/80 shadow-premium">
-                <div className="absolute inset-0 bg-gradient-to-r from-brand-gold/[0.04] to-transparent pointer-events-none"></div>
-                <div className="flex-1 space-y-2 text-center md:text-left z-10">
-                    <p className="label-caps !text-[10px] text-brand-gold/60 !tracking-[0.4em]">Mainnet Oracle Pulse</p>
-                    <div className="flex items-baseline justify-center md:justify-start gap-4">
-                        <h1 className="text-7xl font-black text-white tracking-tighter gold-text leading-none">${ubtPrice.toFixed(4)}</h1>
-                        <div className="flex flex-col">
-                            <span className="text-emerald-400 font-mono text-xs font-bold uppercase tracking-widest">Calculated Sync</span>
-                            <span className="text-[9px] text-gray-600 font-mono">Backing: ${economy?.cvp_usd_backing?.toLocaleString() ?? '...'}</span>
+            {/* MARKET ANALYTICS HUD */}
+            <div className="module-frame bg-slate-950 rounded-[3rem] p-10 border-white/5 shadow-premium relative overflow-hidden">
+                <div className="absolute inset-0 bg-gradient-to-br from-brand-gold/[0.04] via-transparent to-transparent pointer-events-none"></div>
+                
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-12 relative z-10">
+                    <div className="space-y-2">
+                        <p className="label-caps !text-[10px] text-brand-gold/60 !tracking-[0.5em]">Live Global Equilibrium</p>
+                        <div className="flex items-baseline gap-6">
+                            <h1 className="text-7xl sm:text-8xl font-black text-white tracking-tighter gold-text leading-none">${metrics.price.toFixed(6)}</h1>
+                            <div className="flex flex-col">
+                                <span className="text-emerald-500 font-mono text-[10px] font-black uppercase tracking-widest animate-pulse">ORACLE_ACTIVE</span>
+                                <span className="text-[9px] text-gray-700 font-mono uppercase">Ratio 1:{Math.round(1/metrics.price)}</span>
+                            </div>
                         </div>
                     </div>
-                    <PulseChart ledger={ledger} />
-                </div>
-                
-                <div className="grid grid-cols-2 gap-4 z-10 w-full md:w-auto">
-                    <div className="bg-black/60 p-6 rounded-2xl border border-white/5 text-center min-w-[160px] shadow-inner">
-                        <p className="label-caps !text-[8px] text-gray-600 mb-2">Backing Reserve</p>
-                        <p className="text-2xl font-black text-emerald-500 font-mono tracking-tighter">${economy?.cvp_usd_backing?.toLocaleString() ?? '...'}</p>
-                    </div>
-                    <div className="bg-black/60 p-6 rounded-2xl border border-white/5 text-center min-w-[160px] shadow-inner">
-                        <p className="label-caps !text-[8px] text-gray-600 mb-2">Circulation</p>
-                        <p className="text-2xl font-black text-white font-mono tracking-tighter">{(economy?.circulating_ubt || 0).toLocaleString()} <span className="text-xs">UBT</span></p>
+                    
+                    <div className="grid grid-cols-2 gap-4 w-full lg:w-auto">
+                        <MetricBox label="USD Reserve" value={`$${metrics.backing.toLocaleString()}`} color="text-emerald-500" />
+                        <MetricBox label="Liquid Float" value={`${metrics.circulating.toLocaleString()} UBT`} color="text-white" />
                     </div>
                 </div>
+
+                <PulseCandleChart ledger={ledger} currentPrice={metrics.price} />
             </div>
 
-            {/* Hub Selector */}
-            <div className="flex bg-slate-950/80 p-1.5 rounded-[2.5rem] border border-white/5 shadow-2xl w-full sm:max-w-md mx-auto">
-                <button 
-                    onClick={() => setView('swap')} 
-                    className={`flex-1 py-4 rounded-[2.2rem] text-[10px] font-black uppercase tracking-[0.3em] transition-all duration-500 ${view === 'swap' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-gray-500 hover:text-gray-300'}`}
-                >
-                    Treasury
-                </button>
-                <button 
-                    onClick={() => setView('p2p')} 
-                    className={`flex-1 py-4 rounded-[2.2rem] text-[10px] font-black uppercase tracking-[0.3em] transition-all duration-500 ${view === 'p2p' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-gray-500 hover:text-gray-300'}`}
-                >
-                    P2P Bazaar
-                </button>
+            {/* CONTROL BAR */}
+            <div className="flex bg-slate-950/80 p-1.5 rounded-[2.5rem] border border-white/5 shadow-2xl max-w-sm mx-auto">
+                <NavBtn active={view === 'swap'} onClick={() => setView('swap')} label="Treasury" />
+                <NavBtn active={view === 'p2p'} onClick={() => setView('p2p')} label="Bazaar" />
             </div>
 
             {view === 'swap' ? (
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-10">
-                    <div className="lg:col-span-8 module-frame bg-slate-950/60 p-8 sm:p-12 rounded-[4rem] border-white/5 shadow-premium space-y-10 relative overflow-hidden">
-                        <div className="corner-tl opacity-20"></div><div className="corner-tr opacity-20"></div>
-                        
+                <div className="grid grid-cols-1 xl:grid-cols-12 gap-10">
+                    <div className="xl:col-span-8 module-frame bg-slate-950/60 p-8 sm:p-12 rounded-[4rem] border-white/5 shadow-premium space-y-10 relative">
                         {bridgeStep === 'input' ? (
-                            <div className="space-y-10 animate-fade-in">
-                                <div className="flex flex-col sm:flex-row justify-between items-center border-b border-white/5 pb-8 gap-6">
-                                    <div>
-                                        <h2 className="text-3xl font-black text-white uppercase tracking-tighter">Primary Market</h2>
-                                        <p className="label-caps !text-[9px] mt-1 text-gray-500">Authorized Treasury Bridge</p>
-                                    </div>
+                            <div className="space-y-12 animate-fade-in">
+                                <div className="flex justify-between items-center border-b border-white/5 pb-8">
+                                    <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text">Order Desk</h2>
                                     <div className="flex bg-black/60 p-1 rounded-2xl border border-white/5">
-                                        <button onClick={() => setSwapType('BUY')} className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${swapType === 'BUY' ? 'bg-emerald-600 text-white shadow-lg' : 'text-gray-600'}`}>Mint UBT</button>
-                                        <button onClick={() => setSwapType('SELL')} className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${swapType === 'SELL' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-600'}`}>Burn UBT</button>
+                                        <button onClick={() => setSwapType('BUY')} className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${swapType === 'BUY' ? 'bg-emerald-600 text-white shadow-lg' : 'text-gray-600'}`}>Buy</button>
+                                        <button onClick={() => setSwapType('SELL')} className={`px-6 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${swapType === 'SELL' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-600'}`}>Sell</button>
                                     </div>
                                 </div>
 
                                 <div className="space-y-8">
-                                    <div className="bg-black/40 p-10 rounded-[3rem] border border-white/5 focus-within:border-brand-gold/40 transition-all shadow-inner">
-                                        <label className="label-caps !text-[11px] mb-6 block">Order Volume</label>
+                                    <div className="bg-black/40 p-10 rounded-[3rem] border border-white/5 shadow-inner">
+                                        <label className="label-caps !text-[11px] mb-6">Quantity</label>
                                         <div className="flex items-center gap-6">
-                                            <input 
-                                                type="number" 
-                                                value={swapAmount}
-                                                onChange={e => setSwapAmount(e.target.value)}
-                                                className="bg-transparent border-none text-7xl font-black font-mono text-white focus:outline-none w-full placeholder-gray-900 tracking-tighter" 
-                                                placeholder="0.00"
-                                            />
-                                            <span className="text-3xl font-black text-brand-gold font-mono tracking-widest">UBT</span>
+                                            <input type="number" value={swapAmount} onChange={e => setSwapAmount(e.target.value)} className="bg-transparent border-none text-7xl font-black font-mono text-white focus:outline-none w-full placeholder-gray-900 tracking-tighter" placeholder="0" />
+                                            <span className="text-3xl font-black text-brand-gold font-mono tracking-widest uppercase">UBT</span>
                                         </div>
                                     </div>
                                     
-                                    <div className="flex justify-center -my-12 relative z-20">
+                                    <div className="flex justify-center -my-14 relative z-20">
                                         <div className="p-4 bg-slate-900 rounded-full border border-white/10 shadow-glow-gold">
                                             <TrendingUpIcon className={`h-8 w-8 text-brand-gold transition-transform duration-500 ${swapType === 'SELL' ? 'rotate-180' : ''}`} />
                                         </div>
                                     </div>
 
                                     <div className="bg-black/40 p-10 rounded-[3rem] border border-white/5 shadow-inner">
-                                        <label className="label-caps !text-[11px] mb-6 block">Oracle Value Assessment</label>
+                                        <label className="label-caps !text-[11px] mb-6">Settlement Value</label>
                                         <div className="flex justify-between items-center">
-                                            <p className="text-7xl font-black font-mono text-white tracking-tighter leading-none">${estTotal.toFixed(2)}</p>
+                                            <p className="text-7xl font-black font-mono text-white tracking-tighter">${estTotal.toFixed(2)}</p>
                                             <span className="text-2xl font-black text-gray-700 font-mono tracking-widest uppercase">USD</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                <button 
-                                    onClick={handleSwapInitiate}
-                                    disabled={isSwapping || !swapAmount}
-                                    className={`w-full py-8 font-black rounded-3xl transition-all active:scale-[0.98] shadow-glow-gold disabled:opacity-20 uppercase tracking-[0.5em] text-[11px] flex justify-center items-center gap-4 ${swapType === 'SELL' ? 'bg-red-600 text-white shadow-red-900/40' : 'bg-brand-gold text-slate-950'}`}
-                                >
-                                    {isSwapping ? <LoaderIcon className="h-6 w-6 animate-spin" /> : <>Initiate Protocol Handshake <ShieldCheckIcon className="h-6 w-6"/></>}
+                                <button onClick={handleSwapInitiate} disabled={isSwapping || !swapAmount} className={`w-full py-8 font-black rounded-3xl transition-all active:scale-[0.98] shadow-glow-gold uppercase tracking-[0.5em] text-[11px] flex justify-center items-center gap-4 ${swapType === 'SELL' ? 'bg-red-600 text-white' : 'bg-brand-gold text-slate-950'}`}>
+                                    {isSwapping ? <LoaderIcon className="h-6 w-6 animate-spin" /> : <>Authorize Handshake <ShieldCheckIcon className="h-6 w-6"/></>}
                                 </button>
                             </div>
                         ) : bridgeStep === 'ussd' ? (
                             <div className="space-y-12 animate-fade-in text-center py-10">
-                                <h2 className="text-4xl font-black text-white uppercase tracking-tighter gold-text">Ecocash Bridge</h2>
+                                <h2 className="text-4xl font-black text-white uppercase tracking-tighter gold-text">Ecocash Terminal</h2>
                                 <div className="bg-black/60 p-12 rounded-[3.5rem] border border-brand-gold/30 shadow-inner">
-                                     <p className="label-caps !text-[11px] mb-8">Execute USSD Packet</p>
+                                     <p className="label-caps !text-[11px] mb-8">Execute Packet</p>
                                      <p className="text-4xl sm:text-5xl font-black text-white font-mono tracking-tighter break-all">{ussdCommand}</p>
                                 </div>
                                 <div className="space-y-6 max-w-sm mx-auto">
-                                    <a 
-                                        href={`tel:${ussdCommand}`}
-                                        onClick={() => setBridgeStep('reference')}
-                                        className="w-full block py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95"
-                                    >
-                                        Dial & Proceed
-                                    </a>
-                                    <button onClick={() => setBridgeStep('input')} className="text-[10px] text-gray-600 font-black uppercase tracking-widest hover:text-white transition-colors">Abort Handshake</button>
+                                    <a href={`tel:${ussdCommand}`} onClick={() => setBridgeStep('reference')} className="w-full block py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95">EXECUTE</a>
+                                    <button onClick={() => setBridgeStep('input')} className="text-[10px] text-gray-600 font-black uppercase tracking-widest">Abort</button>
                                 </div>
                             </div>
                         ) : bridgeStep === 'reference' ? (
                             <div className="space-y-12 animate-fade-in text-center py-10">
-                                <h2 className="text-4xl font-black text-white uppercase tracking-tighter gold-text">Sync Ledger</h2>
+                                <h2 className="text-4xl font-black text-white uppercase tracking-tighter gold-text">Ledger Proof</h2>
                                 <div className="space-y-8 max-w-md mx-auto">
-                                    <p className="text-sm text-gray-400 uppercase font-black leading-loose">Input the reference identity from your Ecocash receipt to anchor the block.</p>
-                                    <input 
-                                        type="text" 
-                                        value={ecocashRef}
-                                        onChange={e => setEcocashRef(e.target.value.toUpperCase())}
-                                        className="w-full bg-black border border-white/10 p-8 rounded-[2rem] text-white font-mono text-center text-4xl font-black tracking-[0.2em] focus:outline-none focus:ring-1 focus:ring-brand-gold"
-                                        placeholder="REF_ID"
-                                        autoFocus
-                                    />
-                                    <button 
-                                        onClick={handleEcocashSubmit}
-                                        disabled={isSwapping || !ecocashRef}
-                                        className="w-full py-6 bg-emerald-600 text-white font-black rounded-3xl uppercase tracking-[0.4em] text-[10px] shadow-glow-matrix active:scale-95 flex justify-center items-center gap-3"
-                                    >
-                                        {isSwapping ? <LoaderIcon className="h-6 w-6 animate-spin" /> : <>Finalize Mainnet Sync</>}
+                                    <p className="text-sm text-gray-400 uppercase font-black px-6">Input SMS Anchor Reference</p>
+                                    <input type="text" value={ecocashRef} onChange={e => setEcocashRef(e.target.value.toUpperCase())} className="w-full bg-black border border-white/10 p-8 rounded-[2rem] text-white font-mono text-center text-4xl font-black tracking-widest focus:outline-none" placeholder="REF_ID" autoFocus />
+                                    <button onClick={handleEcocashSubmit} disabled={isSwapping || !ecocashRef} className="w-full py-6 bg-emerald-600 text-white font-black rounded-3xl uppercase tracking-[0.4em] text-[10px] shadow-glow-matrix flex justify-center items-center">
+                                        {isSwapping ? <LoaderIcon className="h-6 w-6 animate-spin" /> : 'Finalize Proof'}
                                     </button>
                                 </div>
                             </div>
                         ) : (
                             <div className="space-y-12 animate-fade-in py-16 flex flex-col items-center">
-                                <div className="relative">
-                                    <div className="w-40 h-40 bg-brand-gold/5 rounded-full border border-brand-gold/20 flex items-center justify-center animate-pulse">
-                                        <LogoIcon className="h-20 w-20 text-brand-gold animate-spin-slow" />
-                                    </div>
-                                    <div className="absolute inset-0 border border-brand-gold/20 rounded-full animate-ping"></div>
+                                <div className="w-40 h-40 bg-brand-gold/5 rounded-full border border-brand-gold/20 flex items-center justify-center animate-pulse">
+                                    <LogoIcon className="h-20 w-20 text-brand-gold animate-spin-slow" />
                                 </div>
-                                <div className="w-full max-w-md bg-black border border-white/10 rounded-[2.5rem] p-10 font-mono text-[11px] text-brand-gold/80 space-y-4 shadow-inner h-80 overflow-y-auto no-scrollbar">
+                                <div className="w-full max-w-md bg-black border border-white/10 rounded-[2.5rem] p-10 font-mono text-[11px] text-brand-gold/80 space-y-4 shadow-inner min-h-[200px]">
                                     {syncLogs.map((log, i) => <div key={i} className="animate-fade-in">{log}</div>)}
                                     <div className="w-2 h-5 bg-brand-gold animate-terminal-cursor shadow-glow-gold"></div>
                                 </div>
-                                <p className="label-caps !text-[11px] animate-pulse">Syncing with Network Consensus...</p>
+                                <p className="label-caps !text-[11px] animate-pulse text-gray-500">Processing Consensus...</p>
                             </div>
                         )}
                     </div>
 
-                    <div className="lg:col-span-4 space-y-6">
-                        <div className="glass-card p-10 rounded-[3.5rem] border-white/5 bg-slate-900/40">
+                    <div className="xl:col-span-4 space-y-6">
+                        <div className="glass-card p-10 rounded-[3.5rem] border-white/5 bg-slate-900/40 shadow-inner h-full">
                             <h3 className="label-caps !text-[10px] mb-8 flex items-center gap-3">
                                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div>
-                                Pending Settlements
+                                Recent Handshaking
                             </h3>
                             <div className="space-y-4">
                                 {mySellRequests.map(req => (
-                                    <div key={req.id} className="p-6 bg-black/40 rounded-3xl border border-white/5 space-y-4 group hover:border-brand-gold/30 transition-all">
+                                    <div key={req.id} className="p-6 bg-black/40 rounded-3xl border border-white/5">
                                         <div className="flex justify-between items-start">
                                             <div>
                                                 <p className="text-2xl font-black text-white font-mono tracking-tighter leading-none">{req.amountUbt} UBT</p>
-                                                <p className="text-[10px] font-bold text-gray-600 uppercase mt-2 tracking-widest">${req.amountUsd.toFixed(2)} USD</p>
+                                                <p className="text-[9px] font-bold text-gray-600 uppercase mt-2 tracking-widest">${req.amountUsd.toFixed(2)} USD</p>
                                             </div>
-                                            <span className={`px-3 py-1 rounded-lg text-[8px] font-black uppercase tracking-widest ${req.status === 'PENDING' ? 'bg-yellow-900/20 text-yellow-500' : 'bg-emerald-900/20 text-emerald-400'}`}>
+                                            <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-widest ${req.status === 'PENDING' ? 'bg-yellow-900/20 text-yellow-500' : 'bg-emerald-900/20 text-emerald-400'}`}>
                                                 {req.status}
                                             </span>
                                         </div>
@@ -337,29 +329,24 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                     </div>
                 </div>
             ) : (
-                <div className="animate-fade-in grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                <div className="animate-fade-in grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8">
                      {offers.map(offer => (
-                        <div key={offer.id} className="module-frame glass-module p-8 rounded-[3rem] border-white/5 hover:border-brand-gold/30 transition-all flex flex-col gap-8 relative group shadow-2xl">
+                        <div key={offer.id} className="module-frame glass-module p-8 rounded-[3rem] border-white/5 hover:border-brand-gold/30 transition-all flex flex-col gap-8 shadow-2xl relative group">
                             <div className="corner-tl opacity-20"></div>
                             <div className="flex justify-between items-start">
                                 <div className="flex items-center gap-4">
-                                    <div className="p-3 bg-slate-800 rounded-2xl border border-white/10"><UsersIcon className="h-6 w-6 text-gray-500" /></div>
+                                    <div className="w-12 h-12 rounded-xl bg-slate-800 flex items-center justify-center border border-white/10 group-hover:border-brand-gold/40 transition-all"><UsersIcon className="h-6 w-6 text-gray-600" /></div>
                                     <div>
                                         <p className="text-sm font-black text-white uppercase tracking-tight">{offer.sellerName}</p>
-                                        <p className="text-[9px] text-gray-600 uppercase font-black tracking-[0.2em]">{formatTimeAgo(offer.createdAt.toDate().toISOString())}</p>
+                                        <p className="text-[9px] text-gray-600 uppercase font-black tracking-widest">{formatTimeAgo(offer.createdAt.toDate().toISOString())}</p>
                                     </div>
                                 </div>
-                                <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black tracking-[0.3em] uppercase ${offer.type === 'SELL' ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+                                <span className={`px-4 py-1.5 rounded-xl text-[9px] font-black tracking-widest uppercase ${offer.type === 'SELL' ? 'bg-red-500/10 text-red-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
                                     {offer.type}
                                 </span>
                             </div>
-
-                            <div className="space-y-2">
-                                <p className="text-5xl font-black text-white font-mono tracking-tighter leading-none">{offer.amount} <span className="text-base text-gray-700">UBT</span></p>
-                                <p className="text-xs font-black text-gray-500 uppercase tracking-widest">Rate: ${offer.pricePerUnit.toFixed(4)} / UNIT</p>
-                            </div>
-
-                            <button className="w-full py-5 bg-slate-800 hover:bg-brand-gold hover:text-slate-950 text-white font-black rounded-2xl text-[10px] uppercase tracking-[0.4em] transition-all shadow-xl active:scale-95">Take Swap Offer</button>
+                            <p className="text-5xl font-black text-white font-mono tracking-tighter">{offer.amount} <span className="text-base text-gray-700">UBT</span></p>
+                            <button className="w-full py-5 bg-slate-800 hover:bg-brand-gold hover:text-slate-950 text-white font-black rounded-2xl text-[10px] uppercase tracking-[0.4em] transition-all shadow-xl active:scale-95 border border-white/10 group-hover:border-transparent">Commit Swap</button>
                         </div>
                     ))}
                 </div>
@@ -367,3 +354,16 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
         </div>
     );
 };
+
+const MetricBox = ({ label, value, color }: { label: string, value: string, color: string }) => (
+    <div className="bg-black/60 p-5 rounded-2xl border border-white/5 text-center min-w-[150px] shadow-inner transition-all hover:border-brand-gold/20">
+        <p className="label-caps !text-[8px] text-gray-600 mb-2">{label}</p>
+        <p className={`text-2xl font-black ${color} font-mono tracking-tighter`}>{value}</p>
+    </div>
+);
+
+const NavBtn = ({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) => (
+    <button onClick={onClick} className={`flex-1 py-4 rounded-[2.2rem] text-[10px] font-black uppercase tracking-[0.3em] transition-all duration-500 ${active ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-gray-500 hover:text-gray-300'}`}>
+        {label}
+    </button>
+);
