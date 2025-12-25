@@ -53,7 +53,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (user && !user.isAnonymous) {
-        // WE HAVE A SESSION: Force loading to true until Firestore provides the profile
+        // ALWAYS lock the UI when a session is found
         setIsLoadingAuth(true);
 
         const userDocRef = doc(db, 'users', user.uid);
@@ -80,22 +80,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
               }
             }
           } else {
-            // Document doesn't exist yet (could be a fresh registration)
             setCurrentUser(null);
           }
           
-          // DATA ARRIVED: Now we can safely unlock the UI
+          // DATA VERIFIED: Only now do we release all loading states
           setIsLoadingAuth(false);
           setIsProcessingAuth(false);
         }, (error) => {
-          console.error("Profile synchronization error:", error);
+          console.error("Auth listener error:", error);
           setIsLoadingAuth(false);
           setIsProcessingAuth(false);
         });
         
         api.setupPresence(user.uid);
       } else {
-        // NO SESSION: Unauthenticated state
+        // No session exists
         setCurrentUser(null);
         setIsLoadingAuth(false);
         setIsProcessingAuth(false);
@@ -118,9 +117,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await cryptoService.updateVaultCredentials(credentials.email, credentials.password, pin);
       }
       
-      // Note: We do NOT set isProcessingAuth(false) here. 
-      // The onSnapshot listener in the useEffect above will handle it.
+      // CRITICAL: We do NOT set isProcessingAuth(false) here.
+      // The onSnapshot listener in the useEffect above is the ONLY thing
+      // allowed to turn off the loading screen once it confirms the profile data has arrived.
     } catch (error: any) {
+      // If login itself fails, we must unlock the UI so they can try again.
       setIsProcessingAuth(false);
       addToast(error.message || 'Handshake failed', 'error');
       throw error;
@@ -139,7 +140,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           
           setIsSovereignLocked(false);
           addToast("Identity Reconstituted.", "success");
-          // loading handled by listener
       } catch (err) {
           setIsSovereignLocked(false); 
           setIsProcessingAuth(false);
@@ -189,7 +189,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await setDoc(doc(db, 'users', user.uid), newAgent);
       await sendEmailVerification(user);
       addToast(`Facilitator Node Created. Verify email.`, 'success');
-      // loading handled by listener
     } catch (error: any) {
       setIsProcessingAuth(false);
       addToast(`Protocol error: ${error.message}`, 'error');
@@ -256,7 +255,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await batch.commit();
         await sendEmailVerification(user);
         addToast('Identity anchored. Verify email.', 'success');
-        // loading handled by listener
     } catch (error: any) {
         setIsProcessingAuth(false);
         addToast(`Deployment error: ${error.message}`, 'error');

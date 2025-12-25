@@ -93,7 +93,8 @@ const App: React.FC = () => {
   };
   
   const renderMainContent = () => {
-    // 1. HARD LOADING GATE: If we are syncing auth OR if there's a user but no profile yet, wait.
+    // 1. GLOBAL LOADING GATE
+    // If the system is booting, or authenticating, or HAS a user session but NO profile yet: WAIT.
     if (isLoadingAuth || isProcessingAuth || (firebaseUser && !currentUser)) {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-black">
@@ -103,7 +104,7 @@ const App: React.FC = () => {
       );
     }
 
-    // 2. SOVEREIGN GATE: PIN Protection
+    // 2. SOVEREIGN PIN GATE
     if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
         if (isRecovering) {
             return (
@@ -125,11 +126,13 @@ const App: React.FC = () => {
         );
     }
 
-    // 3. AUTH GATE: Login Page
+    // 3. AUTH GATE
+    // We ONLY show the AuthPage if there is definitely NO firebase session.
     if (!firebaseUser && !currentUser) return <AuthPage />;
 
-    // 4. OVERLAYS: Chat & Public Profiles
-    const user = currentUser!; // Safe to assert now
+    // 4. PROTOCOL CONTENT
+    // At this point, currentUser MUST exist because of the loading guard in step 1.
+    const user = currentUser!;
     
     if (chatTarget) {
       return (
