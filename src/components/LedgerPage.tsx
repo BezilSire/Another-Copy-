@@ -1,17 +1,11 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/apiService';
 import { LoaderIcon } from './icons/LoaderIcon';
-import { DatabaseIcon } from './icons/DatabaseIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
-import { UserCircleIcon } from './icons/UserCircleIcon';
 import { SearchIcon } from './icons/SearchIcon';
-import { ArrowUpRightIcon } from './icons/ArrowUpRightIcon';
 import { formatTimeAgo } from '../utils';
 import { TreasuryVault, UbtTransaction, GlobalEconomy, PublicUserProfile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
-import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 
 type ExplorerView = 'ledger' | 'account' | 'transaction';
 
@@ -26,7 +20,6 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     // Data State
     const [transactions, setTransactions] = useState<UbtTransaction[]>([]);
     const [economy, setEconomy] = useState<GlobalEconomy | null>(null);
-    const [vaults, setVaults] = useState<TreasuryVault[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
 
@@ -49,28 +42,8 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
             }
         };
         loadBaseData();
-        const unsubVaults = api.listenToVaults(v => isMounted && setVaults(v), console.error);
-        return () => { isMounted = false; unsubVaults(); };
+        return () => { isMounted = false; };
     }, []);
-
-    // Identity Resolution
-    useEffect(() => {
-        if (view === 'account' && targetValue) {
-            setIsLoading(true);
-            setAccountData(null);
-            api.resolveNodeIdentity(targetValue).then(res => {
-                setAccountData(res);
-            }).finally(() => setIsLoading(false));
-        }
-    }, [view, targetValue]);
-
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
-        const val = searchQuery.trim();
-        if (!val) return;
-        if (val.length > 25) navigateAccount(val);
-        else navigateTx(val);
-    };
 
     const navigateAccount = (address: string) => {
         setTargetValue(address);
@@ -144,7 +117,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                                 <td className="px-8 py-6">
                                     <div className="flex flex-col">
                                         <span className="text-sm font-black text-white">{tx.amount.toLocaleString()} <span className="text-[9px] text-gray-700">UBT</span></span>
-                                        <span className="text-[9px] text-emerald-500/80 font-black">≈ ${ubtToUsd(tx.amount, (tx as any).priceAtSync)} USD</span>
+                                        <span className="text-[9px] text-emerald-500/80 font-black">≈ ${ubtToUsd(tx.amount, tx.priceAtSync)} USD</span>
                                     </div>
                                 </td>
                                 <td className="px-8 py-6">
@@ -159,49 +132,45 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     );
 
     return (
-        <div className="min-h-screen bg-black text-white font-sans pb-32">
-            <div className="bg-slate-900/40 border-b border-white/5 py-12 px-8">
-                <div className="max-w-7xl mx-auto space-y-12">
-                    <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10">
-                        <button onClick={() => { setView('ledger'); setAccountData(null); }} className="flex items-center gap-6 group">
-                            <div className="p-4 bg-brand-gold rounded-[1.5rem] text-slate-950 shadow-glow-gold group-hover:scale-105 transition-all">
-                                <GlobeIcon className="h-8 w-8" />
-                            </div>
-                            <div className="text-left">
-                                <h1 className="text-4xl font-black tracking-tighter uppercase gold-text leading-none">Mainnet Explorer</h1>
-                                <p className="label-caps !text-[10px] !text-gray-500 !tracking-[0.4em] mt-3">Immutable Common Ledger</p>
-                            </div>
-                        </button>
-                        
-                        <form onSubmit={handleSearch} className="flex-1 max-w-2xl w-full relative">
-                            <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
-                                <SearchIcon className="h-6 w-6 text-gray-700" />
-                            </div>
-                            <input 
-                                type="text"
-                                value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
-                                placeholder="Search Node Identifier / Handshake Signature..."
-                                className="w-full bg-slate-950 border border-white/10 rounded-3xl py-6 pl-16 pr-6 text-sm font-bold text-white focus:ring-1 focus:ring-brand-gold/30 transition-all placeholder-gray-800 uppercase data-mono"
-                            />
-                        </form>
-                    </div>
-
-                    <div className="flex items-center gap-10 overflow-x-auto no-scrollbar whitespace-nowrap pt-4">
-                        <HudStat label="Equilibrium Price" value={`$${(economy?.ubt_to_usd_rate || 0).toFixed(6)}`} color="text-brand-gold" />
-                        <HudStat label="Sync Frequency" value="8s avg" color="text-gray-400" />
-                        <HudStat label="Ledger Depth" value={`#${transactions.length}`} color="text-gray-400" />
-                        <div className="flex items-center gap-2 ml-auto">
-                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                            <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Protocol Synchronized</span>
+        <div className="min-h-screen bg-black text-white font-sans pb-32 px-4">
+            <div className="max-w-7xl mx-auto space-y-12 py-12">
+                <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10">
+                    <button onClick={() => { setView('ledger'); setAccountData(null); }} className="flex items-center gap-6 group">
+                        <div className="p-4 bg-brand-gold rounded-[1.5rem] text-slate-950 shadow-glow-gold group-hover:scale-105 transition-all">
+                            <GlobeIcon className="h-8 w-8" />
                         </div>
+                        <div className="text-left">
+                            <h1 className="text-4xl font-black tracking-tighter uppercase gold-text leading-none">Global Explorer</h1>
+                            <p className="label-caps !text-[10px] !text-gray-500 !tracking-[0.4em] mt-3">Immutable Common Ledger</p>
+                        </div>
+                    </button>
+                    
+                    <form onSubmit={(e) => { e.preventDefault(); navigateTx(searchQuery); }} className="flex-1 max-w-2xl w-full relative">
+                        <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
+                            <SearchIcon className="h-6 w-6 text-gray-700" />
+                        </div>
+                        <input 
+                            type="text"
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            placeholder="Search Node Identifier / Handshake Signature..."
+                            className="w-full bg-slate-950 border border-white/10 rounded-3xl py-6 pl-16 pr-6 text-sm font-bold text-white focus:ring-1 focus:ring-brand-gold/30 transition-all placeholder-gray-800 uppercase data-mono"
+                        />
+                    </form>
+                </div>
+
+                <div className="flex items-center gap-10 overflow-x-auto no-scrollbar whitespace-nowrap pt-4">
+                    <HudStat label="Equilibrium Price" value={`$${(economy?.ubt_to_usd_rate || 0).toFixed(6)}`} color="text-brand-gold" />
+                    <HudStat label="Sync Frequency" value="8s avg" color="text-gray-400" />
+                    <HudStat label="Ledger Depth" value={`#${transactions.length}`} color="text-gray-400" />
+                    <div className="flex items-center gap-2 ml-auto">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                        <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Protocol Synchronized</span>
                     </div>
                 </div>
-            </div>
 
-            <div className="max-w-7xl mx-auto px-8 py-12">
                 <div className="flex items-center gap-4 mb-10">
-                    <h3 className="text-xl font-black text-white uppercase tracking-tight">Handshake Stream</h3>
+                    <h3 className="text-xl font-black text-white uppercase tracking-tight">Mainnet Event Stream</h3>
                     <div className="h-px flex-1 bg-white/5"></div>
                 </div>
 

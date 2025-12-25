@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -146,6 +145,7 @@ const App: React.FC = () => {
                 currentUser={currentUser}
                 onBack={() => setViewingProfileId(null)}
                 onStartChat={async (id) => {
+                    // FIX: Ensured getPublicUserProfile and startChat calls match merged api object
                     const target = await api.getPublicUserProfile(id);
                     if (target) {
                         const convo = await api.startChat(currentUser, target);

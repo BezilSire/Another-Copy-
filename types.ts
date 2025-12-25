@@ -7,7 +7,6 @@ export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity
 export type ProtocolMode = 'MAINNET' | 'TESTNET';
 export type AssetType = 'SOL' | 'USDT' | 'USDC';
 
-// Cleaned up NavView to prioritize Network State and remove expunged features
 export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger';
 export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more';
 
@@ -62,7 +61,6 @@ export interface User {
   vouchCount?: number;
   credibility_score?: number;
   socialLinks?: { title: string; url: string }[];
-  // Social features
   following?: string[];
   followers?: string[];
 }
@@ -130,6 +128,7 @@ export interface UbtTransaction {
     hash: string;
     senderPublicKey: string;
     parentHash: string;
+    priceAtSync?: number; // Captures Oracle value at time of transaction
     status?: 'pending' | 'verified' | 'failed';
     type?: 'P2P_HANDSHAKE' | 'VOUCH_ANCHOR' | 'REDEMPTION' | 'SYSTEM_MINT' | 'VAULT_SYNC' | 'SIMULATION_MINT' | 'FIAT_BRIDGE' | 'CRYPTO_BRIDGE';
     protocol_mode: ProtocolMode; 
