@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, useRef } from 'react';
 import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, sendEmailVerification } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
@@ -56,6 +57,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       setFirebaseUser(user);
 
       if (user && !user.isAnonymous) {
+        // CRITICAL: Set loading to true while we wait for the doc listener to provide data
+        setIsLoadingAuth(true);
         const userDocRef = doc(db, 'users', user.uid);
         
         userDocListener = onSnapshot(userDocRef, async (userDoc) => {
@@ -63,33 +66,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
 
             if (userData.status === 'ousted') {
-              addToast('Your account has been suspended.', 'error');
+              addToast('Node terminated by authority.', 'error');
               api.logout();
+              setCurrentUser(null);
             } else {
               setCurrentUser(userData);
               
-              // Stabilize Identity Anchor
-              // If the user has a Sovereign vault, we wait for PIN unlock. 
-              // We only attempt automatic pubkey sync IF session is unlocked or no vault exists.
               const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
               const hasVault = cryptoService.hasVault();
 
               if (!hasVault || isUnlocked) {
                   const localPubKey = cryptoService.getPublicKey();
                   if (localPubKey && userData.publicKey !== localPubKey) {
-                      if (!isProcessingAuthRef.current) {
-                          await api.updateUser(user.uid, { publicKey: localPubKey });
-                      }
+                      await api.updateUser(user.uid, { publicKey: localPubKey });
                   }
               }
             }
           } else {
-            if (!isProcessingAuthRef.current) {
-              setCurrentUser(null);
-            }
+            setCurrentUser(null);
           }
+          // Only release loading when we've actually checked the doc
           setIsLoadingAuth(false);
         }, (error) => {
+          console.error("User doc listener error:", error);
           setIsLoadingAuth(false);
         });
         
@@ -110,9 +109,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsProcessingAuth(true);
     try {
       await api.login(credentials.email, credentials.password);
+      
       const pin = sessionStorage.getItem('ugc_temp_pin');
       if (pin) {
         await cryptoService.updateVaultCredentials(credentials.email, credentials.password, pin);
+      }
+
+      // We don't set isProcessingAuth(false) here immediately.
+      // We wait a few ms for the onSnapshot in the effect to trigger and populate currentUser.
+      // This prevents the App component from seeing !currentUser and showing the login page again.
+      let attempts = 0;
+      while (!currentUser && attempts < 20) {
+          await new Promise(r => setTimeout(r, 100));
+          attempts++;
       }
     } catch (error: any) {
       addToast(error.message || 'Handshake failed', 'error');
@@ -120,7 +129,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } finally {
       setIsProcessingAuth(false);
     }
-  }, [addToast]);
+  }, [addToast, currentUser]);
 
   const unlockSovereignSession = useCallback(async (data: VaultData, pin: string) => {
       setIsProcessingAuth(true);

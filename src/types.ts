@@ -1,4 +1,3 @@
-
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -7,7 +6,10 @@ export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity
 export type ProtocolMode = 'MAINNET' | 'TESTNET';
 export type AssetType = 'SOL' | 'USDT' | 'USDC';
 
-// FIX: Comprehensive User interface including all required fields for various roles
+// Cleaned up NavView to prioritize Network State and remove expunged features
+export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger';
+export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more';
+
 export interface User {
   id: string;
   name: string;
@@ -41,8 +43,8 @@ export interface User {
   id_card_number?: string;
   knowledgePoints?: number;
   hasReadKnowledgeBase?: boolean;
-  scap?: number; // Social Capital
-  ccap?: number; // Civic Capital
+  scap?: number; 
+  ccap?: number; 
   referralEarnings?: number;
   ventureEquity?: VentureEquityHolding[];
   lastDailyCheckin?: Timestamp;
@@ -58,12 +60,12 @@ export interface User {
   publicKey?: string;
   vouchCount?: number;
   credibility_score?: number;
-  followers?: string[];
-  following?: string[];
   socialLinks?: { title: string; url: string }[];
+  // Social features
+  following?: string[];
+  followers?: string[];
 }
 
-// FIX: Added missing UserVault interface
 export interface UserVault {
     id: string;
     userId: string;
@@ -74,7 +76,6 @@ export interface UserVault {
     createdAt: Timestamp;
 }
 
-// FIX: Added missing TreasuryVault interface
 export interface TreasuryVault {
     id: string;
     name: string;
@@ -85,7 +86,6 @@ export interface TreasuryVault {
     isLocked: boolean;
 }
 
-// FIX: Added missing CitizenResource interface
 export interface CitizenResource {
     id: string;
     name: string;
@@ -101,7 +101,6 @@ export interface CitizenResource {
     signerKey: string;
 }
 
-// FIX: Added missing Dispute interface
 export interface Dispute {
     id: string;
     claimantId: string;
@@ -135,7 +134,6 @@ export interface UbtTransaction {
     protocol_mode: ProtocolMode; 
 }
 
-// FIX: Added missing Transaction interface (different from UbtTransaction)
 export interface Transaction {
     id: string;
     type: 'credit' | 'debit' | 'p2p_sent' | 'p2p_received' | 'amm_swap' | 'liquidation_lock' | 'liquidation_settled' | 'INTERNAL_SYNC';
@@ -152,7 +150,6 @@ export interface Transaction {
     protocol_mode?: ProtocolMode;
 }
 
-// FIX: Added missing Agent interface
 export interface Agent extends User {
   role: 'agent';
   agent_code: string;
@@ -167,12 +164,10 @@ export interface MemberUser extends User {
   last_distress_call?: Timestamp | null;
 }
 
-// FIX: Added missing Admin interface
 export interface Admin extends User {
   role: 'admin';
 }
 
-// FIX: Added missing Member interface
 export interface Member {
   id: string;
   full_name: string;
@@ -206,7 +201,6 @@ export interface Member {
   is_duplicate_email?: boolean;
 }
 
-// FIX: Added missing NewMember interface
 export interface NewMember {
   full_name: string;
   phone: string;
@@ -216,14 +210,12 @@ export interface NewMember {
   payment_status: 'pending' | 'complete' | 'installment';
 }
 
-// FIX: Added missing NewPublicMemberData interface
 export interface NewPublicMemberData {
     full_name: string;
     email: string;
     referralCode?: string;
 }
 
-// FIX: Added missing Broadcast interface
 export interface Broadcast {
   id: string;
   authorId: string;
@@ -232,7 +224,6 @@ export interface Broadcast {
   date: string;
 }
 
-// FIX: Added missing Post interface
 export interface Post {
   id: string;
   authorId: string;
@@ -257,7 +248,6 @@ export interface Post {
   }
 }
 
-// FIX: Added missing Comment interface
 export interface Comment {
     id: string;
     parentId: string;
@@ -268,7 +258,6 @@ export interface Comment {
     timestamp: Timestamp;
 }
 
-// FIX: Added missing Report interface
 export interface Report {
     id: string;
     reporterId: string;
@@ -307,7 +296,6 @@ export interface Message {
     nonce?: string;     
 }
 
-// FIX: Added missing Notification interface
 export interface Notification {
     id: string;
     userId: string;
@@ -319,7 +307,6 @@ export interface Notification {
     causerId?: string;
 }
 
-// FIX: Added missing Activity interface
 export interface Activity {
     id: string;
     type: string;
@@ -331,7 +318,6 @@ export interface Activity {
     link: string;
 }
 
-// FIX: Added missing NotificationItem type
 export type NotificationItem = (Notification | Activity) & { itemType: 'notification' | 'activity' };
 
 export interface PublicUserProfile extends Partial<User> {
@@ -357,7 +343,6 @@ export interface PublicUserProfile extends Partial<User> {
     vouchCount?: number;
 }
 
-// FIX: Added missing Proposal interface
 export interface Proposal {
     id: string;
     title: string;
@@ -384,7 +369,6 @@ export interface RedemptionCycle {
     cvp_usd_total: number;
 }
 
-// FIX: Added missing PayoutRequest interface
 export interface PayoutRequest {
     id: string;
     userId: string;
@@ -411,7 +395,6 @@ export interface PayoutRequest {
     completedAt?: Timestamp;
 }
 
-// FIX: Added missing SustenanceCycle interface
 export interface SustenanceCycle {
     slf_balance: number;
     hamper_cost: number;
@@ -431,7 +414,6 @@ export interface SustenanceVoucher {
     redeemedBy?: string;
 }
 
-// FIX: Added missing Venture interface
 export interface Venture {
     id: string;
     name: string;
@@ -451,7 +433,6 @@ export interface Venture {
     totalProfitsDistributed: number;
 }
 
-// FIX: Added missing CommunityValuePool interface
 export interface CommunityValuePool {
     id: string;
     total_usd_value: number;
@@ -466,7 +447,6 @@ export interface VentureEquityHolding {
     shares: number;
 }
 
-// FIX: Added missing Distribution interface
 export interface Distribution {
     id: string;
     date: Timestamp;
@@ -474,26 +454,22 @@ export interface Distribution {
     notes: string;
 }
 
-// FIX: Added missing GlobalEconomy interface
 export interface GlobalEconomy {
     ubt_to_usd_rate: number;
+    // FIX: Added missing properties used in apiService.ts
+    cvp_usd_backing: number;
+    circulating_ubt: number;
+    total_ubt_supply: number;
+    last_oracle_sync: Timestamp;
     ubtRedemptionWindowOpen?: boolean;
     ubtRedemptionWindowStartedAt?: Timestamp;
     ubtRedemptionWindowClosesAt?: Timestamp;
-    total_ubt_supply?: number;
     ubt_in_cvp?: number;
     system_sol_address?: string;
     system_usdt_address?: string;
     system_usdc_address?: string;
 }
 
-// FIX: Added missing LedgerViewParams interface
-export interface LedgerViewParams {
-    type: 'tx' | 'address';
-    value: string;
-}
-
-// FIX: Added missing P2POffer interface
 export interface P2POffer {
     id: string;
     sellerId: string;
@@ -511,7 +487,6 @@ export interface P2POffer {
     escrowTxId?: string;
 }
 
-// FIX: Added missing PendingUbtPurchase interface
 export interface PendingUbtPurchase {
     id: string;
     userId: string;
@@ -527,7 +502,6 @@ export interface PendingUbtPurchase {
     verifiedAt?: Timestamp;
 }
 
-// FIX: Added missing SellRequest interface
 export interface SellRequest {
     id: string;
     userId: string;

@@ -42,6 +42,7 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [isVouching, setIsVouching] = useState(false);
     const [activeTab, setActiveTab] = useState<'activity' | 'about' | 'card' | 'venture'>('activity');
+    // FIX: Added missing typeFilter state variable to resolve reference error on line 190
     const [typeFilter, setTypeFilter] = useState<FilterType>('all');
     const { addToast } = useToast();
 
@@ -161,7 +162,7 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
                                 <button 
                                     onClick={handleVouch}
                                     disabled={isVouching}
-                                    className="w-full py-4 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-[0.3em] shadow-glow-gold flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
+                                    className="w-full py-5 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-[0.3em] shadow-glow-gold flex items-center justify-center gap-3 transition-all active:scale-95 disabled:opacity-50"
                                 >
                                     {isVouching ? <LoaderIcon className="h-4 w-4 animate-spin"/> : <><ShieldCheckIcon className="h-4 w-4" /> Sign Vouch Anchor</>}
                                 </button>

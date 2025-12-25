@@ -1,4 +1,3 @@
-
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -6,6 +5,9 @@ export type UserStatus = 'active' | 'pending' | 'suspended' | 'ousted';
 export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress' | 'foryou' | 'following';
 export type ProtocolMode = 'MAINNET' | 'TESTNET';
 export type AssetType = 'SOL' | 'USDT' | 'USDC';
+
+export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger';
+export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more';
 
 export interface User {
   id: string;
@@ -40,8 +42,8 @@ export interface User {
   id_card_number?: string;
   knowledgePoints?: number;
   hasReadKnowledgeBase?: boolean;
-  scap?: number; // Social Capital
-  ccap?: number; // Civic Capital
+  scap?: number; 
+  ccap?: number; 
   referralEarnings?: number;
   ventureEquity?: VentureEquityHolding[];
   lastDailyCheckin?: Timestamp;
@@ -51,13 +53,15 @@ export interface User {
   lastCycleChoice?: 'redeemed' | 'staked' | 'invested';
   name_lowercase?: string;
   skills_lowercase?: string[];
-  ubtBalance?: number; // Mirror of Hot Wallet
+  ubtBalance?: number; 
   initialUbtStake?: number;
   fcmToken?: string;
   publicKey?: string;
-  followers?: string[];
-  following?: string[];
+  vouchCount?: number;
+  credibility_score?: number;
   socialLinks?: { title: string; url: string }[];
+  following?: string[];
+  followers?: string[];
 }
 
 export interface UserVault {
@@ -65,7 +69,7 @@ export interface UserVault {
     userId: string;
     name: string;
     balance: number;
-    type: 'HOT' | 'LOCKED' | 'BUSINESS';
+    type: 'HOT' | 'LOCKED' | 'BUSINESS' | 'LIQUID';
     lockedUntil?: Timestamp;
     createdAt: Timestamp;
 }
@@ -92,14 +96,122 @@ export interface UbtTransaction {
     senderPublicKey: string;
     parentHash: string;
     status?: 'pending' | 'verified' | 'failed';
-    type?: 'P2P_HANDSHAKE' | 'REDEMPTION' | 'SYSTEM_MINT' | 'VAULT_SYNC' | 'SIMULATION_MINT' | 'FIAT_BRIDGE' | 'CRYPTO_BRIDGE';
+    type?: 'P2P_HANDSHAKE' | 'VOUCH_ANCHOR' | 'REDEMPTION' | 'SYSTEM_MINT' | 'VAULT_SYNC' | 'SIMULATION_MINT' | 'FIAT_BRIDGE' | 'CRYPTO_BRIDGE';
     protocol_mode: ProtocolMode; 
 }
 
-export interface Agent extends User {
-  role: 'agent';
-  agent_code: string;
-  commissionBalance?: number;
+export interface GlobalEconomy {
+    ubt_to_usd_rate: number;
+    total_ubt_supply: number;
+    circulating_ubt: number;
+    cvp_usd_backing: number;
+    last_oracle_sync: Timestamp;
+    ubtRedemptionWindowOpen?: boolean;
+    ubtRedemptionWindowStartedAt?: Timestamp;
+    ubtRedemptionWindowClosesAt?: Timestamp;
+    system_sol_address?: string;
+    system_usdt_address?: string;
+    system_usdc_address?: string;
+}
+
+export interface CommunityValuePool {
+    id: string;
+    total_usd_value: number;
+    total_circulating_ccap: number;
+    ccap_to_usd_rate: number;
+}
+
+export interface P2POffer {
+    id: string;
+    sellerId: string;
+    sellerName: string;
+    type: 'BUY' | 'SELL';
+    amount: number;
+    pricePerUnit: number;
+    totalPrice: number;
+    paymentMethod: string;
+    status: 'OPEN' | 'LOCKED' | 'COMPLETED' | 'CANCELLED';
+    buyerId?: string;
+    buyerName?: string;
+    createdAt: Timestamp;
+}
+
+export interface PendingUbtPurchase {
+    id: string;
+    userId: string;
+    userName: string;
+    amountUsd: number;
+    amountUbt: number;
+    ecocashRef?: string;
+    cryptoAsset?: AssetType;
+    cryptoAddress?: string;
+    payment_method: 'FIAT' | 'CRYPTO';
+    status: 'PENDING' | 'AWAITING_CONFIRMATION' | 'VERIFIED' | 'REJECTED';
+    createdAt: Timestamp;
+}
+
+export interface SellRequest {
+    id: string;
+    userId: string;
+    userName: string;
+    userPhone: string;
+    amountUbt: number;
+    amountUsd: number;
+    status: 'PENDING' | 'CLAIMED' | 'DISPATCHED' | 'COMPLETED' | 'CANCELLED';
+    createdAt: Timestamp;
+    claimerId?: string;
+    claimerName?: string;
+    claimerRole?: UserRole;
+    ecocashRef?: string;
+}
+
+export interface Venture {
+    id: string;
+    name: string;
+    description: string;
+    ownerId: string;
+    ownerName: string;
+    fundingGoalUsd: number;
+    fundingGoalCcap: number;
+    fundingRaisedCcap: number;
+    backers: string[];
+    status: 'fundraising' | 'operational' | 'fully_funded' | 'completed' | 'on_hold' | 'pending_approval';
+    createdAt: Timestamp;
+    pitchDeck: { title: string; slides: { title: string; content: string }[] };
+    impactAnalysis: { score: number; reasoning: string };
+    ticker: string;
+    totalSharesIssued: number;
+    totalProfitsDistributed: number;
+}
+
+export interface VentureEquityHolding {
+    ventureId: string;
+    ventureName: string;
+    ventureTicker: string;
+    shares: number;
+}
+
+export interface Message {
+    id: string;
+    senderId: string;
+    senderName: string;
+    text: string;
+    timestamp: Timestamp;
+    signature?: string; 
+    hash?: string;      
+    nonce?: string;     
+}
+
+export interface Conversation {
+    id: string;
+    members: string[];
+    memberNames: { [key: string]: string };
+    lastMessage: string;
+    lastMessageTimestamp: Timestamp;
+    lastMessageSenderId: string;
+    readBy: string[];
+    isGroup: boolean;
+    name?: string;
 }
 
 export interface MemberUser extends User {
@@ -112,6 +224,12 @@ export interface MemberUser extends User {
 
 export interface Admin extends User {
   role: 'admin';
+}
+
+export interface Agent extends User {
+  role: 'agent';
+  agent_code: string;
+  commissionBalance?: number;
 }
 
 export interface Member {
@@ -219,26 +337,6 @@ export interface Report {
     status: 'new' | 'resolved';
 }
 
-export interface Conversation {
-    id: string;
-    members: string[];
-    memberNames: { [key: string]: string };
-    lastMessage: string;
-    lastMessageTimestamp: Timestamp;
-    lastMessageSenderId: string;
-    readBy: string[];
-    isGroup: boolean;
-    name?: string;
-}
-
-export interface Message {
-    id: string;
-    senderId: string;
-    senderName: string;
-    text: string;
-    timestamp: Timestamp;
-}
-
 export interface Notification {
     id: string;
     userId: string;
@@ -281,13 +379,9 @@ export interface PublicUserProfile extends Partial<User> {
     scap?: number;
     ccap?: number;
     createdAt?: Timestamp;
-    pitchDeckTitle?: string;
-    pitchDeckSlides?: { title: string; content: string }[];
-    followers?: string[];
-    following?: string[];
-    socialLinks?: { title: string; url: string }[];
     publicKey?: string;
     ubtBalance?: number;
+    vouchCount?: number;
 }
 
 export interface Proposal {
@@ -302,6 +396,7 @@ export interface Proposal {
     votesAgainst: string[];
     voteCountFor: number;
     voteCountAgainst: number;
+    commentCount?: number;
 }
 
 export interface RedemptionCycle {
@@ -360,56 +455,11 @@ export interface SustenanceVoucher {
     redeemedBy?: string;
 }
 
-export interface Venture {
-    id: string;
-    name: string;
-    description: string;
-    ownerId: string;
-    ownerName: string;
-    fundingGoalUsd: number;
-    fundingGoalCcap: number;
-    fundingRaisedCcap: number;
-    backers: string[];
-    status: 'fundraising' | 'operational' | 'fully_funded' | 'completed' | 'on_hold' | 'pending_approval';
-    createdAt: Timestamp;
-    pitchDeck: { title: string; slides: { title: string; content: string }[] };
-    impactAnalysis: { score: number; reasoning: string };
-    ticker: string;
-    totalSharesIssued: number;
-    totalProfitsDistributed: number;
-}
-
-export interface CommunityValuePool {
-    id: string;
-    total_usd_value: number;
-    total_circulating_ccap: number;
-    ccap_to_usd_rate: number;
-}
-
-export interface VentureEquityHolding {
-    ventureId: string;
-    ventureName: string;
-    ventureTicker: string;
-    shares: number;
-}
-
 export interface Distribution {
     id: string;
     date: Timestamp;
     totalAmount: number;
     notes: string;
-}
-
-export interface GlobalEconomy {
-    ubt_to_usd_rate: number;
-    ubtRedemptionWindowOpen?: boolean;
-    ubtRedemptionWindowStartedAt?: Timestamp;
-    ubtRedemptionWindowClosesAt?: Timestamp;
-    total_ubt_supply?: number;
-    ubt_in_cvp?: number;
-    system_sol_address?: string;
-    system_usdt_address?: string;
-    system_usdc_address?: string;
 }
 
 export interface Transaction {
@@ -428,57 +478,34 @@ export interface Transaction {
     protocol_mode?: ProtocolMode;
 }
 
-export interface LedgerViewParams {
-    type: 'tx' | 'address';
-    value: string;
+export interface CitizenResource {
+    id: string;
+    name: string;
+    type: 'ENERGY' | 'WATER' | 'FOOD' | 'LAND' | 'EQUIPMENT';
+    circle: string;
+    location: string;
+    status: 'OPTIMAL' | 'WARNING' | 'MAINTENANCE' | 'DEPLETED';
+    capacity: string;
+    managedBy: string;
+    createdAt: Timestamp;
+    signature: string;
+    nonce: string;
+    signerKey: string;
 }
 
-export interface P2POffer {
+export interface Dispute {
     id: string;
-    sellerId: string;
-    sellerName: string;
-    type: 'BUY' | 'SELL';
-    amount: number;
-    pricePerUnit: number;
-    totalPrice: number;
-    paymentMethod: string;
-    status: 'OPEN' | 'LOCKED' | 'COMPLETED' | 'CANCELLED';
-    buyerId?: string;
-    buyerName?: string;
-    createdAt: Timestamp;
-    lockedAt?: Timestamp;
-    escrowTxId?: string;
-}
-
-export interface PendingUbtPurchase {
-    id: string;
-    userId: string;
-    userName: string;
-    amountUsd: number;
-    amountUbt: number;
-    ecocashRef?: string; // For Fiat
-    cryptoAsset?: AssetType; // For Crypto
-    cryptoAddress?: string; // Generated child-address for user
-    payment_method: 'FIAT' | 'CRYPTO';
-    status: 'PENDING' | 'AWAITING_CONFIRMATION' | 'VERIFIED' | 'REJECTED';
-    createdAt: Timestamp;
-    verifiedAt?: Timestamp;
-}
-
-export interface SellRequest {
-    id: string;
-    userId: string;
-    userName: string;
-    userPhone: string;
-    amountUbt: number;
-    amountUsd: number;
-    status: 'PENDING' | 'CLAIMED' | 'DISPATCHED' | 'COMPLETED' | 'CANCELLED';
-    createdAt: Timestamp;
-    claimerId?: string;
-    claimerName?: string;
-    claimerRole?: UserRole;
-    ecocashRef?: string;
-    claimedAt?: Timestamp;
-    dispatchedAt?: Timestamp;
-    completedAt?: Timestamp;
+    claimantId: string;
+    claimantName: string;
+    respondentId: string;
+    respondentName: string;
+    reason: string;
+    evidence: string;
+    status: 'TRIBUNAL' | 'RESOLVED' | 'DISMISSED';
+    juryIds: string[];
+    votesForClaimant: number;
+    votesForRespondent: number;
+    timestamp: Timestamp;
+    resolvedAt?: Timestamp;
+    signedVotes: { [userId: string]: string };
 }

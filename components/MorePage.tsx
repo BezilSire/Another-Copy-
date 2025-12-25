@@ -1,22 +1,15 @@
-
 import React from 'react';
-import { User } from '../types';
+import { User, NavView } from '../types';
 import { UserIcon } from './icons/UserIcon';
 import { BellIcon } from './icons/BellIcon';
 import { BookOpenIcon } from './icons/BookOpenIcon';
 import { HeartIcon } from './icons/HeartIcon';
-import { TrendingUpIcon } from './icons/TrendingUpIcon';
 import { LogOutIcon } from './icons/LogOutIcon';
 import { ChevronRightIcon } from './icons/ChevronRightIcon';
-import { SparkleIcon } from './icons/SparkleIcon';
-import { DatabaseIcon } from './icons/DatabaseIcon';
-import { GlobeIcon } from './icons/GlobeIcon';
 import { LockIcon } from './icons/LockIcon';
-// Added HistoryIcon import
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
-
-// Added 'versions' to NavView
-type NavView = 'profile' | 'notifications' | 'sustenance' | 'myinvestments' | 'knowledge' | 'launchpad' | 'earn' | 'ledger' | 'security' | 'versions';
+import { ScaleIcon } from './icons/ScaleIcon';
 
 interface MorePageProps {
   user: User;
@@ -30,52 +23,63 @@ const NavItem: React.FC<{
   label: string;
   onClick: () => void;
   badgeCount?: number;
-}> = ({ icon, label, onClick, badgeCount }) => (
+  highlight?: boolean;
+}> = ({ icon, label, onClick, badgeCount, highlight }) => (
   <button
     onClick={onClick}
-    className="w-full flex items-center p-4 bg-slate-800 rounded-lg hover:bg-slate-700 transition-colors"
+    className={`w-full flex items-center p-5 rounded-[2rem] transition-all duration-300 border border-white/5 hover:border-brand-gold/20 ${highlight ? 'bg-brand-gold/5' : 'bg-slate-900/40 hover:bg-slate-900'}`}
   >
-    <div className="flex-shrink-0 bg-slate-700/50 text-green-400 p-2 rounded-lg">{icon}</div>
-    <span className="flex-1 ml-4 text-left font-semibold text-white">{label}</span>
+    <div className={`flex-shrink-0 p-3 rounded-xl ${highlight ? 'bg-brand-gold/10 text-brand-gold' : 'bg-slate-800 text-gray-500 group-hover:text-white'}`}>{icon}</div>
+    <span className="flex-1 ml-5 text-left font-black uppercase tracking-[0.2em] text-[10px] text-white group-hover:text-white">{label}</span>
     {badgeCount !== undefined && badgeCount > 0 && (
-      <span className="bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">{badgeCount > 9 ? '9+' : badgeCount}</span>
+      <span className="bg-red-600 text-white text-[9px] font-black px-2 py-0.5 rounded-full">{badgeCount}</span>
     )}
-    <ChevronRightIcon className="h-5 w-5 text-gray-400 ml-2" />
+    <ChevronRightIcon className="h-4 w-4 text-gray-700 ml-2" />
   </button>
 );
 
 export const MorePage: React.FC<MorePageProps> = ({ user, onNavigate, onLogout, notificationCount }) => {
   return (
-    <div className="animate-fade-in space-y-6">
-      <div className="flex items-center space-x-4 p-4 bg-slate-800 rounded-lg">
-        <UserIcon className="h-12 w-12 text-gray-400" />
+    <div className="animate-fade-in space-y-10 max-w-2xl mx-auto pb-20 px-4">
+      {/* Node Status Header */}
+      <div className="flex items-center space-x-6 p-8 bg-slate-950/60 rounded-[3rem] border border-white/5 shadow-2xl relative overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-tr from-brand-gold/[0.03] to-transparent pointer-events-none"></div>
+        <div className="w-20 h-20 bg-slate-900 rounded-2xl border border-white/10 flex items-center justify-center shadow-inner">
+            <UserIcon className="h-10 w-10 text-gray-600" />
+        </div>
         <div>
-          <h1 className="text-2xl font-bold text-white">{user.name}</h1>
-          <p className="text-gray-400 capitalize">{user.role}</p>
+          <h1 className="text-3xl font-black text-white uppercase tracking-tighter gold-text leading-none">{user.name}</h1>
+          <p className="label-caps !text-white mt-2 font-black !tracking-[0.4em]">Protocol Node Operational</p>
         </div>
       </div>
 
       <div className="space-y-3">
-        <NavItem icon={<UserIcon className="h-5 w-5" />} label="My Profile" onClick={() => onNavigate('profile')} />
-        <NavItem icon={<BellIcon className="h-5 w-5" />} label="Notifications" onClick={() => onNavigate('notifications')} badgeCount={notificationCount} />
-        <NavItem icon={<DatabaseIcon className="h-5 w-5" />} label="Ways to Earn" onClick={() => onNavigate('earn')} />
-        <NavItem icon={<TrendingUpIcon className="h-5 w-5" />} label="My Investments" onClick={() => onNavigate('myinvestments')} />
-        <NavItem icon={<GlobeIcon className="h-5 w-5" />} label="Public Ledger" onClick={() => onNavigate('ledger')} />
-        <NavItem icon={<SparkleIcon className="h-5 w-5" />} label="Project Launchpad" onClick={() => onNavigate('launchpad')} />
-        <NavItem icon={<LockIcon className="h-5 w-5" />} label="Node Security & Vault" onClick={() => onNavigate('security')} />
-        {/* Added Temporal Ledger (Versions) option */}
-        <NavItem icon={<HistoryIcon className="h-5 w-5" />} label="Temporal Ledger (Versions)" onClick={() => onNavigate('versions')} />
-        <NavItem icon={<HeartIcon className="h-5 w-5" />} label="Sustenance" onClick={() => onNavigate('sustenance')} />
-        <NavItem icon={<BookOpenIcon className="h-5 w-5" />} label="Knowledge Base" onClick={() => onNavigate('knowledge')} />
+        <h3 className="label-caps !text-white pl-4 mb-4">Node Operations</h3>
+        <NavItem icon={<UserIcon className="h-4 w-4" />} label="Identity Profile" onClick={() => onNavigate('profile')} />
+        <NavItem icon={<BellIcon className="h-4 w-4" />} label="Protocol Alerts" onClick={() => onNavigate('notifications')} badgeCount={notificationCount} />
+        <NavItem icon={<LockIcon className="h-4 w-4" />} label="Identity Vault" onClick={() => onNavigate('security')} highlight />
       </div>
 
-      <div className="pt-4">
+      <div className="space-y-3">
+        <h3 className="label-caps !text-white pl-4 mb-4">Network State</h3>
+        <NavItem icon={<ShieldCheckIcon className="h-4 w-4" />} label="Sovereign State (Registry)" onClick={() => onNavigate('state')} />
+        <NavItem icon={<ScaleIcon className="h-4 w-4" />} label="Justice Hub (Tribunals)" onClick={() => onNavigate('state')} />
+        <NavItem icon={<HistoryIcon className="h-4 w-4" />} label="Protocol Audit" onClick={() => onNavigate('audit')} />
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="label-caps !text-white pl-4 mb-4">Ecosystem Modules</h3>
+        <NavItem icon={<HeartIcon className="h-4 w-4" />} label="Sustenance Dividend" onClick={() => onNavigate('sustenance')} />
+        <NavItem icon={<BookOpenIcon className="h-4 w-4" />} label="Protocol Knowledge" onClick={() => onNavigate('knowledge')} />
+      </div>
+
+      <div className="pt-6">
         <button
           onClick={onLogout}
-          className="w-full flex items-center justify-center p-4 bg-slate-800 rounded-lg hover:bg-red-900/50 transition-colors text-red-400 font-semibold"
+          className="w-full flex items-center justify-center p-6 bg-red-500/5 border border-red-900/20 rounded-[2rem] hover:bg-red-500/10 transition-all text-red-500 font-black uppercase tracking-[0.3em] text-[10px]"
         >
-          <LogOutIcon className="h-5 w-5 mr-3" />
-          <span>Log Out</span>
+          <LogOutIcon className="h-4 w-4 mr-3" />
+          <span>Disconnect Node</span>
         </button>
       </div>
     </div>

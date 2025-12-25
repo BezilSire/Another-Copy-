@@ -31,7 +31,7 @@ import { NotificationPermissionBanner } from './components/NotificationPermissio
 import { RadarModal } from './components/RadarModal';
 import { UBTScan } from './components/UBTScan';
 import { LogoIcon } from './components/icons/LogoIcon';
-import { LoaderIcon } from './components/icons/LoaderIcon';
+import { LoaderIcon } from './icons/LoaderIcon';
 import { PinVaultLogin } from './components/PinVaultLogin';
 import { RecoveryProtocol } from './components/RecoveryProtocol';
 import { cryptoService } from './services/cryptoService';
@@ -133,6 +133,7 @@ const App: React.FC = () => {
   };
   
   const renderContent = () => {
+    // 1. Loading States
     if (isLoadingAuth || isProcessingAuth) {
       return (
         <div className="fixed inset-0 bg-black flex flex-col items-center justify-center p-10 font-mono">
@@ -142,7 +143,8 @@ const App: React.FC = () => {
       );
     }
 
-    // Sovereign Gate
+    // 2. Sovereign Gate (PIN Security)
+    // If a vault exists and hasn't been unlocked this session, block everything with the PIN gate.
     if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
         if (isRecovering) {
             return (
@@ -166,10 +168,12 @@ const App: React.FC = () => {
         );
     }
 
+    // 3. Unauthenticated State
     if (!currentUser) {
       return <AuthPage />;
     }
 
+    // 4. Global Modals / Overlays (Full Screen)
     if (chatTarget) {
       return (
         <ChatsPage
@@ -203,6 +207,7 @@ const App: React.FC = () => {
       );
     }
     
+    // 5. Verification States
     if (firebaseUser && !firebaseUser.emailVerified && currentUser.isProfileComplete) {
         return <VerifyEmailPage user={currentUser} onLogout={requestLogout} />;
     }
@@ -215,6 +220,7 @@ const App: React.FC = () => {
         return <div className="p-4 sm:p-6 lg:p-8"><CompleteProfilePage user={currentUser} onProfileComplete={() => {}} /></div>;
     }
     
+    // 6. Role Dashboards
     if (currentUser.role === 'admin') {
       return (
         <div className="p-4 sm:p-6 lg:p-8">

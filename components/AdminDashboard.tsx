@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Admin, Agent, Member, Broadcast, Report, User, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PendingUbtPurchase, SellRequest } from '../types';
 import { api } from '../services/apiService';
@@ -17,8 +16,12 @@ import { LockIcon } from './icons/LockIcon';
 import { SendIcon } from './icons/SendIcon';
 import { AdminDispatchTerminal } from './AdminDispatchTerminal';
 import { AdminOracleTerminal } from './AdminOracleTerminal';
+import { AdminRegistrarTerminal } from './AdminRegistrarTerminal';
+import { AdminJusticeTerminal } from './AdminJusticeTerminal';
+import { GlobeIcon } from './icons/GlobeIcon';
+import { ScaleIcon } from './icons/ScaleIcon';
 
-type AdminView = 'dashboard' | 'feed' | 'profile' | 'wallet' | 'oracle' | 'treasury' | 'dispatch';
+type AdminView = 'dashboard' | 'feed' | 'profile' | 'wallet' | 'oracle' | 'treasury' | 'dispatch' | 'registrar' | 'justice';
 
 export const AdminDashboard: React.FC<{
   user: Admin;
@@ -78,6 +81,10 @@ export const AdminDashboard: React.FC<{
             return <AdminDispatchTerminal admin={user} />;
         case 'oracle': 
             return <AdminOracleTerminal purchases={pendingPurchases} liquidations={sellRequests} admin={user} />;
+        case 'registrar':
+            return <AdminRegistrarTerminal admin={user} />;
+        case 'justice':
+            return <AdminJusticeTerminal admin={user} reports={reports} />;
         case 'wallet': return <LedgerPage />;
         case 'profile': return <AdminProfile user={user} onUpdateUser={onUpdateUser} />;
         case 'feed': return ( <> <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView /><PostsFeed user={user} onViewProfile={onViewProfile} typeFilter={typeFilter} isAdminView /></> );
@@ -92,15 +99,17 @@ export const AdminDashboard: React.FC<{
               <h1 className="text-6xl font-black text-white tracking-tighter uppercase leading-none gold-text">Authority HUD</h1>
               <div className="flex items-center gap-4">
                    <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shadow-glow-matrix"></div>
-                   <p className="label-caps !text-[10px] !tracking-[0.5em] !text-gray-500">Root Node Identity Verified</p>
+                   <p className="label-caps !text-white !text-[10px] !tracking-[0.5em]">Root Node Identity Verified</p>
               </div>
           </div>
           <div className="border-b border-white/10 w-full xl:w-auto overflow-x-auto no-scrollbar">
-              <nav className="-mb-px flex space-x-10" aria-label="Tabs">
+              <nav className="-mb-px flex space-x-8" aria-label="Tabs">
                   <TabButton label="Operations" icon={<LayoutDashboardIcon/>} isActive={view === 'dashboard'} onClick={() => setView('dashboard')} />
                   <TabButton label="Treasury" icon={<LockIcon/>} isActive={view === 'treasury'} onClick={() => setView('treasury')} />
                   <TabButton label="Dispatch" icon={<SendIcon/>} isActive={view === 'dispatch'} onClick={() => setView('dispatch')} />
                   <TabButton label="Oracle" icon={<DollarSignIcon/>} isActive={view === 'oracle'} count={pendingPurchases.length + sellRequests.filter(r => r.status === 'PENDING').length} onClick={() => setView('oracle')} />
+                  <TabButton label="Registrar" icon={<GlobeIcon/>} isActive={view === 'registrar'} onClick={() => setView('registrar')} />
+                  <TabButton label="Justice" icon={<ScaleIcon/>} isActive={view === 'justice'} count={reports.filter(r => r.status === 'new').length} onClick={() => setView('justice')} />
                   <TabButton label="Explorer" icon={<DatabaseIcon/>} isActive={view === 'wallet'} onClick={() => setView('wallet')} />
                   <TabButton label="Identity" icon={<UserCircleIcon/>} isActive={view === 'profile'} onClick={() => setView('profile')} />
               </nav>

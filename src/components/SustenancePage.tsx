@@ -1,11 +1,11 @@
-
 import React, { useState, useEffect } from 'react';
-import { MemberUser, SustenanceVoucher } from '../types';
+import { MemberUser, SustenanceVoucher, TreasuryVault } from '../types';
 import { api } from '../services/apiService';
 import { HeartIcon } from './icons/HeartIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { formatTimeAgo } from '../utils';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
+import { LockIcon } from './icons/LockIcon';
 
 interface SustenancePageProps {
   user: MemberUser;
@@ -42,9 +42,20 @@ const CountdownTimer: React.FC<{ nextDrop: Date }> = ({ nextDrop }) => {
 };
 
 export const SustenancePage: React.FC<SustenancePageProps> = ({ user }) => {
+    const [sustenanceVault, setSustenanceVault] = useState<TreasuryVault | null>(null);
+    const [isLoadingVault, setIsLoadingVault] = useState(true);
     const activeVouchers = user.sustenanceVouchers?.filter(v => v.status === 'active') || [];
     const pastVouchers = user.sustenanceVouchers?.filter(v => v.status !== 'active') || [];
     const nextDropDate = new Date(Date.UTC(2025, 4, 1)); // Placeholder for next cycle
+
+    useEffect(() => {
+        const unsub = api.listenToVaults(vts => {
+            const vault = vts.find(v => v.type === 'SUSTENANCE');
+            if (vault) setSustenanceVault(vault);
+            setIsLoadingVault(false);
+        }, () => setIsLoadingVault(false));
+        return () => unsub();
+    }, []);
 
     return (
         <div className="space-y-10 animate-fade-in pb-20 font-sans">
@@ -58,6 +69,25 @@ export const SustenancePage: React.FC<SustenancePageProps> = ({ user }) => {
                     </div>
                     <h1 className="text-4xl font-black text-white uppercase tracking-tighter gold-text leading-none">Sustenance Dividend</h1>
                     <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em] max-w-sm mx-auto leading-relaxed">Verifiable return of value to the Commons collective.</p>
+                </div>
+            </div>
+
+            {/* Proof of Reserve Section */}
+            <div className="module-frame bg-slate-950/80 p-8 rounded-[2.5rem] border border-brand-gold/20 flex flex-col md:flex-row items-center justify-between gap-8 shadow-2xl">
+                <div className="flex items-center gap-6">
+                    <div className="p-4 bg-brand-gold/10 rounded-2xl border border-brand-gold/30 text-brand-gold shadow-inner">
+                        <LockIcon className="h-8 w-8" />
+                    </div>
+                    <div>
+                        <h3 className="label-caps !text-[10px] text-white !tracking-[0.3em] mb-1">Sustenance Reserve Node</h3>
+                        <p className="data-mono text-[9px] text-gray-500 uppercase break-all">ID: {sustenanceVault?.publicKey ?? 'PROVISIONING...'}</p>
+                    </div>
+                </div>
+                <div className="text-center md:text-right">
+                    <p className="text-5xl font-black text-brand-gold font-mono tracking-tighter leading-none">
+                        {isLoadingVault ? '...' : (sustenanceVault?.balance?.toLocaleString() ?? '0')} <span className="text-sm font-sans uppercase">UBT</span>
+                    </p>
+                    <p className="text-[8px] font-black text-gray-600 uppercase tracking-[0.4em] mt-3">Immutable Mainnet Anchor</p>
                 </div>
             </div>
 
@@ -86,13 +116,13 @@ export const SustenancePage: React.FC<SustenancePageProps> = ({ user }) => {
                                      <div className="flex justify-between items-start">
                                         <div>
                                             <p className="text-3xl font-black text-white uppercase tracking-tighter">Food Voucher</p>
-                                            <p className="text-lg font-black text-emerald-500 font-mono tracking-tighter">${v.value.toFixed(2)} USD</p>
+                                            <p className="text-lg font-black text-emerald-500 font-mono tracking-tighter">${v.value?.toFixed(2)} USD</p>
                                         </div>
                                         <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-[9px] font-black uppercase tracking-widest">Signed</span>
                                      </div>
                                      <p className="text-[10px] text-gray-500 uppercase font-black leading-loose">Present this anchor to a verified vendor. Single-use protocol only. Do not duplicate dispatch.</p>
                                      <div className="flex items-center gap-2 text-[9px] font-black text-yellow-500 uppercase tracking-widest">
-                                        <LoaderIcon className="h-3 w-3" /> Expires in {formatTimeAgo(v.expiresAt.toDate().toISOString())}
+                                        <LoaderIcon className="h-3 w-3" /> Expires in {v.expiresAt ? formatTimeAgo(v.expiresAt.toDate().toISOString()) : '...'}
                                      </div>
                                 </div>
                             </div>

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { MemberUser, Conversation, User, FilterType, LedgerViewParams } from '../types';
+import { MemberUser, Conversation, User, FilterType, MemberView } from '../types';
 import { MemberBottomNav } from './MemberBottomNav';
 import { PostsFeed } from './PostsFeed';
 import { NewPostModal } from './NewPostModal';
@@ -12,11 +12,8 @@ import { MemberProfile } from './MemberProfile';
 import { KnowledgeBasePage } from './KnowledgeBasePage';
 import { CommunityPage } from './CommunityPage';
 import { MorePage } from './MorePage';
-import { VenturesPage } from './VenturesPage';
-import { MyInvestmentsPage } from './MyInvestmentsPage';
 import { SustenancePage } from './SustenancePage';
 import { NotificationsPage } from './NotificationsPage';
-import { EarnPage } from './EarnPage';
 import { PostTypeFilter } from './PostTypeFilter';
 import { VerificationHub } from './VerificationHub';
 import { VerificationRedirectModal } from './VerificationRedirectModal';
@@ -31,8 +28,8 @@ import { cryptoService } from '../services/cryptoService';
 import { SovereignUpgradeBanner } from './SovereignUpgradeBanner';
 import { GenesisNodeFlow } from './GenesisNodeFlow';
 import { StateRegistry } from './StateRegistry';
-
-type MemberView = 'home' | 'ventures' | 'community' | 'more' | 'profile' | 'knowledge' | 'myinvestments' | 'sustenance' | 'earn' | 'notifications' | 'wallet' | 'chats' | 'ledger' | 'hub' | 'state';
+import { IdentityVault } from './IdentityVault';
+import { ProtocolReconciliation } from './ProtocolReconciliation';
 
 interface MemberDashboardProps {
   user: MemberUser;
@@ -61,7 +58,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
     if (ccapAwarded > 0) {
       addToast(`Protocol index updated! Earned ${ccapAwarded} CCAP.`, 'success');
     } else {
-      addToast('Dispatch successfully recorded.', 'success');
+      addToast('Dispatch recorded.', 'success');
     }
     setIsNewPostModalOpen(false);
   };
@@ -100,26 +97,26 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
           );
       case 'state':
         return <StateRegistry user={user} />;
+      case 'security':
+        return <div className="max-w-2xl mx-auto"><IdentityVault onRestore={() => setView('home')} /></div>;
+      case 'audit':
+        return <ProtocolReconciliation user={user} onClose={() => setView('home')} />;
+      case 'hub':
+        return <PulseHub user={user} />;
       case 'sustenance':
         return <SustenancePage user={user} />;
-      case 'earn':
-        return <EarnPage user={user} onUpdateUser={onUpdateUser} onNavigateToRedemption={() => setView('home')} onNavigateToInvestments={() => setView('myinvestments')} />;
       case 'wallet':
         return <WalletPage user={user} />;
       case 'chats':
         return <ChatsPage user={user} initialTarget={selectedChat} onClose={() => { setSelectedChat(null); setView('home'); }} onViewProfile={onViewProfile as (userId: string) => void} onNewMessageClick={() => setIsNewChatModalOpen(true)} onNewGroupClick={() => {}} />;
       case 'ledger':
         return <LedgerPage />;
-      case 'ventures':
-        return <VenturesPage currentUser={user} onViewProfile={onViewProfile as (userId: string) => void} onNavigateToPitchAssistant={() => {}} />;
       case 'community':
         return <CommunityPage currentUser={user} onViewProfile={onViewProfile as (userId: string) => void} />;
       case 'profile':
         return <MemberProfile currentUser={user} onUpdateUser={onUpdateUser} onViewProfile={onViewProfile as (userId: string) => void} onGetVerifiedClick={() => setIsVerificationModalOpen(true)} />;
       case 'notifications':
         return <NotificationsPage user={user} onNavigate={() => {}} onViewProfile={onViewProfile as (userId: string) => void} />;
-      case 'myinvestments':
-        return <MyInvestmentsPage user={user} onViewProfile={onViewProfile as (userId: string) => void} onNavigateToMarketplace={() => setView('ventures')} />;
       case 'knowledge':
         return <KnowledgeBasePage currentUser={user} onUpdateUser={onUpdateUser} />;
       case 'more':
