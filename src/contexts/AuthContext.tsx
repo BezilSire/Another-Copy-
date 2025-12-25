@@ -40,24 +40,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
 
   const { addToast } = useToast();
-  // Using a ref to track processing state without triggering unnecessary renders in listeners
-  const isProcessingRef = useRef(false);
+  
+  // Track if we are currently waiting for a Firestore document to bridge the auth-data gap
+  const isWaitingForDoc = useRef(false);
 
   useEffect(() => {
     let userDocListener: (() => void) | undefined;
 
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      setFirebaseUser(user);
+
       if (userDocListener) {
         userDocListener();
         userDocListener = undefined;
       }
-      setFirebaseUser(user);
 
       if (user && !user.isAnonymous) {
-        // If we're already processing a login, don't flip the global loading flag yet
-        if (!isProcessingRef.current) {
-            setIsLoadingAuth(true);
-        }
+        // We found an authenticated session. Block UI until Firestore confirms profile.
+        setIsLoadingAuth(true);
+        isWaitingForDoc.current = true;
 
         const userDocRef = doc(db, 'users', user.uid);
         
@@ -87,23 +88,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setCurrentUser(null);
           }
           
-          // CRITICAL: release both loading flags once document is successfully read
+          // Data has arrived. Safe to release all loading gates.
           setIsLoadingAuth(false);
           setIsProcessingAuth(false);
-          isProcessingRef.current = false;
+          isWaitingForDoc.current = false;
         }, (error) => {
           console.error("User doc listener error:", error);
           setIsLoadingAuth(false);
           setIsProcessingAuth(false);
-          isProcessingRef.current = false;
+          isWaitingForDoc.current = false;
         });
         
         api.setupPresence(user.uid);
       } else {
+        // No user authenticated.
         setCurrentUser(null);
         setIsLoadingAuth(false);
         setIsProcessingAuth(false);
-        isProcessingRef.current = false;
+        isWaitingForDoc.current = false;
       }
     });
 
@@ -115,7 +117,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     setIsProcessingAuth(true);
-    isProcessingRef.current = true;
+    isWaitingForDoc.current = true; // Set flag to prevent listener-clearing race
     try {
       await api.login(credentials.email, credentials.password);
       
@@ -124,12 +126,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await cryptoService.updateVaultCredentials(credentials.email, credentials.password, pin);
       }
 
-      // NOTE: We do NOT set isProcessingAuth(false) here. 
-      // We let the onSnapshot listener above handle it once the user data actually arrives.
-      // This bridges the gap and prevents the login screen from flickering back.
+      // CRITICAL: We do NOT set isProcessingAuth(false) here.
+      // The onSnapshot listener in the useEffect handles clearing the state 
+      // only when the data is actually available.
     } catch (error: any) {
       setIsProcessingAuth(false);
-      isProcessingRef.current = false;
+      isWaitingForDoc.current = false;
       addToast(error.message || 'Handshake failed', 'error');
       throw error;
     }
@@ -137,7 +139,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const unlockSovereignSession = useCallback(async (data: VaultData, pin: string) => {
       setIsProcessingAuth(true);
-      isProcessingRef.current = true;
+      isWaitingForDoc.current = true;
       try {
           sessionStorage.setItem('ugc_temp_pin', pin);
           sessionStorage.setItem('ugc_node_unlocked', 'true');
@@ -148,10 +150,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           
           setIsSovereignLocked(false);
           addToast("Identity Reconstituted.", "success");
+          // isProcessingAuth is cleared by the onSnapshot listener triggered by api.login
       } catch (err) {
           setIsSovereignLocked(false); 
           setIsProcessingAuth(false);
-          isProcessingRef.current = false;
+          isWaitingForDoc.current = false;
           addToast("Cloud Sync Offline. Manual auth required.", "info");
       }
   }, [addToast]);
@@ -167,7 +170,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const agentSignup = useCallback(async (credentials: AgentSignupCredentials) => {
     setIsProcessingAuth(true);
-    isProcessingRef.current = true;
+    isWaitingForDoc.current = true;
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
       const { user } = userCredential;
@@ -199,9 +202,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       await setDoc(doc(db, 'users', user.uid), newAgent);
       await sendEmailVerification(user);
       addToast(`Facilitator Node Created. Verify email.`, 'success');
+      // isProcessingAuth cleared by listener
     } catch (error: any) {
       setIsProcessingAuth(false);
-      isProcessingRef.current = false;
+      isWaitingForDoc.current = false;
       addToast(`Protocol error: ${error.message}`, 'error');
       throw error;
     }
@@ -209,7 +213,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   
   const publicMemberSignup = useCallback(async (memberData: NewPublicMemberData, password: string) => {
     setIsProcessingAuth(true);
-    isProcessingRef.current = true;
+    isWaitingForDoc.current = true;
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, memberData.email, password);
         const { user } = userCredential;
@@ -267,9 +271,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await batch.commit();
         await sendEmailVerification(user);
         addToast('Identity anchored. Verify email.', 'success');
+        // isProcessingAuth cleared by listener
     } catch (error: any) {
         setIsProcessingAuth(false);
-        isProcessingRef.current = false;
+        isWaitingForDoc.current = false;
         addToast(`Deployment error: ${error.message}`, 'error');
         throw error;
     }

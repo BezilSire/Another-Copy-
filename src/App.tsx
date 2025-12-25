@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -77,7 +78,7 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 };
 
 const App: React.FC = () => {
-  const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser, isSovereignLocked, unlockSovereignSession } = useAuth();
+  const { currentUser, firebaseUser, isLoadingAuth, isProcessingAuth, logout, updateUser, isSovereignLocked, unlockSovereignSession } = useAuth();
   const [isBooting, setIsBooting] = useState(true);
   const [isRecovering, setIsRecovering] = useState(false);
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
@@ -132,18 +133,17 @@ const App: React.FC = () => {
   };
   
   const renderContent = () => {
-    // 1. Loading States
-    if (isLoadingAuth || isProcessingAuth) {
+    // 1. Loading States - If auth is loading OR there's a Firebase user but no profile yet, stay in sync mode.
+    if (isLoadingAuth || isProcessingAuth || (firebaseUser && !currentUser)) {
       return (
         <div className="fixed inset-0 bg-black flex flex-col items-center justify-center p-10 font-mono">
             <LoaderIcon className="h-8 w-8 animate-spin text-brand-gold mb-4 opacity-50" />
-            <div className="text-[10px] uppercase tracking-[0.6em] text-brand-gold/60 animate-pulse">Syncing Node Identity...</div>
+            <div className="text-[10px] uppercase tracking-[0.6em] text-brand-gold/60 animate-pulse text-center">Synchronizing Protocol Node...</div>
         </div>
       );
     }
 
     // 2. Sovereign Gate (PIN Security)
-    // If a vault exists and hasn't been unlocked this session, block everything with the PIN gate.
     if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
         if (isRecovering) {
             return (
@@ -193,7 +193,6 @@ const App: React.FC = () => {
           currentUser={currentUser}
           onBack={() => setViewingProfileId(null)}
           onStartChat={async (id) => {
-             // FIX: Ensured getPublicUserProfile and startChat calls match merged api object
              const target = await api.getPublicUserProfile(id);
              if (target) {
                const convo = await api.startChat(currentUser, target);
