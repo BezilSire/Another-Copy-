@@ -1,16 +1,15 @@
 // Service Worker for Global Commons Network
 // Caches app shell and critical CDN dependencies for offline access.
 
-const STATIC_CACHE_NAME = 'gcn-static-v9';
-const DYNAMIC_CACHE_NAME = 'gcn-dynamic-v9';
+const STATIC_CACHE_NAME = 'gcn-static-v11';
+const DYNAMIC_CACHE_NAME = 'gcn-dynamic-v11';
 
 const APP_SHELL = [
-  './',
-  './index.html',
-  './offline.html',
-  './logo.svg',
-  './manifest.json',
-  './index.js' 
+  '/',
+  '/index.html',
+  '/offline.html',
+  '/logo.svg',
+  '/manifest.json'
 ];
 
 const EXTERNAL_LIBS = [
@@ -18,7 +17,6 @@ const EXTERNAL_LIBS = [
   'https://cdn.tailwindcss.com',
   'https://esm.sh/react',
   'https://esm.sh/react-dom/client',
-  'https://esm.sh/google-genai',
   'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js',
   'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js',
   'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js',
@@ -42,7 +40,7 @@ const IGNORED_HOSTS = [
 self.addEventListener('install', event => {
   event.waitUntil(
     caches.open(STATIC_CACHE_NAME).then(cache => {
-      console.log('[Service Worker] Pre-caching Static Assets');
+      console.log('[Service Worker] Pre-caching Static Assets v11');
       return cache.addAll([...APP_SHELL, ...EXTERNAL_LIBS]);
     })
   );
@@ -55,6 +53,7 @@ self.addEventListener('activate', event => {
       return Promise.all(
         keys.map(key => {
           if (key !== STATIC_CACHE_NAME && key !== DYNAMIC_CACHE_NAME) {
+            console.log('[Service Worker] Clearing old cache:', key);
             return caches.delete(key);
           }
         })
@@ -87,7 +86,7 @@ self.addEventListener('fetch', event => {
         return networkResponse;
       }).catch(() => {
         if (event.request.mode === 'navigate') {
-          return caches.match('./offline.html');
+          return caches.match('/offline.html');
         }
       });
     })
