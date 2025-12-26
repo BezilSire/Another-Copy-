@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Admin, Agent, Member, Broadcast, Report, User, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PendingUbtPurchase, SellRequest } from '../types';
 import { api } from '../services/apiService';
-import { useToast } from '../contexts/ToastContext';
 import { LayoutDashboardIcon } from './icons/LayoutDashboardIcon';
 import { DollarSignIcon } from './icons/DollarSignIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
@@ -13,15 +12,16 @@ import { PostsFeed } from './PostsFeed';
 import { PostTypeFilter } from './PostTypeFilter';
 import { TreasuryManager } from './TreasuryManager';
 import { LockIcon } from './icons/LockIcon';
-import { SendIcon } from './icons/SendIcon';
 import { AdminDispatchTerminal } from './AdminDispatchTerminal';
 import { AdminOracleTerminal } from './AdminOracleTerminal';
 import { AdminRegistrarTerminal } from './AdminRegistrarTerminal';
 import { AdminJusticeTerminal } from './AdminJusticeTerminal';
 import { GlobeIcon } from './icons/GlobeIcon';
 import { ScaleIcon } from './icons/ScaleIcon';
+import { VideoIcon } from './icons/VideoIcon';
+import { MeetingHub } from './MeetingHub';
 
-type AdminView = 'dashboard' | 'feed' | 'profile' | 'wallet' | 'oracle' | 'treasury' | 'dispatch' | 'registrar' | 'justice';
+type AdminView = 'dashboard' | 'feed' | 'profile' | 'wallet' | 'oracle' | 'treasury' | 'dispatch' | 'registrar' | 'justice' | 'meetings';
 
 export const AdminDashboard: React.FC<{
   user: Admin;
@@ -29,7 +29,7 @@ export const AdminDashboard: React.FC<{
   unreadCount: number;
   onOpenChat: () => void;
   onViewProfile: (userId: string | null) => void;
-}> = ({ user, onUpdateUser, unreadCount, onOpenChat, onViewProfile }) => {
+}> = ({ user, onUpdateUser, onViewProfile }) => {
   const [view, setView] = useState<AdminView>('dashboard');
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
@@ -75,8 +75,10 @@ export const AdminDashboard: React.FC<{
     switch (view) {
         case 'dashboard': 
             return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={(msg) => api.sendBroadcast(user, msg)} />;
+        case 'meetings':
+            return <MeetingHub user={user} />;
         case 'treasury':
-            return <TreasuryManager admin={user} />;
+            return < TreasuryManager admin={user} />;
         case 'dispatch':
             return <AdminDispatchTerminal admin={user} />;
         case 'oracle': 
@@ -87,30 +89,31 @@ export const AdminDashboard: React.FC<{
             return <AdminJusticeTerminal admin={user} reports={reports} />;
         case 'wallet': return <LedgerPage />;
         case 'profile': return <AdminProfile user={user} onUpdateUser={onUpdateUser} />;
-        case 'feed': return ( <> <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView /><PostsFeed user={user} onViewProfile={onViewProfile} typeFilter={typeFilter} isAdminView /></> );
+        case 'feed': return ( <> <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView /><PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter={typeFilter} isAdminView /></> );
         default: return null;
     }
   };
 
   return (
-    <div className="space-y-12 animate-fade-in max-w-[100vw] px-4 sm:px-10 lg:px-20 pb-20">
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-10">
+    <div className="space-y-12 animate-fade-in max-w-[100vw] px-4 sm:px-10 lg:px-20 pb-20 font-sans">
+      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-10 border-b border-white/5 pb-2">
           <div className="space-y-4">
               <h1 className="text-6xl font-black text-white tracking-tighter uppercase leading-none gold-text">Authority HUD</h1>
               <div className="flex items-center gap-4">
                    <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shadow-glow-matrix"></div>
-                   <p className="label-caps !text-white !text-[10px] !tracking-[0.5em]">Root Node Identity Verified</p>
+                   <p className="label-caps !text-white !text-[10px] !tracking-[0.4em]">Root Node Identity Verified</p>
               </div>
           </div>
-          <div className="border-b border-white/10 w-full xl:w-auto overflow-x-auto no-scrollbar">
+          <div className="w-full xl:w-auto overflow-x-auto no-scrollbar">
               <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                  <TabButton label="Operations" icon={<LayoutDashboardIcon/>} isActive={view === 'dashboard'} onClick={() => setView('dashboard')} />
+                  <TabButton label="Ops" icon={<LayoutDashboardIcon/>} isActive={view === 'dashboard'} onClick={() => setView('dashboard')} />
+                  <TabButton label="Meetings" icon={<VideoIcon/>} isActive={view === 'meetings'} onClick={() => setView('meetings')} />
                   <TabButton label="Treasury" icon={<LockIcon/>} isActive={view === 'treasury'} onClick={() => setView('treasury')} />
-                  <TabButton label="Dispatch" icon={<SendIcon/>} isActive={view === 'dispatch'} onClick={() => setView('dispatch')} />
+                  <TabButton label="Dispatch" icon={<GlobeIcon/>} isActive={view === 'dispatch'} onClick={() => setView('dispatch')} />
                   <TabButton label="Oracle" icon={<DollarSignIcon/>} isActive={view === 'oracle'} count={pendingPurchases.length + sellRequests.filter(r => r.status === 'PENDING').length} onClick={() => setView('oracle')} />
-                  <TabButton label="Registrar" icon={<GlobeIcon/>} isActive={view === 'registrar'} onClick={() => setView('registrar')} />
+                  <TabButton label="Registrar" icon={<DatabaseIcon/>} isActive={view === 'registrar'} onClick={() => setView('registrar')} />
                   <TabButton label="Justice" icon={<ScaleIcon/>} isActive={view === 'justice'} count={reports.filter(r => r.status === 'new').length} onClick={() => setView('justice')} />
-                  <TabButton label="Explorer" icon={<DatabaseIcon/>} isActive={view === 'wallet'} onClick={() => setView('wallet')} />
+                  <TabButton label="Ledger" icon={<GlobeIcon/>} isActive={view === 'wallet'} onClick={() => setView('wallet')} />
                   <TabButton label="Identity" icon={<UserCircleIcon/>} isActive={view === 'profile'} onClick={() => setView('profile')} />
               </nav>
           </div>

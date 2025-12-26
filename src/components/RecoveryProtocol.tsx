@@ -1,15 +1,16 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { cryptoService } from '../services/cryptoService';
+import { cryptoService, VaultData } from '../services/cryptoService';
 import { api } from '../services/apiService';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { KeyIcon } from './icons/KeyIcon';
 import { User } from '../types';
+import { auth } from '../services/firebase';
 
 interface RecoveryProtocolProps {
-    onComplete: (mnemonic: string, pin: string) => void;
+    onComplete: (mnemonic: string, pin: string, data: VaultData) => void;
     onBack: () => void;
 }
 
@@ -20,12 +21,13 @@ const EXAMPLE_PHRASE = [
 
 export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, onBack }) => {
     const [phraseParts, setPhraseParts] = useState<string[]>(Array(12).fill(''));
-    const [newPin, setNewPin] = useState('');
+    const [pin, setPin] = useState('');
     const [confirmPin, setConfirmPin] = useState('');
     const [step, setStep] = useState(1);
     const [isVerifying, setIsVerifying] = useState(false);
     const [recoveredAccount, setRecoveredAccount] = useState<User | null>(null);
     const [scanningStatus, setScanningStatus] = useState('');
+    const [sessionMismatch, setSessionMismatch] = useState<string | null>(null);
     
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -75,7 +77,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
     const handleVerifySeed = async () => {
         const fullPhrase = phraseParts.join(' ').trim();
         if (!cryptoService.validateMnemonic(fullPhrase)) {
-            alert("INTEGRITY ERROR: The phrases provided do not match the required protocol format or are in the wrong order.");
+            alert("INTEGRITY ERROR: The phrases provided do not match the required protocol format.");
             return;
         }
 
@@ -83,40 +85,76 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
         setScanningStatus("SCANNING_LEDGER...");
         
         try {
-            // Derive the key from the mnemonic
             const keyPair = cryptoService.mnemonicToKeyPair(fullPhrase);
-            
-            // Search for this key in the user registry
             const user = await api.getUserByPublicKey(keyPair.publicKey);
             
-            setTimeout(() => {
-                if (user) {
-                    setRecoveredAccount(user);
-                    setScanningStatus("IDENTITY_FOUND");
-                } else {
-                    setScanningStatus("NODE_IS_GENESIS");
+            if (user) {
+                setRecoveredAccount(user);
+                
+                // Session Integrity Check: Ensure current login matches this phrase's owner
+                const currentEmail = auth.currentUser?.email;
+                if (currentEmail && currentEmail.toLowerCase() !== user.email.toLowerCase()) {
+                    setSessionMismatch(user.email);
+                    setIsVerifying(false);
+                    return;
                 }
+                
+                setScanningStatus("IDENTITY_FOUND");
                 setStep(2);
-                setIsVerifying(false);
-            }, 1000);
-            
+            } else {
+                setScanningStatus("NODE_IS_GENESIS");
+                setStep(2);
+            }
         } catch (e) {
             console.error("Recovery scan failed:", e);
-            alert("Protocol lookup failed. Check connection.");
+            alert("Protocol lookup failed.");
+        } finally {
             setIsVerifying(false);
         }
     };
 
-    const handleReset = async () => {
-        if (newPin.length !== 6 || newPin !== confirmPin) {
+    const handleReset = () => {
+        if (pin.length !== 6 || pin !== confirmPin) {
             alert("PIN MISMATCH: Security codes must be identical 6-digit sequences.");
             return;
         }
+
         setIsVerifying(true);
-        setTimeout(() => {
-            onComplete(phraseParts.join(' '), newPin);
-        }, 1200);
+        const mnemonic = phraseParts.join(' ').trim();
+        
+        // Package the data for reconstitution
+        const vaultData: VaultData = {
+            mnemonic,
+            email: recoveredAccount?.email || auth.currentUser?.email || undefined
+        };
+        
+        onComplete(mnemonic, pin, vaultData);
     };
+
+    if (sessionMismatch) {
+        return (
+            <div className="module-frame glass-module p-10 rounded-[3rem] border-red-500/20 shadow-premium animate-fade-in max-w-md w-full text-center space-y-8">
+                <div className="p-5 bg-red-500/10 rounded-full w-20 h-20 mx-auto flex items-center justify-center border border-red-500/20">
+                    <ShieldCheckIcon className="h-10 w-10 text-red-500" />
+                </div>
+                <div className="space-y-4">
+                    <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Identity Mismatch</h2>
+                    <p className="text-sm text-gray-400 leading-relaxed">
+                        These phrases belong to the account <strong className="text-brand-gold">{sessionMismatch}</strong>, but you are currently logged in as <strong className="text-white">{auth.currentUser?.email}</strong>.
+                    </p>
+                </div>
+                <div className="flex flex-col gap-3">
+                    <button 
+                        onClick={() => api.logout().then(() => window.location.reload())}
+                        className="w-full py-5 bg-white text-black font-black rounded-2xl uppercase tracking-widest text-[10px]"
+                    >
+                        Repair Node Connection (Logout)
+                    </button>
+                    <button onClick={onBack} className="w-full py-3 text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-widest">Abort</button>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="module-frame glass-module p-6 sm:p-10 rounded-[3rem] border-white/10 shadow-premium animate-fade-in max-w-2xl w-full relative overflow-hidden font-sans">
@@ -134,7 +172,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                 <div className="space-y-8 animate-fade-in relative z-10">
                     <div className="bg-brand-gold/5 border border-brand-gold/20 p-5 rounded-2xl text-center">
                         <p className="text-[10px] text-brand-gold font-black uppercase tracking-[0.2em] leading-loose">
-                            Enter your 12-word Identity Anchor in order to recover your <span className="text-white">existing Node and $UBT balance</span>.
+                            Enter your 12-word Identity Anchor in order to recover your <span className="text-white">existing Node and protocol stake</span>.
                         </p>
                     </div>
                     
@@ -168,7 +206,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                                 <span>{scanningStatus}</span>
                             </>
                         ) : (
-                            "Authorize Reconstitution"
+                            "Authorize Identity Lookup"
                         )}
                     </button>
                 </div>
@@ -180,9 +218,12 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                         </div>
                         {recoveredAccount ? (
                             <div>
-                                <p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest">Node Re-Anchored</p>
+                                <p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest">Node Ownership Verified</p>
                                 <p className="text-lg text-white font-black uppercase mt-1">{recoveredAccount.name}</p>
-                                <p className="text-[9px] text-gray-500 mt-2 font-mono">{recoveredAccount.email}</p>
+                                <div className="mt-4 p-4 bg-black/40 border border-white/5 rounded-2xl">
+                                    <p className="text-[8px] text-gray-500 uppercase font-black tracking-widest mb-1">Associated Address</p>
+                                    <p className="text-[10px] text-brand-gold font-mono truncate">{recoveredAccount.email}</p>
+                                </div>
                             </div>
                         ) : (
                             <div>
@@ -193,12 +234,13 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                     </div>
                     
                     <div className="space-y-4">
+                        <p className="text-[9px] text-gray-500 uppercase font-black tracking-widest text-center">Establish local node access PIN</p>
                         <input 
                             type="password"
                             inputMode="numeric"
                             maxLength={6}
-                            value={newPin}
-                            onChange={e => setNewPin(e.target.value.replace(/\D/g, ''))}
+                            value={pin}
+                            onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
                             placeholder="SET SECURITY PIN"
                             className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-white text-center text-3xl font-black tracking-[0.5em] focus:border-brand-gold focus:ring-4 focus:ring-brand-gold/10 transition-all outline-none"
                         />
@@ -215,8 +257,8 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                     
                     <button 
                         onClick={handleReset}
-                        disabled={isVerifying || newPin.length < 6}
-                        className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all"
+                        disabled={isVerifying || pin.length < 6 || pin !== confirmPin}
+                        className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all disabled:opacity-20"
                     >
                         {isVerifying ? <LoaderIcon className="h-6 w-6 animate-spin mx-auto"/> : "Complete Re-Anchor"}
                     </button>

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { User, Post } from '../types';
 import { api } from '../services/apiService';
@@ -13,6 +14,11 @@ import { LoaderIcon } from './icons/LoaderIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
+// FIX: Added missing imports for ShieldCheckIcon and DatabaseIcon
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
+import { DatabaseIcon } from './icons/DatabaseIcon';
+import { MultiSelectPills } from './MultiSelectPills';
+import { SKILLS_LIST } from '../utils';
 
 interface NewPostModalProps {
   isOpen: boolean;
@@ -40,15 +46,20 @@ const PostTypeButton: React.FC<{
 }> = ({ label, icon, value, currentValue, onClick, tooltip }) => (
     <div className="relative group flex-1">
         <button
+            type="button"
             onClick={() => onClick(value)}
-            className={`w-full flex flex-col items-center justify-center p-3 rounded-lg transition-colors duration-200 space-y-1 text-sm
-                ${currentValue === value ? 'bg-green-600/20 text-green-300' : 'bg-slate-800 hover:bg-slate-700 text-gray-300'}
+            className={`w-full flex flex-col items-center justify-center p-4 rounded-2xl transition-all duration-300 space-y-2 border-2
+                ${currentValue === value 
+                    ? 'bg-brand-gold/10 border-brand-gold text-brand-gold shadow-glow-gold' 
+                    : 'bg-slate-800 border-white/5 hover:border-white/20 text-gray-500 hover:text-gray-300'}
             `}
         >
-            {icon}
-            <span>{label}</span>
+            <div className={`${currentValue === value ? 'scale-110' : 'opacity-50'} transition-all`}>
+                {icon}
+            </div>
+            <span className="text-[10px] font-black uppercase tracking-widest">{label}</span>
         </button>
-        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 bg-slate-900 text-white text-xs rounded-lg p-2 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-lg border border-slate-700 z-10">
+        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-3 w-48 bg-black border border-white/10 text-white text-[10px] font-bold uppercase tracking-widest rounded-xl p-3 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none shadow-2xl z-50 text-center">
             {tooltip}
         </div>
     </div>
@@ -60,6 +71,7 @@ export const NewPostModal: React.FC<NewPostModalProps> = ({ isOpen, onClose, use
   const [content, setContent] = useState('');
   const [textLength, setTextLength] = useState(0);
   const [postType, setPostType] = useState<PostType>('general');
+  const [requiredSkills, setRequiredSkills] = useState<string[]>([]);
   const [isPosting, setIsPosting] = useState(false);
   const [isEvaluating, setIsEvaluating] = useState(false);
   const [evaluation, setEvaluation] = useState<EvaluationResult | null>(null);
@@ -77,6 +89,7 @@ export const NewPostModal: React.FC<NewPostModalProps> = ({ isOpen, onClose, use
       setContent('');
       setTextLength(0);
       setPostType('general');
+      setRequiredSkills([]);
       setEvaluation(null);
       if (editorRef.current) {
         editorRef.current.innerHTML = '';
@@ -112,7 +125,6 @@ export const NewPostModal: React.FC<NewPostModalProps> = ({ isOpen, onClose, use
       const text = e.currentTarget.textContent || '';
       setContent(html);
       setTextLength(text.length);
-      // Reset evaluation if user edits content after evaluation
       if (evaluation) {
           setEvaluation(null);
       }
@@ -138,7 +150,8 @@ export const NewPostModal: React.FC<NewPostModalProps> = ({ isOpen, onClose, use
     setIsPosting(true);
     try {
       const ccapToAward = bypass ? 0 : evaluation?.ccapAward || 0;
-      await api.createPost(user, content, postType, ccapToAward);
+      await api.createPost(user, content, postType, ccapToAward, requiredSkills);
+      // FIX: Using ccapToAward instead of undefined ccapAwarded
       onPostCreated(ccapToAward);
     } catch (error) {
       console.error("Failed to create post:", error);
@@ -156,124 +169,128 @@ export const NewPostModal: React.FC<NewPostModalProps> = ({ isOpen, onClose, use
     }
   };
 
-  const EvaluationResultDisplay = () => {
-    if (!evaluation) return null;
-    const isApproved = evaluation.impactScore >= 7;
-
-    return (
-        <div className={`mt-4 p-4 rounded-lg border ${isApproved ? 'bg-green-900/30 border-green-700' : 'bg-yellow-900/30 border-yellow-700'} animate-fade-in`}>
-            <div className="flex items-center gap-4">
-                 <div className={`flex flex-col items-center justify-center h-20 w-20 rounded-full ${isApproved ? 'bg-green-500' : 'bg-yellow-500'}`}>
-                    <span className="text-3xl font-bold text-slate-900">{evaluation.impactScore}<span className="text-lg">/10</span></span>
-                    <span className="text-xs font-semibold text-slate-800">Impact Score</span>
-                </div>
-                <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                         {isApproved ? <CheckCircleIcon className="h-5 w-5 text-green-400"/> : <AlertTriangleIcon className="h-5 w-5 text-yellow-400"/>}
-                        <h4 className="font-semibold text-white">{isApproved ? "Impact Analysis: Approved" : "Impact Analysis: Needs Improvement"}</h4>
-                    </div>
-                    <p className="text-sm text-gray-300 italic">"{evaluation.reasoning}"</p>
-                </div>
-            </div>
-            {!isApproved && evaluation.suggestionsForImprovement && (
-                 <div className="mt-4 pt-3 border-t border-yellow-700/50">
-                    <h5 className="font-semibold text-yellow-300">Suggestions for Improvement:</h5>
-                    <p className="text-sm text-yellow-200 whitespace-pre-line mt-1">{evaluation.suggestionsForImprovement}</p>
-                 </div>
-            )}
-        </div>
-    );
-  }
-
   return (
     <div className="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
       <div className="flex items-center justify-center min-h-screen">
-        <div className="fixed inset-0 bg-black bg-opacity-75 transition-opacity" aria-hidden="true" onClick={onClose}></div>
-        <div className="relative bg-slate-900 w-full h-full sm:w-11/12 sm:max-w-4xl sm:h-auto sm:max-h-[90vh] sm:rounded-lg shadow-xl flex flex-col transform transition-all animate-fade-in">
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-slate-700 flex-shrink-0">
-            <div className="flex items-center space-x-2">
+        <div className="fixed inset-0 bg-black bg-opacity-90 transition-opacity" aria-hidden="true" onClick={onClose}></div>
+        <div className="relative bg-slate-950 w-full h-full sm:w-11/12 sm:max-w-4xl sm:h-auto sm:max-h-[90vh] sm:rounded-[3rem] shadow-premium flex flex-col transform transition-all animate-fade-in border border-white/10">
+          <div className="corner-tl opacity-30"></div><div className="corner-tr opacity-30"></div>
+          
+          <div className="flex items-center justify-between p-6 border-b border-white/5 flex-shrink-0">
+            <div className="flex items-center space-x-4">
               {isMobile && (
-                <button onClick={onClose} className="text-gray-400 hover:text-white -ml-1 mr-2 p-1" aria-label="Back">
+                <button onClick={onClose} className="text-gray-400 hover:text-brand-gold -ml-1 p-2 bg-white/5 rounded-xl transition-all" aria-label="Back">
                   <ArrowLeftIcon className="h-6 w-6" />
                 </button>
               )}
-              <h3 className="text-lg font-bold text-white">Create a Post</h3>
+              <div>
+                <h3 className="text-xl font-black text-white uppercase tracking-tighter gold-text leading-none">New Dispatch</h3>
+                <p className="label-caps !text-[8px] !text-emerald-500/80 mt-1.5 !tracking-[0.4em]">Protocol Broadcast Mode</p>
+              </div>
             </div>
             {!isMobile && (
-              <button onClick={onClose} className="text-gray-400 hover:text-white" aria-label="Close">
-                <XCircleIcon className="h-6 w-6" />
+              <button onClick={onClose} className="p-2 text-gray-500 hover:text-brand-gold transition-all" aria-label="Close">
+                <XCircleIcon className="h-8 w-8" />
               </button>
             )}
           </div>
 
-          {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6">
-            <div className="flex items-start space-x-4">
-              <UserCircleIcon className="h-10 w-10 text-gray-400 flex-shrink-0" />
-              <div className="w-full">
-                <div className="border border-slate-700 rounded-md">
-                  <div className="flex items-center space-x-1 p-2 bg-slate-800 border-b border-slate-700">
-                    <button type="button" title="Heading 1" onClick={() => handleFormatClick('formatBlock', '<h1>')} className="px-2 py-1 text-sm font-bold text-gray-300 hover:bg-slate-700 rounded">H1</button>
-                    <button type="button" title="Heading 2" onClick={() => handleFormatClick('formatBlock', '<h2>')} className="px-2 py-1 text-sm font-bold text-gray-300 hover:bg-slate-700 rounded">H2</button>
-                    <button type="button" title="Bold" onClick={() => handleFormatClick('bold')} className="px-2 py-1 text-sm font-bold text-gray-300 hover:bg-slate-700 rounded w-8">B</button>
-                    <button type="button" title="Italic" onClick={() => handleFormatClick('italic')} className="px-2 py-1 text-sm font-bold italic text-gray-300 hover:bg-slate-700 rounded w-8">I</button>
+          <div className="flex-1 overflow-y-auto p-8 space-y-10 no-scrollbar">
+            <div className="space-y-4">
+              <label className="label-caps !text-[10px] text-gray-500 pl-1">Spectrum Classification</label>
+              <div className="flex items-start justify-around gap-4">
+                <PostTypeButton label="General" icon={<MessageSquareIcon className="h-6 w-6" />} value="general" currentValue={postType} onClick={setPostType} tooltip="Standard community communication. Earns CCAP on impact." />
+                <PostTypeButton label="Proposal" icon={<LightbulbIcon className="h-6 w-6" />} value="proposal" currentValue={postType} onClick={setPostType} tooltip="System improvement suggestion. Higher CCAP potential." />
+                <PostTypeButton label="Offer" icon={<UsersIcon className="h-6 w-6" />} value="offer" currentValue={postType} onClick={setPostType} tooltip="Skill or resource availability for citizens." />
+                <PostTypeButton label="Opportunity" icon={<BriefcaseIcon className="h-6 w-6" />} value="opportunity" currentValue={postType} onClick={setPostType} tooltip="Job or collaboration nodes requiring skills." />
+              </div>
+            </div>
+
+            <div className="flex items-start space-x-6">
+              <div className="w-12 h-12 rounded-xl bg-slate-900 border border-white/10 flex items-center justify-center flex-shrink-0">
+                  <UserCircleIcon className="h-8 w-8 text-gray-700" />
+              </div>
+              <div className="w-full space-y-4">
+                <div className="module-frame bg-slate-950 border border-white/10 rounded-[2rem] overflow-hidden focus-within:border-brand-gold/40 transition-all shadow-inner">
+                  <div className="flex items-center space-x-2 p-3 bg-white/5 border-b border-white/5">
+                    <button type="button" title="Bold" onClick={() => handleFormatClick('bold')} className="p-2 text-xs font-black uppercase text-gray-500 hover:text-brand-gold transition-all">Bold</button>
+                    <button type="button" title="Italic" onClick={() => handleFormatClick('italic')} className="p-2 text-xs font-black uppercase text-gray-500 hover:text-brand-gold transition-all">Italic</button>
                   </div>
                   <div
                     ref={editorRef}
                     contentEditable="true"
                     onInput={handleInput}
-                    data-placeholder={"Share your thoughts, propose an idea, or post an opportunity..."}
-                    className="w-full bg-slate-800 p-3 text-white text-base focus:outline-none wysiwyg-editor"
-                    style={{ resize: 'vertical', minHeight: '200px', overflowY: 'auto' }}
+                    data-placeholder={"Enter protocol transmission data..."}
+                    className="w-full bg-slate-950 p-6 text-gray-200 text-lg focus:outline-none wysiwyg-editor min-h-[250px] leading-relaxed"
                   />
                 </div>
-                <div className={`text-right text-xs mt-1 ${textLength > MAX_POST_LENGTH ? 'text-red-400' : 'text-gray-400'}`}>
-                  {textLength} / {MAX_POST_LENGTH}
+                <div className={`text-right text-[10px] font-black font-mono tracking-widest ${textLength > MAX_POST_LENGTH ? 'text-red-500' : 'text-gray-700'}`}>
+                  {textLength.toLocaleString()} / {MAX_POST_LENGTH.toLocaleString()} OCTETS
                 </div>
               </div>
             </div>
+            
+            {postType === 'opportunity' && (
+                <div className="animate-fade-in module-frame glass-module p-8 rounded-[2.5rem] border-white/5 space-y-6 shadow-xl">
+                    <div className="flex items-center gap-3">
+                        <ShieldCheckIcon className="h-5 w-5 text-emerald-500" />
+                        <h4 className="text-xs font-black text-white uppercase tracking-[0.3em]">Collaboration Matching Protocol</h4>
+                    </div>
+                    <MultiSelectPills
+                        label="Required Node Capabilities"
+                        options={SKILLS_LIST}
+                        selected={requiredSkills}
+                        onChange={setRequiredSkills}
+                        minSelection={1}
+                        maxSelection={5}
+                    />
+                </div>
+            )}
 
-            <div className="pt-2">
-              <p className="text-sm font-medium text-gray-300 mb-3">Categorize your post:</p>
-              <div className="flex items-start justify-around space-x-2">
-                <PostTypeButton label="General" icon={<MessageSquareIcon className="h-5 w-5" />} value="general" currentValue={postType} onClick={setPostType} tooltip="General discussion. Earns CCAP based on impact." />
-                <PostTypeButton label="Proposal" icon={<LightbulbIcon className="h-5 w-5" />} value="proposal" currentValue={postType} onClick={setPostType} tooltip="Suggest an idea for the commons. Earns CCAP based on impact." />
-                <PostTypeButton label="Offer" icon={<UsersIcon className="h-5 w-5" />} value="offer" currentValue={postType} onClick={setPostType} tooltip="Offer a skill or service. Earns CCAP based on impact." />
-                <PostTypeButton label="Opportunity" icon={<BriefcaseIcon className="h-5 w-5" />} value="opportunity" currentValue={postType} onClick={setPostType} tooltip="Share a job or collaboration. Earns CCAP based on impact." />
-              </div>
-            </div>
-            <EvaluationResultDisplay />
+            {evaluation && (
+                <div className={`p-8 rounded-[2.5rem] border-2 animate-fade-in flex flex-col md:flex-row gap-8 items-center ${evaluation.impactScore >= 7 ? 'bg-emerald-950/10 border-emerald-500/30' : 'bg-red-950/10 border-red-500/30'}`}>
+                    <div className={`w-24 h-24 rounded-full flex flex-col items-center justify-center shadow-2xl shrink-0 ${evaluation.impactScore >= 7 ? 'bg-emerald-500 text-slate-950 shadow-glow-matrix' : 'bg-red-500 text-white shadow-red-900/50'}`}>
+                        <span className="text-3xl font-black font-mono leading-none">{evaluation.impactScore}</span>
+                        <span className="text-[8px] font-black uppercase tracking-widest mt-1">Impact</span>
+                    </div>
+                    <div className="space-y-3">
+                        <h4 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2">
+                             {evaluation.impactScore >= 7 ? <CheckCircleIcon className="h-5 w-5 text-emerald-500" /> : <AlertTriangleIcon className="h-5 w-5 text-red-500" />}
+                             Oracle Impact Verification
+                        </h4>
+                        <p className="text-sm text-gray-400 italic leading-relaxed">"{evaluation.reasoning}"</p>
+                        {evaluation.impactScore < 7 && (
+                             <p className="text-xs text-red-400/80 font-bold uppercase tracking-wide mt-4 border-t border-red-500/20 pt-4">Suggestions: {evaluation.suggestionsForImprovement}</p>
+                        )}
+                    </div>
+                </div>
+            )}
           </div>
 
-          {/* Footer */}
-          <div className="bg-slate-800 px-4 py-3 flex justify-end items-center gap-4 border-t border-slate-700 flex-shrink-0">
-            {/* Post Directly Button */}
+          <div className="bg-slate-900/80 border-t border-white/5 p-6 sm:px-10 flex flex-col sm:flex-row justify-end items-center gap-4 flex-shrink-0">
             <button
               onClick={() => handlePost(true)}
-              disabled={isPosting || isEvaluating || textLength === 0 || textLength > MAX_POST_LENGTH || (evaluation && evaluation.impactScore >= 7)}
-              className="inline-flex justify-center rounded-md border border-slate-600 shadow-sm px-4 py-2 bg-slate-700 text-base font-medium text-gray-300 hover:bg-slate-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              title={evaluation && evaluation.impactScore >= 7 ? "Use the 'Post (+ CCAP)' button instead" : "Post without earning potential CCAP"}
+              disabled={isPosting || isEvaluating || textLength === 0}
+              className="w-full sm:w-auto px-8 py-4 bg-white/5 border border-white/10 text-white font-black rounded-2xl uppercase tracking-[0.2em] text-[10px] hover:bg-white/10 transition-all"
             >
-              Post Directly
+              Dispatch Pure
             </button>
 
-            {/* Evaluate & Post with CCAP Button */}
             {evaluation && evaluation.impactScore >= 7 ? (
               <button
                 onClick={() => handlePost(false)}
                 disabled={isPosting}
-                className="inline-flex items-center justify-center rounded-md border border-transparent shadow-sm px-6 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 disabled:bg-slate-500"
+                className="w-full sm:w-auto px-10 py-4 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.3em] text-[10px] shadow-glow-gold transition-all active:scale-95 flex items-center justify-center gap-3"
               >
-                {isPosting ? <LoaderIcon className="h-5 w-5 animate-spin"/> : `Post (+${evaluation.ccapAward} CCAP)`}
+                {isPosting ? <LoaderIcon className="h-5 w-5 animate-spin"/> : <><DatabaseIcon className="h-4 w-4"/> Anchor +{evaluation.ccapAward} CCAP</>}
               </button>
             ) : (
               <button
                 onClick={handleEvaluate}
-                disabled={isEvaluating || textLength === 0 || textLength > MAX_POST_LENGTH}
-                className="inline-flex items-center justify-center rounded-md border border-transparent shadow-sm px-6 py-2 bg-green-600 text-base font-medium text-white hover:bg-green-700 disabled:bg-slate-500"
+                disabled={isEvaluating || textLength === 0}
+                className="w-full sm:w-auto px-10 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl uppercase tracking-[0.3em] text-[10px] shadow-glow-matrix transition-all active:scale-95 flex items-center justify-center gap-3"
               >
-                {isEvaluating ? <><LoaderIcon className="h-5 w-5 animate-spin mr-2" />Evaluating...</> : evaluation ? 'Re-evaluate for CCAP' : <><SparkleIcon className="h-5 w-5 mr-2" />Evaluate for CCAP</>}
+                {isEvaluating ? <LoaderIcon className="h-5 w-5 animate-spin" /> : <><SparkleIcon className="h-5 w-5"/> Evaluate Node Impact</>}
               </button>
             )}
           </div>

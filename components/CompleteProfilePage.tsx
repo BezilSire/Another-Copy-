@@ -1,13 +1,9 @@
-
 import React, { useState } from 'react';
 import { User } from '../types';
 import { useToast } from '../contexts/ToastContext';
+import { useAuth } from '../contexts/AuthContext';
 import { ProfileCompletionMeter } from './ProfileCompletionMeter';
-import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
-
-const SKILLS_LIST = ['Software Development', 'Marketing', 'Sales', 'Product Management', 'Design (UI/UX)', 'Finance', 'Legal', 'Operations', 'Human Resources', 'Agriculture', 'Education', 'Healthcare'];
-const LOOKING_FOR_LIST = ['Co-founder', 'Business Partner', 'Investor', 'Mentor', 'Advisor', 'Employee', 'Freelancer'];
-
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 
 interface CompleteProfilePageProps {
   user: User;
@@ -15,24 +11,16 @@ interface CompleteProfilePageProps {
 }
 
 export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, onProfileComplete }) => {
+  // FIX: Added isProcessingAuth from useAuth context
+  const { isProcessingAuth } = useAuth();
   const [formData, setFormData] = useState({
     phone: user.phone || '',
     address: user.address || '',
     bio: user.bio || '',
-    // Member-specific fields
     profession: user.profession || '',
     skills: (user.skills || []).join(', '),
-    interests: (user.interests || []).join(', '),
-    passions: (user.passions || []).join(', '),
-    gender: user.gender || '',
-    age: user.age || '',
-    circle: user.circle || '',
-    // Venture fields
-    isLookingForPartners: user.isLookingForPartners || false,
-    lookingFor: user.lookingFor || [] as string[],
-    businessIdea: user.businessIdea || '',
-    // Agent/Member-specific
     id_card_number: user.id_card_number || '',
+    circle: user.circle || '',
   });
   const [isSaving, setIsSaving] = useState(false);
   const { addToast } = useToast();
@@ -42,165 +30,81 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-   const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, checked } = e.target;
-    if (name === 'isLookingForPartners') {
-      setFormData(prev => ({ ...prev, isLookingForPartners: checked }));
-    } else { // For 'lookingFor' multi-select
-      const value = e.target.value;
-      setFormData(prev => ({
-        ...prev,
-        lookingFor: checked
-          ? [...prev.lookingFor, value]
-          : prev.lookingFor.filter(item => item !== value),
-      }));
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsSaving(true);
 
-    const requiredFields = user.role === 'member'
-      ? ['phone', 'address', 'bio', 'profession', 'circle', 'id_card_number']
-      : ['phone', 'address', 'bio', 'id_card_number'];
+    const required = ['phone', 'address', 'bio', 'profession', 'circle', 'id_card_number'];
+    const missing = required.some(f => !(formData as any)[f]?.trim());
 
-    const isMissingFields = requiredFields.some(field => !(formData as any)[field]?.trim());
-
-    if (isMissingFields) {
-      addToast('Please fill in all required fields to continue.', 'error');
+    if (missing) {
+      addToast('Enter all mandatory identity nodes.', 'error');
       setIsSaving(false);
       return;
     }
 
     try {
       const skillsAsArray = formData.skills.split(',').map(s => s.trim()).filter(Boolean);
-      const interestsAsArray = formData.interests.split(',').map(s => s.trim()).filter(Boolean);
-      const passionsAsArray = formData.passions.split(',').map(s => s.trim()).filter(Boolean);
-
-      const dataToSubmit = {
-        ...formData,
-        skills: skillsAsArray,
-        interests: interestsAsArray,
-        passions: passionsAsArray,
-      };
+      const dataToSubmit = { ...formData, skills: skillsAsArray, isProfileComplete: true };
       await onProfileComplete(dataToSubmit as Partial<User>);
-      // On success, the App component will automatically navigate away.
+      addToast('Identity anchored to mainnet.', 'success');
     } catch (error) {
-      addToast('Failed to update profile. Please try again.', 'error');
+      addToast('Sync failure.', 'error');
     } finally {
-      // This ensures the button is re-enabled even if navigation fails.
       setIsSaving(false);
     }
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
-        <div className="bg-slate-800 p-6 rounded-lg shadow-lg animate-fade-in">
-            <h2 className="text-2xl font-bold text-white">Complete Your Profile</h2>
-            <p className="text-gray-400 mt-1 mb-6">Welcome to the community! Please provide some additional information to activate your account.</p>
+    <div className="max-w-3xl mx-auto px-4 font-sans">
+        <div className="module-frame glass-module p-8 sm:p-12 rounded-[3.5rem] border-white/10 shadow-premium animate-fade-in relative overflow-hidden">
+            <div className="corner-tl opacity-30"></div><div className="corner-tr opacity-30"></div>
+            
+            <div className="text-center mb-10">
+                <div className="w-20 h-20 bg-brand-gold/10 rounded-2xl flex items-center justify-center border border-brand-gold/20 mx-auto mb-6">
+                    <ShieldCheckIcon className="h-10 w-10 text-brand-gold" />
+                </div>
+                <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text leading-none">Identity Anchor</h2>
+                <p className="text-[10px] text-gray-500 uppercase font-black tracking-[0.4em] mt-3">Finalizing Protocol Induction</p>
+            </div>
 
             <ProfileCompletionMeter profileData={{ ...user, ...formData }} role={user.role} />
 
-            <form onSubmit={handleSubmit} className="space-y-6">
-                {user.role === 'member' && (
-                    <>
-                        <h3 className="text-lg font-semibold text-gray-200 border-b border-slate-700 pb-2">Personal Information</h3>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            <div>
-                                <label htmlFor="phone" className="block text-sm font-medium text-gray-300">Phone Number <span className="text-red-400">*</span></label>
-                                <input type="tel" name="phone" id="phone" value={formData.phone} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                            </div>
-                            <div>
-                                <label htmlFor="profession" className="block text-sm font-medium text-gray-300">Profession <span className="text-red-400">*</span></label>
-                                <input type="text" name="profession" id="profession" value={formData.profession} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                            </div>
-                            <div>
-                                <label htmlFor="circle" className="block text-sm font-medium text-gray-300">Circle (Your City/Area) <span className="text-red-400">*</span></label>
-                                <input type="text" name="circle" id="circle" value={formData.circle} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                            </div>
-                             <div>
-                                <label htmlFor="id_card_number" className="block text-sm font-medium text-gray-300">National ID / Passport <span className="text-red-400">*</span></label>
-                                <input type="text" name="id_card_number" id="id_card_number" value={formData.id_card_number} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                            </div>
-                        </div>
-                        <div>
-                            <label htmlFor="address" className="block text-sm font-medium text-gray-300">Address <span className="text-red-400">*</span></label>
-                            <input type="text" name="address" id="address" value={formData.address} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                        </div>
-                        <div>
-                            <label htmlFor="bio" className="block text-sm font-medium text-gray-300">Bio <span className="text-red-400">*</span></label>
-                            <textarea name="bio" id="bio" rows={4} value={formData.bio} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" placeholder="Tell the community a little about yourself..."/>
-                        </div>
-                         <h3 className="text-lg font-semibold text-gray-200 border-b border-slate-700 pb-2 pt-4">Ventures & Skills (Optional)</h3>
-                         <div className="flex items-center">
-                            <input type="checkbox" id="isLookingForPartners" name="isLookingForPartners" checked={formData.isLookingForPartners} onChange={handleCheckboxChange} className="h-4 w-4 text-green-600 bg-slate-700 border-slate-600 rounded focus:ring-green-500" />
-                            <label htmlFor="isLookingForPartners" className="ml-2 block text-sm text-gray-200">I'm open to business collaborations.</label>
-                         </div>
-                         {formData.isLookingForPartners && (
-                            <div className="space-y-6 animate-fade-in">
-                                <div>
-                                    <label htmlFor="businessIdea" className="block text-sm font-medium text-gray-300">Describe your business idea or what you'd like to work on.</label>
-                                    <textarea name="businessIdea" id="businessIdea" rows={3} value={formData.businessIdea} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                                </div>
-                                <div>
-                                    <label className="block text-sm font-medium text-gray-300">What are you looking for?</label>
-                                    <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                        {LOOKING_FOR_LIST.map(item => (
-                                            <label key={item} className="flex items-center space-x-2 text-sm text-gray-300">
-                                                <input type="checkbox" value={item} checked={formData.lookingFor.includes(item)} onChange={handleCheckboxChange} className="text-green-600 bg-slate-700 border border-slate-600 rounded focus:ring-green-500"/>
-                                                <span>{item}</span>
-                                            </label>
-                                        ))}
-                                    </div>
-                                </div>
-                                <div>
-                                    <label htmlFor="skills" className="block text-sm font-medium text-gray-300">Your skills (comma-separated)</label>
-                                    <input type="text" name="skills" id="skills" value={formData.skills} onChange={handleChange} className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" placeholder="e.g., Marketing, Software Development"/>
-                                    <p className="text-xs text-gray-400 mt-1">Suggested: {SKILLS_LIST.slice(0, 4).join(', ')}...</p>
-                                </div>
-                            </div>
-                         )}
-                    </>
-                )}
-
-                 { (user.role === 'agent' || user.role === 'admin') && (
-                     <>
-                        <div className="p-4 bg-yellow-900/50 border border-yellow-700 rounded-lg flex items-start space-x-3">
-                            <AlertTriangleIcon className="h-5 w-5 text-yellow-400 flex-shrink-0 mt-0.5" />
-                            <div>
-                                <h4 className="font-bold text-yellow-200">Important Information</h4>
-                                <p className="text-sm text-yellow-300 mt-1">To ensure account security and process commission payouts, please provide your phone number, ID card number, and address.</p>
-                            </div>
-                        </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-                            <div>
-                                <label htmlFor="phone" className="block text-sm font-medium text-gray-300">Phone Number <span className="text-red-400">*</span> <span className="text-yellow-400 text-xs">(for payouts)</span></label>
-                                <input type="tel" name="phone" id="phone" value={formData.phone} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                            </div>
-                            <div>
-                                <label htmlFor="id_card_number" className="block text-sm font-medium text-gray-300">ID Card Number <span className="text-red-400">*</span> <span className="text-yellow-400 text-xs">(for verification)</span></label>
-                                <input type="text" name="id_card_number" id="id_card_number" value={formData.id_card_number} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                            </div>
-                        </div>
-                         <div>
-                            <label htmlFor="address" className="block text-sm font-medium text-gray-300">Address <span className="text-red-400">*</span> <span className="text-yellow-400 text-xs">(for verification)</span></label>
-                            <textarea name="address" id="address" rows={3} value={formData.address} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                        </div>
-                        <div>
-                            <label htmlFor="bio" className="block text-sm font-medium text-gray-300">Bio <span className="text-red-400">*</span></label>
-                            <textarea name="bio" id="bio" rows={4} value={formData.bio} onChange={handleChange} required className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white" />
-                        </div>
-                     </>
-                 )}
-
-                <div className="flex justify-end pt-4 border-t border-slate-700">
-                    <button type="submit" disabled={isSaving} className="inline-flex justify-center py-2 px-6 border border-transparent rounded-md text-white bg-green-600 hover:bg-green-700 disabled:bg-slate-500">
-                        {isSaving ? 'Saving...' : 'Save and Continue'}
-                    </button>
+            <form onSubmit={handleSubmit} className="space-y-8">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                    <InputField label="Operational Node (Phone)" name="phone" value={formData.phone} onChange={handleChange} required placeholder="+263..." />
+                    <InputField label="Identity Seal (National ID)" name="id_card_number" value={formData.id_card_number} onChange={handleChange} required placeholder="ID_NUMBER" />
+                    <InputField label="Designation (Profession)" name="profession" value={formData.profession} onChange={handleChange} required placeholder="E.G. DEVELOPER" />
+                    <InputField label="Circle (Location)" name="circle" value={formData.circle} onChange={handleChange} required placeholder="E.G. HARARE" />
                 </div>
+                
+                <div className="space-y-2">
+                    <label className="label-caps !text-[9px]">Sovereign Residence</label>
+                    <input name="address" value={formData.address} onChange={handleChange} required className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white font-bold placeholder-gray-700" placeholder="FULL PHYSICAL ADDRESS" />
+                </div>
+
+                <div className="space-y-2">
+                    <label className="label-caps !text-[9px]">Capability Profile (Comma Separated)</label>
+                    <input name="skills" value={formData.skills} onChange={handleChange} className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white font-mono text-xs uppercase" placeholder="MARKETING, TRADING, AGRI..." />
+                </div>
+
+                <div className="space-y-2">
+                    <label className="label-caps !text-[9px]">Citizen Narrative</label>
+                    <textarea name="bio" rows={4} value={formData.bio} onChange={handleChange} required className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white text-sm leading-relaxed" placeholder="Tell the community a little about your node purpose..."/>
+                </div>
+
+                <button type="submit" disabled={isSaving} className="w-full py-6 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[12px] shadow-glow-gold transition-all active:scale-95 disabled:opacity-30">
+                    {isProcessingAuth ? "Synchronizing..." : "Complete Handshake"}
+                </button>
             </form>
         </div>
     </div>
   );
 };
+
+const InputField: React.FC<{label: string, name: string, value: string, onChange: any, required?: boolean, placeholder?: string}> = ({label, name, value, onChange, required, placeholder}) => (
+    <div className="space-y-2">
+        <label className="label-caps !text-[9px]">{label}</label>
+        <input type="text" name={name} value={value} onChange={onChange} required={required} className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white font-bold placeholder-gray-700 uppercase" placeholder={placeholder} />
+    </div>
+);

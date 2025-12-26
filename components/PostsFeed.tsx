@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Post, User, Comment, Activity, PublicUserProfile, FilterType } from '../types';
 import { api } from '../services/apiService';
@@ -27,8 +28,8 @@ import { ActivityItem } from './ActivityItem';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { LogoIcon } from './icons/LogoIcon';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
-// FIX: Added missing PostsFeedProps interface and moved before component definition
 interface PostsFeedProps {
   user: User;
   onViewProfile: (userId: string) => void;
@@ -36,13 +37,15 @@ interface PostsFeedProps {
   authorId?: string;
   isAdminView?: boolean;
   typeFilter?: FilterType;
+  onFilterReset?: () => void;
 }
 
-const ActionButton: React.FC<{ icon: React.ReactNode; count?: number; onClick: () => void; isActive?: boolean; activeColor?: string; title?: string; }> = 
-({ icon, count, onClick, isActive, activeColor = 'text-green-400', title }) => (
-    <button onClick={onClick} title={title} className={`flex-1 flex items-center justify-center space-x-2 py-2 rounded-lg transition-colors duration-200 ${isActive ? `${activeColor} bg-slate-700/50` : 'hover:bg-slate-700/50'}`}>
+const ActionButton: React.FC<{ icon: React.ReactNode; count?: number; onClick: () => void; isActive?: boolean; activeColor?: string; title?: string; label?: string; }> = 
+({ icon, count, onClick, isActive, activeColor = 'text-green-400', title, label }) => (
+    <button onClick={onClick} title={title} className={`flex-1 flex items-center justify-center space-x-2 py-2 rounded-lg transition-colors duration-200 ${isActive ? `${activeColor} bg-slate-700/50` : 'hover:bg-slate-700/50 text-gray-400'}`}>
         {icon}
         {count !== undefined && count > 0 && <span className="text-sm font-semibold">{count}</span>}
+        {label && <span className="hidden sm:inline text-xs font-bold uppercase tracking-widest">{label}</span>}
     </button>
 );
 
@@ -110,36 +113,56 @@ export const PostItem: React.FC<{
     );
 };
 
-// FIX: Consolidating and cleaning up the duplicate PostsFeed definition
-export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, feedType = 'all', authorId, isAdminView = false, typeFilter = 'all' }) => {
+export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, feedType = 'all', authorId, isAdminView = false, typeFilter = 'all', onFilterReset }) => {
     const [posts, setPosts] = useState<Post[]>([]);
     const [pinnedPosts, setPinnedPosts] = useState<Post[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const { addToast } = useToast();
-    const [lastVisible, setLastVisible] = useState<DocumentSnapshot<DocumentData> | null>(null);
+    
+    const [hasLastVisible, setHasLastVisible] = useState(false);
+    const lastVisibleRef = useRef<DocumentSnapshot<DocumentData> | null>(null);
 
     const loadPosts = useCallback(async (loadMore = false) => {
         if (authorId) return;
-        setIsLoading(true);
+        
+        const isInitial = !loadMore;
+        if (isInitial) {
+            setIsLoading(true);
+            setPosts([]);
+            lastVisibleRef.current = null;
+            setHasLastVisible(false);
+        }
         setError(null);
+
         try {
-            if (!loadMore) {
-                const pinned = await api.fetchPinnedPosts(isAdminView);
+            if (isInitial) {
+                const pinned = await api.fetchPinnedPosts(isAdminView).catch(() => []);
                 setPinnedPosts(pinned);
             }
-            const { posts: newPosts, lastVisible: newLastVisible } = await api.fetchRegularPosts(10, typeFilter, isAdminView, loadMore ? lastVisible : undefined, user);
+            
+            const { posts: newPosts, lastVisible: nextDoc } = await api.fetchRegularPosts(
+                10, 
+                typeFilter || 'all', 
+                isAdminView, 
+                loadMore ? (lastVisibleRef.current || undefined) : undefined, 
+                user
+            );
+            
+            lastVisibleRef.current = nextDoc;
+            setHasLastVisible(!!nextDoc);
             setPosts(prev => loadMore ? [...prev, ...newPosts] : newPosts);
-            setLastVisible(newLastVisible);
         } catch (err: any) {
-            console.error(err);
-            setError("The feed failed to synchronize. Please try again.");
+            console.error("Feed sync error:", err);
+            setError("Handshake unstable. Spectrum index not yet established.");
         } finally {
             setIsLoading(false);
         }
-    }, [authorId, typeFilter, isAdminView, lastVisible, user]);
+    }, [authorId, typeFilter, isAdminView, user]);
 
-    useEffect(() => { loadPosts(false); }, [typeFilter]);
+    useEffect(() => { 
+        loadPosts(false); 
+    }, [typeFilter, loadPosts]);
 
     useEffect(() => {
         if (!authorId) return;
@@ -149,7 +172,7 @@ export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, feedT
             setIsLoading(false);
         }, (err) => {
             console.error(err);
-            setError("Could not load posts.");
+            setError("Identity activity stream unavailable.");
             setIsLoading(false);
         });
         return () => unsubscribe();
@@ -161,17 +184,46 @@ export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, feedT
             const updater = (prev: Post[]) => prev.map(p => p.id === postId ? { ...p, upvotes: p.upvotes.includes(user.id) ? p.upvotes.filter(id => id !== user.id) : [...p.upvotes, user.id] } : p);
             setPosts(updater);
             setPinnedPosts(updater);
-        } catch (error) { addToast('Interaction failed.', 'error'); }
+        } catch (error) { addToast('Protocol signature failed.', 'error'); }
     }, [user.id, addToast]);
 
-    if (isLoading && posts.length === 0) return <div className="text-center p-20"><LoaderIcon className="h-10 w-10 animate-spin mx-auto text-brand-gold" /><p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-4">Syncing Pulse...</p></div>;
+    const handleRetryHandshake = () => {
+        if (onFilterReset) onFilterReset();
+        loadPosts(false);
+    };
+
+    if (isLoading && posts.length === 0) return (
+        <div className="text-center p-20">
+            <div className="relative inline-block mb-4">
+                <LoaderIcon className="h-12 w-12 animate-spin text-brand-gold opacity-50" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-2 h-2 bg-brand-gold rounded-full animate-ping"></div>
+                </div>
+            </div>
+            <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.5em] mt-4">Syncing_Temporal_Pulse</p>
+        </div>
+    );
     
-    if (error) return <div className="text-center p-20 bg-slate-800 rounded-[2.5rem] border border-red-500/20"><p className="text-red-400 font-bold">{error}</p><button onClick={() => loadPosts(false)} className="mt-4 text-brand-gold text-xs font-black uppercase tracking-widest">Retry Connection</button></div>;
+    if (error) return (
+        <div className="text-center p-20 bg-slate-900/60 rounded-[3rem] border border-red-500/20">
+            <AlertTriangleIcon className="h-10 w-10 mx-auto text-red-500 mb-6 opacity-40" />
+            <p className="text-red-400 font-black uppercase tracking-widest text-[11px] mb-3">Sync Anomaly Detected</p>
+            <p className="text-gray-500 text-[10px] leading-relaxed max-w-xs mx-auto uppercase tracking-widest">{error}</p>
+            <button onClick={handleRetryHandshake} className="mt-10 px-10 py-4 bg-white/5 text-brand-gold text-[10px] font-black uppercase tracking-[0.4em] rounded-2xl border border-white/10 hover:bg-white/10 transition-all active:scale-95">Reset Handshake</button>
+        </div>
+    );
 
     const allPosts = [...pinnedPosts.filter(p => !posts.some(regular => regular.id === p.id)), ...posts];
 
     return (
         <div className="space-y-6">
+            <div className="flex items-center justify-between px-4">
+                <div className="flex items-center gap-3">
+                    <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-glow-matrix animate-pulse"></div>
+                    <span className="text-[9px] font-black text-gray-600 uppercase tracking-[0.4em]">Node_Pulse_Stable</span>
+                </div>
+            </div>
+
             {allPosts.map(post => (
                 <PostItem 
                     key={post.id} post={post} currentUser={user} 
@@ -180,9 +232,21 @@ export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, feedT
                     onRepost={() => {}} onShare={() => {}} onTogglePin={() => {}} 
                 />
             ))}
+            
             {allPosts.length === 0 && (
-                <div className="text-center py-20 bg-slate-800 rounded-[2.5rem] border border-white/5">
-                    <p className="text-gray-500 font-black uppercase tracking-widest">No entries found for this spectrum.</p>
+                <div className="text-center py-32 bg-slate-900/40 rounded-[3rem] border border-white/5 opacity-40">
+                    <p className="text-gray-600 font-black uppercase tracking-[0.5em] text-[10px]">Spectrum Void: No entries indexed.</p>
+                </div>
+            )}
+            
+            {!authorId && hasLastVisible && (
+                <div className="pt-10 text-center pb-20">
+                    <button 
+                        onClick={() => loadPosts(true)}
+                        className="px-12 py-5 bg-slate-950 border border-white/5 rounded-[2rem] text-[10px] font-black uppercase tracking-[0.4em] text-gray-500 hover:text-white hover:border-brand-gold/30 transition-all shadow-xl active:scale-95"
+                    >
+                        Index More Blocks
+                    </button>
                 </div>
             )}
         </div>

@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { cryptoService } from '../services/cryptoService';
 import { useToast } from '../contexts/ToastContext';
@@ -26,6 +27,27 @@ export const IdentityVault: React.FC<{ onRestore: () => void }> = ({ onRestore }
             setTimeout(() => setIsCopied(false), 2000);
             addToast("Node Address Copied.", "info");
         });
+    };
+
+    const handleVerifyPin = async () => {
+        if (password.length < 6) {
+            addToast("Enter your 6-digit PIN to verify.", "error");
+            return;
+        }
+        setIsProcessing(true);
+        try {
+            const vaultData = await cryptoService.unlockVault(password);
+            if (vaultData) {
+                addToast("Identity Re-Anchored. Node state verified.", "success");
+                setPassword('');
+            } else {
+                throw new Error("Invalid PIN");
+            }
+        } catch (e) {
+            addToast("Invalid security PIN.", "error");
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     const handleExportJson = async () => {
@@ -90,20 +112,23 @@ export const IdentityVault: React.FC<{ onRestore: () => void }> = ({ onRestore }
                     />
                 </div>
                 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                        <button onClick={handleVerifyPin} className="py-5 bg-brand-gold text-slate-950 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-gold-light transition-all flex items-center justify-center gap-3 shadow-glow-gold">
+                        <ShieldCheckIcon className="h-5 w-5" /> Re-Sync Node
+                        </button>
                         <button onClick={handleExportJson} className="py-5 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white hover:bg-white/10 transition-all flex items-center justify-center gap-3">
-                        <DownloadIcon className="h-5 w-5" /> Export Ledger Backup
+                        <DownloadIcon className="h-5 w-5" /> Ledger Backup
                         </button>
                         <button onClick={() => setIsMnemonicRevealed(!isMnemonicRevealed)} className="py-5 bg-white/5 border border-white/10 rounded-2xl text-[10px] font-black uppercase tracking-widest text-white hover:text-brand-gold transition-all flex items-center justify-center gap-3">
-                        <FileTextIcon className="h-5 w-5" /> Reveal Seed Phrase
+                        <FileTextIcon className="h-5 w-5" /> Seed Phrase
                         </button>
                 </div>
 
                 {isMnemonicRevealed && password.length === 6 && (
-                    <div className="p-8 bg-red-950/20 border border-red-500/20 rounded-3xl animate-fade-in">
-                        <p className="text-[10px] text-red-500 font-black uppercase mb-6 tracking-[0.3em] text-center">CRITICAL: Sovereign Anchor Phrase</p>
+                    <div className="p-8 bg-red-950/20 border border-red-500/20 rounded-3xl animate-fade-in text-center">
+                        <p className="text-[10px] text-red-500 font-black uppercase mb-6 tracking-[0.3em]">CRITICAL: Sovereign Anchor Phrase</p>
                         <p className="text-lg text-white font-mono lowercase bg-black/60 p-6 rounded-2xl leading-relaxed select-all border border-white/5">
-                            {localStorage.getItem('gcn_sign_secret_key')?.substring(0, 48)}... [PROTO-LOCKED]
+                            {localStorage.getItem('gcn_sign_secret_key')?.substring(0, 48)}... [LOCKED_PROTO]
                         </p>
                     </div>
                 )}

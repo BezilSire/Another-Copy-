@@ -1,12 +1,11 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MemberDashboard } from './components/MemberDashboard';
 import { AuthPage } from './components/AuthPage';
 import { Header } from './components/Header';
 import { User, Agent, MemberUser, Admin, Conversation } from './types';
-import { useToast } from './contexts/ToastContext';
 import { ToastContainer } from './components/Toast';
 import { api } from './services/apiService';
 import { useAuth } from './contexts/AuthContext';
@@ -18,19 +17,22 @@ import { PublicProfile } from './components/PublicProfile';
 import { UbtVerificationPage } from './components/UbtVerificationPage';
 import { LogoIcon } from './components/icons/LogoIcon';
 import { LoaderIcon } from './components/icons/LoaderIcon';
+import { AlertTriangleIcon } from './components/icons/AlertTriangleIcon';
 import { PinVaultLogin } from './components/PinVaultLogin';
 import { RecoveryProtocol } from './components/RecoveryProtocol';
 import { cryptoService } from './services/cryptoService';
+import { RadarModal } from './components/RadarModal';
+import { GuestMeetingPage } from './components/GuestMeetingPage';
 
 const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [logs, setLogs] = useState<string[]>([]);
   const sequence = [
-    "> BOOTING UBUNTIUM_KERNEL_v4.5.2...",
-    "> MOUNTING ENCRYPTED_VAULT... [ SUCCESS ]",
+    "> BOOTING UBUNTIUM_CORE_v5.0.3...",
+    "> INITIALIZING CRYPTO_LAYER... [ OK ]",
     "> CONNECTING TO GLOBAL_DAG_MAINNET...",
-    "> VERIFYING SOVEREIGN_IDENTITY_ROOT...",
-    "> HANDSHAKE PROTOCOL STABILIZED.",
-    "> ACCESS GRANTED. WELCOME CITIZEN."
+    "> RESOLVING SOVEREIGN_ID_PROVENANCE...",
+    "> HANDSHAKE STABILIZED. NODE_ONLINE.",
+    "> WELCOME CITIZEN."
   ];
 
   useEffect(() => {
@@ -41,19 +43,19 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
         i++;
       } else {
         clearInterval(interval);
-        setTimeout(onComplete, 400);
+        setTimeout(onComplete, 300);
       }
-    }, 180);
+    }, 70);
     return () => clearInterval(interval);
   }, [onComplete]);
 
   return (
     <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-8 font-mono text-brand-gold">
       <div className="w-24 h-24 mb-16 relative">
-        <LogoIcon className="w-full h-full text-brand-gold animate-pulse" />
-        <div className="absolute inset-0 border border-brand-gold/10 rounded-full animate-ping scale-150 opacity-20"></div>
+        <LogoIcon className="h-full w-full text-brand-gold animate-pulse" />
+        <div className="absolute inset-0 border border-brand-gold/20 rounded-full animate-ping scale-150 opacity-20"></div>
       </div>
-      <div className="w-full max-w-xs space-y-2 border-l border-brand-gold/20 pl-6">
+      <div className="w-full max-w-xs space-y-2 border-l-2 border-brand-gold/30 pl-6">
         {logs.map((log, idx) => (
           <div key={idx} className="text-[10px] tracking-widest font-black uppercase text-brand-gold/90 animate-fade-in">{log}</div>
         ))}
@@ -71,6 +73,13 @@ const App: React.FC = () => {
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<Conversation | 'main' | null>(null);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
+  const [isRadarOpen, setIsRadarOpen] = useState(false);
+
+  // FIX: Restored guestMeetingId detection from URL parameters
+  const guestMeetingId = useMemo(() => {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('join');
+  }, []);
 
   useEffect(() => {
     if (currentUser) {
@@ -84,6 +93,7 @@ const App: React.FC = () => {
   const confirmLogout = async () => {
     await logout();
     setIsLogoutConfirmOpen(false);
+    window.location.reload();
   };
   
   const handleOpenChat = () => setChatTarget('main');
@@ -91,31 +101,27 @@ const App: React.FC = () => {
     setChatTarget(null);
     setViewingProfileId(userId);
   };
+
+  const handleSecurityRecoveryComplete = async (m: string, p: string, data: any) => {
+    await cryptoService.saveVault({ mnemonic: m }, p);
+    await unlockSovereignSession(data, p);
+    setIsRecovering(false);
+  };
   
   const renderMainContent = () => {
-    // 1. GLOBAL LOADING GATE
-    // If the system is booting, or authenticating, or HAS a user session but NO profile yet: WAIT.
-    if (isLoadingAuth || isProcessingAuth || (firebaseUser && !currentUser)) {
-      return (
-        <div className="flex flex-col items-center justify-center min-h-screen bg-black">
-            <LoaderIcon className="h-10 w-10 animate-spin text-brand-gold mb-4" />
-            <div className="text-[10px] uppercase font-black tracking-[0.4em] text-white/30">Synchronizing Ledger...</div>
-        </div>
-      );
+    if (isBooting) return null;
+
+    // FIX: Restored GUEST MEETING GATE to prioritize guest access via meeting links
+    if (guestMeetingId && (!firebaseUser || firebaseUser.isAnonymous)) {
+        return <GuestMeetingPage meetingId={guestMeetingId} />;
     }
 
-    // 2. SOVEREIGN PIN GATE
+    // 1. VAULT GATE (MUST HAPPEN FIRST)
     if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
         if (isRecovering) {
             return (
                 <div className="flex-1 flex flex-col justify-center items-center px-4 min-h-screen bg-black">
-                    <RecoveryProtocol 
-                        onBack={() => setIsRecovering(false)} 
-                        onComplete={async (m, p) => { 
-                            await cryptoService.saveVault({mnemonic: m}, p); 
-                            setIsRecovering(false); 
-                        }} 
-                    />
+                    <RecoveryProtocol onBack={() => setIsRecovering(false)} onComplete={handleSecurityRecoveryComplete} />
                 </div>
             );
         }
@@ -126,115 +132,136 @@ const App: React.FC = () => {
         );
     }
 
-    // 3. AUTH GATE
-    // We ONLY show the AuthPage if there is definitely NO firebase session.
-    if (!firebaseUser && !currentUser) return <AuthPage />;
+    // 2. MAIN DASHBOARD ACCESS
+    if (currentUser) {
+        if (chatTarget) {
+            return (
+                <ChatsPage
+                    user={currentUser}
+                    initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null}
+                    onClose={() => setChatTarget(null)}
+                    onViewProfile={handleViewProfile}
+                    onNewMessageClick={() => {}}
+                    onNewGroupClick={() => {}}
+                />
+            );
+        }
 
-    // 4. PROTOCOL CONTENT
-    // At this point, currentUser MUST exist because of the loading guard in step 1.
-    const user = currentUser!;
-    
-    if (chatTarget) {
-      return (
-        <ChatsPage
-          user={user}
-          initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null}
-          onClose={() => setChatTarget(null)}
-          onViewProfile={handleViewProfile}
-          onNewMessageClick={() => {}}
-          onNewGroupClick={() => {}}
-        />
-      );
-    }
+        if (viewingProfileId) {
+            return (
+                <div className="main-container py-10">
+                    <PublicProfile
+                        userId={viewingProfileId}
+                        currentUser={currentUser}
+                        onBack={() => setViewingProfileId(null)}
+                        onStartChat={async (id) => {
+                            const target = await api.getPublicUserProfile(id);
+                            if (target) {
+                                const convo = await api.startChat(currentUser, target);
+                                setViewingProfileId(null);
+                                setChatTarget(convo);
+                            }
+                        }}
+                        onViewProfile={(id) => setViewingProfileId(id)}
+                        isAdminView={currentUser.role === 'admin'}
+                    />
+                </div>
+            );
+        }
 
-    if (viewingProfileId) {
-      return (
-        <div className="main-container py-10">
-            <PublicProfile
-                userId={viewingProfileId}
-                currentUser={user}
-                onBack={() => setViewingProfileId(null)}
-                onStartChat={async (id) => {
-                    const target = await api.getPublicUserProfile(id);
-                    if (target) {
-                        const convo = await api.startChat(user, target);
-                        setViewingProfileId(null);
-                        setChatTarget(convo);
-                    }
-                }}
-                onViewProfile={handleViewProfile}
-                isAdminView={user.role === 'admin'}
-            />
-        </div>
-      );
-    }
+        const isLegacyOrSpecial = currentUser.role === 'admin' || currentUser.role === 'agent' || currentUser.status === 'active';
+        
+        if (!isLegacyOrSpecial) {
+            if (firebaseUser && !firebaseUser.emailVerified && (currentUser.isProfileComplete || currentUser.status === 'pending')) {
+                return <VerifyEmailPage user={currentUser} onLogout={() => setIsLogoutConfirmOpen(true)} />;
+            }
+            
+            if (currentUser.status === 'pending' && currentUser.role === 'member') {
+                return <UbtVerificationPage user={currentUser} onLogout={() => setIsLogoutConfirmOpen(true)} />;
+            }
 
-    // 5. INDUCTION & VERIFICATION FLOWS
-    const isLegacyOrSpecial = user.role === 'admin' || user.role === 'agent' || user.status === 'active';
-    
-    if (!isLegacyOrSpecial) {
-        if (firebaseUser && !firebaseUser.emailVerified && (user.isProfileComplete || user.status === 'pending')) {
-            return <VerifyEmailPage user={user} onLogout={() => setIsLogoutConfirmOpen(true)} />;
+            if (!currentUser.isProfileComplete) {
+                return <div className="main-container py-12"><CompleteProfilePage user={currentUser} onProfileComplete={async (data) => { await updateUser(data); }} /></div>;
+            }
         }
         
-        if (user.status === 'pending' && user.role === 'member') {
-            return <UbtVerificationPage user={user} onLogout={() => setIsLogoutConfirmOpen(true)} />;
+        if (currentUser.role === 'admin') {
+            return (
+                <AdminDashboard 
+                    user={currentUser as Admin} onUpdateUser={updateUser}
+                    unreadCount={unreadNotificationCount} onOpenChat={handleOpenChat}
+                    onViewProfile={handleViewProfile}
+                />
+            );
         }
 
-        if (!user.isProfileComplete) {
-            return <div className="main-container py-12"><CompleteProfilePage user={user} onProfileComplete={() => {}} /></div>;
+        if (currentUser.role === 'agent') {
+            return (
+                <AgentDashboard 
+                    user={currentUser as Agent} broadcasts={[]} onUpdateUser={updateUser} 
+                    activeView="dashboard" setActiveView={() => {}}
+                    onViewProfile={handleViewProfile}
+                />
+            );
         }
-    }
-    
-    // 6. DASHBOARDS
-    if (user.role === 'admin') {
-      return (
-        <div className="main-container py-8">
-            <AdminDashboard 
-                user={user as Admin} 
-                onUpdateUser={updateUser}
-                unreadCount={unreadNotificationCount}
-                onOpenChat={handleOpenChat}
-                onViewProfile={handleViewProfile}
-            />
-        </div>
-      );
-    }
-
-    if (user.role === 'agent') {
-      return (
-        <div className="main-container py-8">
-            <AgentDashboard 
-                user={user as Agent} broadcasts={[]} onUpdateUser={updateUser} 
-                activeView="dashboard" setActiveView={() => {}}
-                onViewProfile={handleViewProfile}
-            />
-        </div>
-      );
-    }
-    
-    return (
-        <div className="main-container">
+        
+        return (
             <MemberDashboard 
-                user={user as MemberUser} onUpdateUser={updateUser}
+                user={currentUser as MemberUser} onUpdateUser={updateUser}
                 unreadCount={unreadNotificationCount} onLogout={() => setIsLogoutConfirmOpen(true)}
                 onViewProfile={handleViewProfile}
             />
+        );
+    }
+
+    // 3. AUTH LOADING (ONLY IF NO USER DATA)
+    if (isLoadingAuth || isProcessingAuth) {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-black p-10 text-center animate-fade-in">
+            <div className="relative mb-8">
+                <LoaderIcon className="h-14 w-14 animate-spin text-brand-gold opacity-40" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                    <div className="w-2.5 h-2.5 bg-brand-gold rounded-full animate-ping"></div>
+                </div>
+            </div>
+            <div className="text-[10px] uppercase font-black tracking-[0.5em] text-white/30 font-mono">Synchronizing_Node_State</div>
+        </div>
+      );
+    }
+
+    // 4. LOGIN PAGE FALLBACK
+    if (!firebaseUser) {
+        return <AuthPage />;
+    }
+
+    // 5. DATA NOT FOUND ERROR
+    return (
+        <div className="flex flex-col items-center justify-center min-h-screen bg-black p-6 text-center animate-fade-in">
+            <AlertTriangleIcon className="h-12 w-12 text-brand-gold mb-6 opacity-40" />
+            <h2 className="text-xl font-black text-white uppercase tracking-tighter mb-4">Identity Not Indexed</h2>
+            <p className="text-sm text-gray-500 max-w-xs mx-auto uppercase tracking-widest leading-loose">
+                Session verified but citizen record missing. Re-sign to establishing node anchor.
+            </p>
+            <div className="flex flex-col gap-4 mt-10 w-full max-w-xs">
+                <button onClick={() => window.location.reload()} className="w-full py-5 bg-brand-gold text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-glow-gold">Retry Handshake</button>
+                <button onClick={confirmLogout} className="w-full py-4 bg-white/5 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest border border-white/10 hover:bg-white/10 transition-all">Sign Out</button>
+            </div>
         </div>
     );
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-black">
+    <div className="flex flex-col min-h-screen bg-black selection:bg-brand-gold/30">
       {isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
       {!isBooting && (
           <div className="flex-1 flex flex-col animate-fade-in">
-            {!isSovereignLocked && currentUser && (
+            {!isSovereignLocked && currentUser && !firebaseUser?.isAnonymous && (
                 <Header 
                     user={currentUser} 
                     onLogout={() => setIsLogoutConfirmOpen(true)} 
                     onViewProfile={handleViewProfile} 
                     onChatClick={() => handleOpenChat()}
+                    onRadarClick={() => setIsRadarOpen(true)}
                 />
             )}
             
@@ -247,10 +274,25 @@ const App: React.FC = () => {
                 isOpen={isLogoutConfirmOpen}
                 onClose={() => setIsLogoutConfirmOpen(false)}
                 onConfirm={confirmLogout}
-                title="End Protocol Session"
-                message="Are you sure you want to terminate the secure handshake?"
+                title="Disconnect Node"
+                message="Are you sure you want to end the secure protocol handshake?"
                 confirmButtonText="Terminate"
             />
+            {isRadarOpen && currentUser && (
+              <RadarModal 
+                isOpen={isRadarOpen} 
+                onClose={() => setIsRadarOpen(false)} 
+                currentUser={currentUser} 
+                onViewProfile={handleViewProfile}
+                onStartChat={async (id) => {
+                    const target = await api.getPublicUserProfile(id);
+                    if (target) {
+                        const convo = await api.startChat(currentUser, target);
+                        setChatTarget(convo);
+                    }
+                }}
+              />
+            )}
           </div>
       )}
     </div>

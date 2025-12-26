@@ -2,6 +2,7 @@
   "name": "Global Commons Network",
   "description": "The official application for members, agents, and creators of the Global Commons Network.",
   "requestFramePermissions": [
-    "camera"
+    "camera",
+    "microphone"
   ]
 }

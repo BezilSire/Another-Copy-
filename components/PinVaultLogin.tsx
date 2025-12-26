@@ -1,7 +1,7 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { cryptoService, VaultData } from '../services/cryptoService';
 import { LogoIcon } from './icons/LogoIcon';
-import { LockIcon } from './icons/LockIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 
@@ -70,31 +70,31 @@ export const PinVaultLogin: React.FC<PinVaultLoginProps> = ({ onUnlock, onReset 
     };
 
     return (
-        <div className="module-frame glass-module p-8 sm:p-12 rounded-[3rem] border-white/10 shadow-premium animate-fade-in max-w-sm w-full flex flex-col items-center">
-            <div className="corner-tl opacity-20"></div><div className="corner-br opacity-20"></div>
+        <div className="module-frame glass-module p-8 sm:p-12 rounded-[3.5rem] border-white/20 shadow-premium animate-fade-in max-w-sm w-full flex flex-col items-center">
+            <div className="corner-tl !border-white/40"></div><div className="corner-br !border-white/40"></div>
             
-            <div className="w-20 h-20 bg-black rounded-2xl border border-brand-gold/30 flex items-center justify-center shadow-glow-gold mb-8">
-                <LogoIcon className="h-10 w-10 text-brand-gold" />
+            <div className="w-24 h-24 bg-black rounded-3xl border-2 border-brand-gold/40 flex items-center justify-center shadow-glow-gold mb-8">
+                <LogoIcon className="h-12 w-12 text-brand-gold" />
             </div>
 
-            <h2 className="text-xl font-black text-white uppercase tracking-tighter gold-text mb-1">Authorization Required</h2>
-            <p className="label-caps !text-[8px] !text-white/60 mb-10">Enter your 6-digit Unlock PIN</p>
+            <h2 className="text-2xl font-black text-white uppercase tracking-tighter gold-text mb-2 text-center leading-none">Security Access</h2>
+            <p className="label-caps !text-[9px] !text-white mb-12 font-black text-center uppercase tracking-widest">Verify 6-Digit PIN</p>
 
             <div className="w-full">
-                <div className="flex justify-between gap-2 mb-10">
+                <div className="flex justify-between gap-3 mb-12">
                     {pin.map((digit, i) => (
                         <input
                             key={i}
                             ref={inputRefs[i]}
-                            type="password"
+                            type="text"
                             inputMode="numeric"
                             maxLength={1}
                             value={digit}
                             disabled={status === 'unlocking' || status === 'success'}
                             onChange={(e) => handleInput(e.target.value, i)}
                             onKeyDown={(e) => handleKeyDown(e, i)}
-                            className={`w-10 h-14 bg-slate-900 border-2 rounded-xl text-center text-2xl font-black text-white focus:outline-none transition-all
-                                ${status === 'error' ? 'border-red-500 bg-red-900/20' : digit ? 'border-brand-gold ring-4 ring-brand-gold/20' : 'border-white/10'}
+                            className={`w-full aspect-[4/5] bg-black border-[3px] rounded-2xl text-center text-4xl font-black text-white focus:outline-none transition-all
+                                ${status === 'error' ? 'border-red-500 bg-red-900/20' : digit ? 'border-brand-gold ring-4 ring-brand-gold/20 shadow-glow-gold' : 'border-white/30'}
                                 ${status === 'success' ? 'border-emerald-500 bg-emerald-900/20 shadow-glow-matrix' : ''}
                             `}
                         />
@@ -103,19 +103,19 @@ export const PinVaultLogin: React.FC<PinVaultLoginProps> = ({ onUnlock, onReset 
 
                 <div className="h-12 flex flex-col items-center justify-center">
                     {status === 'unlocking' ? (
-                        <LoaderIcon className="h-5 w-5 animate-spin text-brand-gold" />
+                        <LoaderIcon className="h-6 w-6 animate-spin text-brand-gold" />
                     ) : status === 'success' ? (
-                        <CheckCircleIcon className="h-6 w-6 text-emerald-500" />
+                        <CheckCircleIcon className="h-8 w-8 text-emerald-500" />
                     ) : status === 'error' ? (
-                        <p className="text-red-500 text-[9px] font-black uppercase tracking-widest">Invalid Security PIN</p>
+                        <p className="text-red-500 text-[10px] font-black uppercase tracking-widest bg-red-500/10 px-4 py-1 rounded-full">Authentication Failed</p>
                     ) : (
-                        <p className="text-[8px] text-white/40 uppercase font-black tracking-widest">Secure Handshake Active</p>
+                        <p className="text-[9px] text-white font-black uppercase tracking-[0.3em] opacity-50">Handshake Secure</p>
                     )}
                 </div>
             </div>
 
-            <button onClick={onReset} className="mt-8 text-[9px] font-black text-white/50 hover:text-brand-gold uppercase tracking-[0.3em] transition-colors border-b border-white/5 pb-1">
-                Forgotten PIN? Reset Access
+            <button onClick={onReset} className="mt-10 text-[11px] font-black text-brand-gold hover:text-white uppercase tracking-[0.4em] transition-all border-b-2 border-brand-gold/20 pb-1">
+                Forgot PIN?
             </button>
         </div>
     );

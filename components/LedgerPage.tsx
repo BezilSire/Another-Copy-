@@ -30,6 +30,13 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
 
+    // --- Hardcoded Security Purge ---
+    const isCleanProtocol = (tx: UbtTransaction): boolean => {
+        const isSim = tx.type === 'SIMULATION_MINT' || tx.type === 'SYSTEM_MINT' || tx.id.startsWith('sim-');
+        const isSuspiciousVolume = tx.amount === 10000 && !tx.type?.includes('BRIDGE');
+        return !isSim && !isSuspiciousVolume;
+    };
+
     // Load Base Data
     useEffect(() => {
         let isMounted = true;
@@ -41,7 +48,8 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                     new Promise<GlobalEconomy | null>((resolve) => api.listenForGlobalEconomy(resolve, () => resolve(null)))
                 ]);
                 if (isMounted) {
-                    setTransactions(txs);
+                    // Final UI-level safety filter
+                    setTransactions(txs.filter(isCleanProtocol));
                     setEconomy(econ as GlobalEconomy);
                 }
             } finally {
@@ -168,7 +176,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                                 <GlobeIcon className="h-8 w-8" />
                             </div>
                             <div className="text-left">
-                                <h1 className="text-4xl font-black tracking-tighter uppercase gold-text leading-none">Mainnet Explorer</h1>
+                                <h1 className="text-4xl font-black tracking-tighter uppercase gold-text leading-none">Protocol Explorer</h1>
                                 <p className="label-caps !text-[10px] !text-gray-500 !tracking-[0.4em] mt-3">Immutable Common Ledger</p>
                             </div>
                         </button>
@@ -201,7 +209,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
 
             <div className="max-w-7xl mx-auto px-8 py-12">
                 <div className="flex items-center gap-4 mb-10">
-                    <h3 className="text-xl font-black text-white uppercase tracking-tight">Handshake Stream</h3>
+                    <h3 className="text-xl font-black text-white uppercase tracking-tight">Authenticated Handshake Stream</h3>
                     <div className="h-px flex-1 bg-white/5"></div>
                 </div>
 

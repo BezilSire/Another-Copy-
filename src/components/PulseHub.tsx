@@ -13,6 +13,9 @@ import { db } from '../services/firebase';
 import { formatTimeAgo } from '../utils';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
+// FIX: Added missing imports for GlobeIcon and DollarSignIcon to resolve build errors
+import { GlobeIcon } from './icons/GlobeIcon';
+import { DollarSignIcon } from './icons/DollarSignIcon';
 
 interface PulseHubProps {
     user: User;
@@ -417,7 +420,7 @@ const MetricBox = ({ label, value, color }: { label: string, value: string, colo
 );
 
 const NavBtn = ({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) => (
-    <button onClick={onClick} className={`flex-1 py-4 rounded-[2.2rem] text-[11px] font-black uppercase tracking-[0.3em] transition-all duration-500 border-2 ${active ? 'bg-brand-gold text-slate-950 border-brand-gold shadow-glow-gold' : 'text-gray-500 hover:text-white border-transparent'}`}>
+    <button onClick={onClick} className={`flex-1 py-4 rounded-[2.2rem] text-[11px] font-black uppercase tracking-[0.3em] transition-all duration-500 border-2 ${active ? 'bg-brand-gold text-slate-950 border-brand-gold shadow-glow-gold' : 'text-gray-600 hover:text-white border-transparent'}`}>
         {label}
     </button>
 );

@@ -1,3 +1,4 @@
+
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -6,8 +7,17 @@ export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity
 export type ProtocolMode = 'MAINNET' | 'TESTNET';
 export type AssetType = 'SOL' | 'USDT' | 'USDC';
 
-export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger';
+export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger' | 'meetings';
 export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more';
+
+export interface Meeting {
+    id: string; // The short ID (e.g. 772-123)
+    hostId: string;
+    hostName: string;
+    createdAt: Timestamp;
+    offer?: any;
+    answer?: any;
+}
 
 export interface User {
   id: string;

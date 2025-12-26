@@ -9,7 +9,7 @@ import { LoaderIcon } from './icons/LoaderIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
 import { QrCodeIcon } from './icons/QrCodeIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
-import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
 
 const QRCode = (QRCodeLib as any).default || QRCodeLib;
@@ -36,7 +36,6 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
     
     const html5QrCodeRef = useRef<Html5Qrcode | null>(null);
 
-    // Generate My QR Code
     useEffect(() => {
         if (mode === 'show_code' && currentUser.publicKey) {
             const payload = JSON.stringify({
@@ -54,7 +53,6 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
         }
     }, [mode, currentUser]);
 
-    // Handle Scanner Lifecycle
     useEffect(() => {
         if (mode === 'scan_code' && !scannedData) {
             const startCamera = async () => {
@@ -74,7 +72,7 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
                     setCameraReady(true);
                 } catch (err) {
                     console.error("Camera init failed:", err);
-                    addToast("Camera access denied or device busy.", "error");
+                    addToast("Camera access denied.", "error");
                 }
             };
 
@@ -122,15 +120,14 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
         setCameraReady(false);
     };
 
-    // FIX: Added missing handleInitiateSend function to transition to confirmation step and validate amount
     const handleInitiateSend = () => {
         const amount = parseFloat(sendAmount);
         if (isNaN(amount) || amount <= 0) {
-            addToast("Please enter a valid amount.", "error");
+            addToast("Enter valid amount.", "error");
             return;
         }
         if (amount > (currentUser.ubtBalance || 0)) {
-            addToast("Insufficient funds.", "error");
+            addToast("Insufficient node balance.", "error");
             return;
         }
         setShowConfirmation(true);
@@ -141,6 +138,7 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
         const receiver = JSON.parse(scannedData);
         const amount = parseFloat(sendAmount);
 
+        // FIX: Using setIsProcessing as defined in state
         setIsProcessing(true);
         try {
             const timestamp = Date.now();
@@ -230,7 +228,6 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
                             <div className="relative w-full aspect-square rounded-[3rem] overflow-hidden border border-brand-gold/20 bg-black shadow-2xl">
                                 <div id="reader" className="w-full h-full"></div>
                                 
-                                {/* Custom Overlay */}
                                 <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
                                     <div className="w-64 h-64 border-2 border-brand-gold/40 rounded-[2rem] relative overflow-hidden">
                                         <div className="absolute top-0 left-0 right-0 h-0.5 bg-brand-gold shadow-[0_0_15px_#D4AF37] animate-scan-move"></div>

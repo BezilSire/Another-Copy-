@@ -1,14 +1,11 @@
-
 import React from 'react';
-import { User } from '../types';
-import { LogoIcon } from './icons/LogoIcon';
-import { UserCircleIcon } from './icons/UserCircleIcon';
-import { MessageSquareIcon } from './icons/MessageSquareIcon';
-import { TargetIcon } from './icons/TargetIcon';
-import { useOnlineStatus } from '../hooks/useOnlineStatus';
-import { WifiOffIcon } from './icons/WifiOffIcon';
-import { GlobalSearch } from './GlobalSearch';
-import { QrCodeIcon } from './icons/QrCodeIcon';
+import { User } from '../types.ts';
+import { LogoIcon } from './icons/LogoIcon.tsx';
+import { UserCircleIcon } from './icons/UserCircleIcon.tsx';
+import { MessageSquareIcon } from './icons/MessageSquareIcon.tsx';
+import { useOnlineStatus } from '../hooks/useOnlineStatus.ts';
+import { WifiOffIcon } from './icons/WifiOffIcon.tsx';
+import { VideoIcon } from './icons/VideoIcon.tsx';
 
 interface HeaderProps {
   user: User | null;
@@ -17,16 +14,16 @@ interface HeaderProps {
   onChatClick?: () => void;
   onRadarClick?: () => void;
   onScanClick?: () => void;
+  onLiveClick?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, onChatClick, onRadarClick, onScanClick }) => {
+export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, onChatClick, onLiveClick }) => {
   const isOnline = useOnlineStatus();
 
   return (
     <header className="bg-black/90 backdrop-blur-3xl border-b border-brand-gold/20 sticky top-0 z-50 h-20 flex items-center px-4 sm:px-8">
       <div className="max-w-7xl mx-auto w-full flex justify-between items-center gap-6">
         
-        {/* Logo Node */}
         <div className="flex items-center space-x-4 flex-shrink-0">
           <div className="p-2 bg-brand-gold/5 rounded-lg border border-brand-gold/20">
               <LogoIcon className="h-8 w-8 text-brand-gold" />
@@ -38,52 +35,48 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, o
         </div>
         
         {user && (
-          <div className="flex-1 max-w-lg hidden md:block">
-             <div className="relative">
-                <GlobalSearch onViewProfile={onViewProfile} />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1 pointer-events-none opacity-30">
-                    <span className="w-1 h-1 rounded-full bg-brand-gold"></span>
-                    <span className="w-1 h-1 rounded-full bg-brand-gold"></span>
-                </div>
+          <div className="flex-1 flex justify-center">
+             <div className="flex items-center bg-white/5 p-1 rounded-2xl border border-white/10 shadow-inner">
+                {onLiveClick && (
+                    <button 
+                        onClick={onLiveClick} 
+                        className="flex items-center gap-3 px-6 py-2.5 rounded-xl text-brand-gold hover:bg-brand-gold/10 transition-all group"
+                        title="Sovereign Meetings"
+                    >
+                        <VideoIcon className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] hidden sm:block">Live</span>
+                    </button>
+                )}
+                <div className="w-px h-6 bg-white/10 mx-1"></div>
+                {onChatClick && (
+                    <button 
+                        onClick={onChatClick} 
+                        className="flex items-center gap-3 px-6 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all group"
+                        title="Comms Hub"
+                    >
+                        <MessageSquareIcon className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] hidden sm:block">Comms</span>
+                    </button>
+                )}
              </div>
           </div>
         )}
 
         <div className="flex items-center space-x-6 flex-shrink-0">
-          {user && (
-              <div className="flex items-center bg-white/5 p-1 rounded-xl border border-white/5 shadow-inner">
-                  {onScanClick && (
-                      <button onClick={onScanClick} className="p-3 text-gray-500 hover:text-green-400 hover:bg-white/5 rounded-lg transition-all" title="Anchor Scan">
-                          <QrCodeIcon className="h-5 w-5" />
-                      </button>
-                  )}
-                  {onRadarClick && (
-                      <button onClick={onRadarClick} className="p-3 text-gray-500 hover:text-brand-gold-light hover:bg-white/5 rounded-lg transition-all" title="Network Pulse">
-                          <TargetIcon className="h-5 w-5" />
-                      </button>
-                  )}
-                  {onChatClick && (
-                      <button onClick={onChatClick} className="p-3 text-gray-500 hover:text-blue-400 hover:bg-white/5 rounded-lg transition-all" title="Comms Hub">
-                          <MessageSquareIcon className="h-5 w-5" />
-                      </button>
-                  )}
-              </div>
-          )}
-
           {!isOnline && (
               <div className="flex items-center space-x-2 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-[8px] font-black text-red-500 uppercase tracking-widest animate-pulse data-mono">
                   <WifiOffIcon className="h-3 w-3" />
-                  <span>AIR-GAP ACTIVE</span>
+                  <span>AIR-GAP</span>
               </div>
           )}
 
           {user && (
-            <div className="flex items-center space-x-5 pl-5 border-l border-white/10">
+            <div className="flex items-center space-x-5">
               <div className="hidden xl:block text-right">
-                  <p className="label-caps !text-[7px] mb-0.5">Verified Identity</p>
+                  <p className="label-caps !text-[7px] mb-0.5">Identity Root</p>
                   <p className="data-mono text-[10px] text-brand-gold opacity-80">{user.publicKey?.substring(0, 12)}...</p>
               </div>
-              <button onClick={() => onViewProfile(user.id)} className="focus:outline-none ring-1 ring-white/5 hover:ring-brand-gold/40 rounded-xl overflow-hidden p-0.5 transition-all bg-slate-900">
+              <button onClick={() => onViewProfile(user.id)} className="focus:outline-none ring-1 ring-white/5 hover:ring-brand-gold/40 rounded-xl overflow-hidden p-0.5 transition-all bg-slate-900 shadow-xl">
                   <UserCircleIcon className="h-10 w-10 text-slate-700 hover:text-white transition-colors" />
               </button>
               <button 

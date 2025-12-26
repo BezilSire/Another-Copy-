@@ -1,27 +1,24 @@
-
 // Service Worker for Global Commons Network
 // Caches app shell and critical CDN dependencies for offline access.
 
-const STATIC_CACHE_NAME = 'gcn-static-v8';
-const DYNAMIC_CACHE_NAME = 'gcn-dynamic-v8';
+const STATIC_CACHE_NAME = 'gcn-static-v9';
+const DYNAMIC_CACHE_NAME = 'gcn-dynamic-v9';
 
 const APP_SHELL = [
-  '/',
-  '/index.html',
-  '/offline.html',
-  '/logo.svg',
-  '/manifest.json',
-  '/index.js' 
+  './',
+  './index.html',
+  './offline.html',
+  './logo.svg',
+  './manifest.json',
+  './index.js' 
 ];
 
 const EXTERNAL_LIBS = [
   'https://rsms.me/inter/inter.css',
   'https://cdn.tailwindcss.com',
-  'https://aistudiocdn.com/react@19.2.0',
-  'https://aistudiocdn.com/react@19.2.0/',
-  'https://aistudiocdn.com/react-dom@19.2.0/client.js',
-  'https://aistudiocdn.com/react-dom@19.2.0/',
-  'https://aistudiocdn.com/@google/genai@1.24.0',
+  'https://esm.sh/react',
+  'https://esm.sh/react-dom/client',
+  'https://esm.sh/google-genai',
   'https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js',
   'https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js',
   'https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js',
@@ -29,9 +26,11 @@ const EXTERNAL_LIBS = [
   'https://www.gstatic.com/firebasejs/10.12.5/firebase-database.js',
   'https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging.js',
   'https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js',
-  'https://esm.sh/tweetnacl@1.0.3',
-  'https://esm.sh/qrcode@1.5.3',
-  'https://esm.sh/html5-qrcode@2.3.8'
+  'https://esm.sh/tweetnacl',
+  'https://esm.sh/qrcode',
+  'https://esm.sh/html5-qrcode',
+  'https://esm.sh/bip39',
+  'https://esm.sh/buffer'
 ];
 
 const IGNORED_HOSTS = [
@@ -88,7 +87,7 @@ self.addEventListener('fetch', event => {
         return networkResponse;
       }).catch(() => {
         if (event.request.mode === 'navigate') {
-          return caches.match('/offline.html');
+          return caches.match('./offline.html');
         }
       });
     })

@@ -1,12 +1,12 @@
 import React from 'react';
-import { HomeIcon } from './icons/HomeIcon';
-import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon';
-import { WalletIcon } from './icons/WalletIcon';
-import { MessageSquareIcon } from './icons/MessageSquareIcon';
-import { TrendingUpIcon } from './icons/TrendingUpIcon';
-import { GlobeIcon } from './icons/GlobeIcon';
+import { HomeIcon } from './icons/HomeIcon.tsx';
+import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon.tsx';
+import { WalletIcon } from './icons/WalletIcon.tsx';
+import { MessageSquareIcon } from './icons/MessageSquareIcon.tsx';
+import { TrendingUpIcon } from './icons/TrendingUpIcon.tsx';
+import { GlobeIcon } from './icons/GlobeIcon.tsx';
 
-type MemberView = 'home' | 'hub' | 'ledger' | 'chats' | 'wallet' | 'more';
+type MemberView = 'home' | 'state' | 'ledger' | 'chats' | 'meetings' | 'hub' | 'more' | 'wallet';
 
 interface MemberBottomNavProps {
     activeView: MemberView;
@@ -25,13 +25,13 @@ const NavItem: React.FC<{
     <button
         onClick={onClick}
         className={`relative flex flex-col items-center justify-center flex-1 h-full transition-all duration-500 
-        ${isActive ? 'text-brand-gold' : 'text-brand-gold/30 hover:text-brand-gold/60'}
+        ${isActive ? 'text-brand-gold' : 'text-gray-500 hover:text-white'}
         `}
     >
         <div className={`p-1.5 sm:p-2 rounded-xl transition-all duration-500 ${isActive ? (special ? 'bg-brand-gold text-black shadow-glow-gold scale-110' : 'bg-brand-gold/10') : 'bg-transparent'}`}>
           <span className="h-5 w-5 sm:h-6 sm:w-6 block">{icon}</span>
         </div>
-        <span className={`truncate text-[8px] sm:text-[9px] font-black uppercase tracking-[0.1em] mt-1 ${isActive ? 'opacity-100 text-brand-gold' : 'opacity-80 text-brand-gold/40'}`}>{label}</span>
+        <span className={`truncate text-[8px] sm:text-[9px] font-black uppercase tracking-[0.1em] mt-1 ${isActive ? 'opacity-100 text-brand-gold' : 'opacity-80 text-gray-600'}`}>{label}</span>
         {isActive && !special && (
             <div className="absolute bottom-1 w-1 h-1 bg-brand-gold rounded-full shadow-[0_0_8px_#D4AF37]"></div>
         )}

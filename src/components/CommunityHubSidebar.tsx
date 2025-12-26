@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { MemberUser, FilterType, MemberView } from '../types';
 import { HomeIcon } from './icons/HomeIcon';
@@ -11,6 +10,7 @@ import { SparkleIcon } from './icons/SparkleIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { TrendingUpIcon } from './icons/TrendingUpIcon';
+import { VideoIcon } from './icons/VideoIcon';
 
 interface CommunityHubSidebarProps {
   activeView: MemberView;
@@ -60,7 +60,7 @@ export const CommunityHubSidebar: React.FC<CommunityHubSidebarProps> = ({ active
             <SidebarItem label="Public Ledger" icon={<GlobeIcon className="h-5 w-5"/>} isActive={activeView === 'ledger'} onClick={() => onChangeView('ledger')} />
             <SidebarItem label="Comms Hub" icon={<MessageSquareIcon className="h-5 w-5"/>} isActive={activeView === 'chats'} onClick={() => onChangeView('chats')} />
             <SidebarItem label="Sovereign Vault" icon={<WalletIcon className="h-5 w-5"/>} isActive={activeView === 'wallet'} onClick={() => onChangeView('wallet')} />
-            <SidebarItem label="Ventures" icon={<BriefcaseIcon className="h-5 w-5"/>} isActive={activeView === 'ventures'} onClick={() => onChangeView('ventures')} />
+            <SidebarItem label="Meetings" icon={<VideoIcon className="h-5 w-5"/>} isActive={activeView === 'meetings'} onClick={() => onChangeView('meetings')} />
             <SidebarItem label="Citizens" icon={<UsersIcon className="h-5 w-5"/>} isActive={activeView === 'community'} onClick={() => onChangeView('community')} />
             <SidebarItem label="Node Status" icon={<UserCircleIcon className="h-5 w-5"/>} isActive={activeView === 'profile'} onClick={() => onChangeView('profile')} />
         </div>

@@ -1,13 +1,10 @@
 import { GoogleGenAI, Type, Chat } from '@google/genai';
 
-// FIX: Initializing GoogleGenAI instance according to strictly directly from process.env.API_KEY
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-
 // --- ChatBot Functions ---
 let chat: Chat | null = null;
 
 export const initializeChat = (history?: any[]) => {
-  // FIX: Using recommended model 'gemini-3-flash-preview' for basic text chat
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   chat = ai.chats.create({
     model: 'gemini-3-flash-preview',
     history: history || [],
@@ -22,7 +19,6 @@ export const getChatBotResponse = async (message: string): Promise<string> => {
     initializeChat();
   }
   const response = await chat!.sendMessage({ message });
-  // FIX: Directly accessing the .text property as per guidelines (not a method)
   return response.text ?? '';
 };
 
@@ -40,7 +36,7 @@ export const evaluatePostImpact = async (content: string, type: string): Promise
     required: ['impactScore', 'reasoning', 'suggestionsForImprovement', 'ccapAward'],
   };
   
-  // FIX: Using recommended model 'gemini-3-flash-preview'
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Analyze the following user post for its potential impact within a community-driven economic commons. The post type is "${type}". Content: "${content}". Provide a score from 1-10 on its potential for creating value, collaboration, or opportunity. If the score is below 7, provide specific suggestions for improvement. Also determine a CCAP award based on the score: score < 7 -> 0 CCAP; score 7 -> 5 CCAP; score 8 -> 10 CCAP; score 9 -> 20 CCAP; score 10 -> 35 CCAP.`,
@@ -80,7 +76,7 @@ export const generateProjectIdea = async (): Promise<any> => {
     required: ['projectName', 'category', 'justification', 'requirements', 'budgetBreakdown', 'totalEstimatedCost', 'executionPlan', 'timeline', 'financials', 'riskAnalysis', 'scalability', 'commonsFeedbackLoop', 'externalResources'],
   };
   
-  // FIX: Using recommended model 'gemini-3-pro-preview' for complex reasoning tasks
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: 'gemini-3-pro-preview',
     contents: `Generate a robust, real-world business idea that can be launched in Zimbabwe with a budget between $200 and $500. The business should be from a diverse sector (not just solar/energy). Provide a comprehensive plan including justification, requirements, budget, execution plan, timeline, financials, risk analysis, scalability, and how it can create value within a community commons. Also include links to external resources if possible.`,
@@ -109,7 +105,7 @@ export const elaborateBusinessIdea = async (idea: string): Promise<{ suggestedNa
         },
         required: ['suggestedNames', 'detailedPlan', 'impactAnalysis'],
     };
-    // FIX: Using gemini-3-pro-preview
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
         model: 'gemini-3-pro-preview',
         contents: `A user has a business idea: "${idea}". Elaborate this into a detailed 2-paragraph plan. Suggest 3 creative names for the venture. Provide an "Impact Score" from 1-10 on its potential for community value and a brief justification.`,
@@ -131,7 +127,7 @@ export const analyzeTargetMarket = async (detailedPlan: string, targetMarketDesc
         },
         required: ['personas', 'requiredSkills'],
     };
-    // FIX: Using gemini-3-flash-preview
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `For the business plan "${detailedPlan}" targeting "${targetMarketDescription}", create 2 detailed user personas. Also, list the top 3-5 essential skills required to launch this venture (e.g., "Marketing", "Agriculture").`,
@@ -153,7 +149,7 @@ export const generatePitchDeck = async (detailedPlan: string, lookingFor: string
         },
         required: ['title', 'slides'],
     };
-    // FIX: Using gemini-3-flash-preview
+    const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
     const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `Based on this plan: "${detailedPlan}", generate a 5-slide pitch deck. The slides should be: 1. The Problem, 2. Our Solution, 3. Target Market, 4. Business Model, 5. The Ask (mentioning they are looking for: ${lookingFor.join(', ')}).`,
@@ -167,7 +163,7 @@ export const generatePitchDeck = async (detailedPlan: string, lookingFor: string
 };
 
 export const generateWelcomeMessage = async (name: string, circle: string): Promise<string> => {
-  // FIX: Using gemini-3-flash-preview
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   const response = await ai.models.generateContent({
     model: 'gemini-3-flash-preview',
     contents: `Generate a short, friendly, and inspiring welcome message for a new member named "${name}" joining the Global Commons Network. Keep it under 280 characters. Be warm and encouraging.`,

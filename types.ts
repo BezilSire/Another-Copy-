@@ -1,4 +1,3 @@
-
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -7,8 +6,28 @@ export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity
 export type ProtocolMode = 'MAINNET' | 'TESTNET';
 export type AssetType = 'SOL' | 'USDT' | 'USDC';
 
-export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger';
+export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger' | 'meetings' | 'wallet';
 export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more';
+
+export interface ParticipantStatus {
+    isVideoOn: boolean;
+    isMicOn: boolean;
+    isSpeaking: boolean;
+}
+
+export interface Meeting {
+    id: string;
+    hostId: string;
+    hostName: string;
+    title: string;
+    createdAt: Timestamp;
+    expiresAt: Timestamp;
+    offer?: any;
+    answer?: any;
+    callerStatus?: ParticipantStatus;
+    calleeStatus?: ParticipantStatus;
+    kickedParticipantId?: string;
+}
 
 export interface User {
   id: string;
@@ -128,7 +147,7 @@ export interface UbtTransaction {
     hash: string;
     senderPublicKey: string;
     parentHash: string;
-    priceAtSync?: number; // Captures Oracle value at time of transaction
+    priceAtSync?: number; 
     status?: 'pending' | 'verified' | 'failed';
     type?: 'P2P_HANDSHAKE' | 'VOUCH_ANCHOR' | 'REDEMPTION' | 'SYSTEM_MINT' | 'VAULT_SYNC' | 'SIMULATION_MINT' | 'FIAT_BRIDGE' | 'CRYPTO_BRIDGE';
     protocol_mode: ProtocolMode; 
@@ -492,9 +511,9 @@ export interface PendingUbtPurchase {
     userName: string;
     amountUsd: number;
     amountUbt: number;
-    ecocashRef?: string; // For Fiat
-    cryptoAsset?: AssetType; // For Crypto
-    cryptoAddress?: string; // Generated child-address for user
+    ecocashRef?: string;
+    cryptoAsset?: AssetType;
+    cryptoAddress?: string;
     payment_method: 'FIAT' | 'CRYPTO';
     status: 'PENDING' | 'AWAITING_CONFIRMATION' | 'VERIFIED' | 'REJECTED';
     createdAt: Timestamp;

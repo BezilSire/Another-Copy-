@@ -30,6 +30,7 @@ import { GenesisNodeFlow } from './GenesisNodeFlow';
 import { StateRegistry } from './StateRegistry';
 import { IdentityVault } from './IdentityVault';
 import { ProtocolReconciliation } from './ProtocolReconciliation';
+import { MeetingHub } from './MeetingHub';
 
 interface MemberDashboardProps {
   user: MemberUser;
@@ -105,6 +106,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
         return <PulseHub user={user} />;
       case 'sustenance':
         return <SustenancePage user={user} />;
+      case 'meetings':
+        return <MeetingHub user={user} />;
       case 'wallet':
         return <WalletPage user={user} />;
       case 'chats':

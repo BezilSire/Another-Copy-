@@ -11,6 +11,7 @@ import { LockIcon } from './icons/LockIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import { ScaleIcon } from './icons/ScaleIcon';
+import { VideoIcon } from './icons/VideoIcon';
 
 interface MorePageProps {
   user: User;
@@ -58,7 +59,8 @@ export const MorePage: React.FC<MorePageProps> = ({ user, onNavigate, onLogout, 
         <h3 className="label-caps !text-[9px] !text-gray-600 pl-4 mb-4">Node Operations</h3>
         <NavItem icon={<UserIcon className="h-4 w-4" />} label="Identity Profile" onClick={() => onNavigate('profile')} />
         <NavItem icon={<BellIcon className="h-4 w-4" />} label="Protocol Alerts" onClick={() => onNavigate('notifications')} badgeCount={notificationCount} />
-        <NavItem icon={<LockIcon className="h-4 w-4" />} label="Identity Vault" onClick={() => onNavigate('security')} highlight />
+        <NavItem icon={<VideoIcon className="h-4 w-4" />} label="Sovereign Meetings" onClick={() => onNavigate('meetings')} highlight />
+        <NavItem icon={<LockIcon className="h-4 w-4" />} label="Identity Vault" onClick={() => onNavigate('security')} />
       </div>
 
       <div className="space-y-3">

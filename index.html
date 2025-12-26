@@ -1,20 +1,19 @@
-
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>Ubuntium | Sovereign Protocol</title>
-  <link rel="manifest" href="/manifest.json">
-  <link rel="icon" href="/logo.svg" type="image/svg+xml">
+  <link rel="manifest" href="./manifest.json">
+  <link rel="icon" href="./logo.svg" type="image/svg+xml">
   <meta name="theme-color" content="#020617"/>
   <script type="importmap">
 {
   "imports": {
-    "react": "https://aistudiocdn.com/react@19.2.0",
-    "react/": "https://aistudiocdn.com/react@19.2.0/",
-    "react-dom/client": "https://aistudiocdn.com/react-dom@19.2.0/client.js",
-    "@google/genai": "https://aistudiocdn.com/@google/genai@1.24.0",
+    "react": "https://esm.sh/react",
+    "react/": "https://esm.sh/react/",
+    "react-dom/client": "https://esm.sh/react-dom/client",
+    "@google/genai": "https://esm.sh/@google/genai",
     "firebase/app": "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js",
     "firebase/auth": "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js",
     "firebase/firestore": "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js",
@@ -23,12 +22,12 @@
     "firebase/messaging": "https://www.gstatic.com/firebasejs/10.12.5/firebase-messaging.js",
     "firebase/functions": "https://www.gstatic.com/firebasejs/10.12.5/firebase-functions.js",
     "firebase/": "https://www.gstatic.com/firebasejs/10.12.5/",
-    "react-dom/": "https://aistudiocdn.com/react-dom@19.2.0/",
-    "tweetnacl": "https://esm.sh/tweetnacl@1.0.3?bundle",
-    "qrcode": "https://esm.sh/qrcode@1.5.3?bundle",
-    "html5-qrcode": "https://esm.sh/html5-qrcode@2.3.8?bundle",
-    "bip39": "https://esm.sh/bip39@3.1.0?bundle",
-    "buffer": "https://esm.sh/buffer@6.0.3?bundle"
+    "react-dom/": "https://esm.sh/react-dom/",
+    "tweetnacl": "https://esm.sh/tweetnacl",
+    "qrcode": "https://esm.sh/qrcode",
+    "html5-qrcode": "https://esm.sh/html5-qrcode",
+    "bip39": "https://esm.sh/bip39",
+    "buffer": "https://esm.sh/buffer"
   }
 }
 </script>
@@ -70,12 +69,14 @@
             'fade-in': 'fadeIn 0.4s ease-out forwards',
             'pulse-soft': 'pulseSoft 4s infinite ease-in-out',
             'spin-slow': 'spin 8s linear infinite',
-            'terminal-cursor': 'cursor 1s infinite'
+            'terminal-cursor': 'cursor 1s infinite',
+            'scan-move': 'scanMove 2s linear infinite'
           },
           keyframes: {
             fadeIn: { '0%': { opacity: 0, transform: 'translateY(10px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
             pulseSoft: { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.8 } },
-            cursor: { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0 } }
+            cursor: { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0 } },
+            scanMove: { '0%': { transform: 'translateY(0)' }, '100%': { transform: 'translateY(256px)' } }
           },
           boxShadow: {
             'glow-gold': '0 0 20px -5px rgba(212, 175, 55, 0.4)',
@@ -134,8 +135,8 @@
     .corner-br { bottom: 0; right: 0; border-bottom: 1px solid; border-right: 1px solid; }
 
     input, select, textarea {
-      background: #0f172a !important; /* Lighter background for better contrast */
-      border: 2px solid rgba(255, 255, 255, 0.15) !important; /* Visible borders */
+      background: #0f172a !important;
+      border: 2px solid rgba(255, 255, 255, 0.15) !important;
       border-radius: 1rem !important;
       padding: 1rem 1.25rem !important;
       color: white !important;
@@ -173,6 +174,6 @@
 </head>
 <body>
   <div id="root"></div>
-  <script type="module" src="/index.js"></script>
+  <script type="module" src="./index.tsx"></script>
 </body>
 </html>

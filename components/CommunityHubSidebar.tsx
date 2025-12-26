@@ -1,16 +1,16 @@
 import React from 'react';
-import { MemberUser, FilterType, MemberView } from '../types';
-import { HomeIcon } from './icons/HomeIcon';
-import { UsersIcon } from './icons/UsersIcon';
-import { WalletIcon } from './icons/WalletIcon';
-import { BriefcaseIcon } from './icons/BriefcaseIcon';
-import { UserCircleIcon } from './icons/UserCircleIcon';
-import { MessageSquareIcon } from './icons/MessageSquareIcon';
-import { BookOpenIcon } from './icons/BookOpenIcon';
-import { SparkleIcon } from './icons/SparkleIcon';
-import { GlobeIcon } from './icons/GlobeIcon';
-import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
-import { TrendingUpIcon } from './icons/TrendingUpIcon';
+import { MemberUser, FilterType, MemberView } from '../types.ts';
+import { HomeIcon } from './icons/HomeIcon.tsx';
+import { UsersIcon } from './icons/UsersIcon.tsx';
+import { WalletIcon } from './icons/WalletIcon.tsx';
+import { BriefcaseIcon } from './icons/BriefcaseIcon.tsx';
+import { UserCircleIcon } from './icons/UserCircleIcon.tsx';
+import { MessageSquareIcon } from './icons/MessageSquareIcon.tsx';
+import { SparkleIcon } from './icons/SparkleIcon.tsx';
+import { GlobeIcon } from './icons/GlobeIcon.tsx';
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon.tsx';
+import { TrendingUpIcon } from './icons/TrendingUpIcon.tsx';
+import { VideoIcon } from './icons/VideoIcon.tsx';
 
 interface CommunityHubSidebarProps {
   activeView: MemberView;
@@ -56,11 +56,11 @@ export const CommunityHubSidebar: React.FC<CommunityHubSidebarProps> = ({ active
     <div className="space-y-8 animate-fade-in">
         <div className="bg-slate-900/50 backdrop-blur-xl rounded-[2.5rem] p-3 space-y-1 border border-white/5 shadow-2xl">
             <SidebarItem label="Oracle Feed" icon={<HomeIcon className="h-5 w-5"/>} isActive={activeView === 'home'} onClick={() => onChangeView('home')} />
-            <SidebarItem label="Network Pulse" icon={<TrendingUpIcon className="h-5 w-5"/>} isActive={activeView === 'hub'} onClick={() => onChangeView('hub')} premium />
+            <SidebarItem label="Sovereign State" icon={<ShieldCheckIcon className="h-5 w-5"/>} isActive={activeView === 'state'} onClick={() => onChangeView('state')} premium />
             <SidebarItem label="Public Ledger" icon={<GlobeIcon className="h-5 w-5"/>} isActive={activeView === 'ledger'} onClick={() => onChangeView('ledger')} />
             <SidebarItem label="Comms Hub" icon={<MessageSquareIcon className="h-5 w-5"/>} isActive={activeView === 'chats'} onClick={() => onChangeView('chats')} />
             <SidebarItem label="Sovereign Vault" icon={<WalletIcon className="h-5 w-5"/>} isActive={activeView === 'wallet'} onClick={() => onChangeView('wallet')} />
-            <SidebarItem label="Sovereign State" icon={<ShieldCheckIcon className="h-5 w-5"/>} isActive={activeView === 'state'} onClick={() => onChangeView('state')} premium />
+            <SidebarItem label="Meetings" icon={<VideoIcon className="h-5 w-5"/>} isActive={activeView === 'meetings'} onClick={() => onChangeView('meetings')} />
             <SidebarItem label="Citizens" icon={<UsersIcon className="h-5 w-5"/>} isActive={activeView === 'community'} onClick={() => onChangeView('community')} />
             <SidebarItem label="Node Status" icon={<UserCircleIcon className="h-5 w-5"/>} isActive={activeView === 'profile'} onClick={() => onChangeView('profile')} />
         </div>
@@ -89,7 +89,7 @@ export const CommunityHubSidebar: React.FC<CommunityHubSidebarProps> = ({ active
                 </div>
             </div>
              <button onClick={() => onChangeView('hub')} className="w-full py-4 bg-slate-800 hover:bg-slate-700 text-[10px] font-black uppercase tracking-[0.2em] text-white rounded-xl transition-all active:scale-95 border border-white/5">
-                Asset Terminal
+                Node Protocols
             </button>
         </div>
     </div>

@@ -16,10 +16,9 @@ import { SendIcon } from './icons/SendIcon';
 import { SendUbtModal } from './SendUbtModal';
 import { LockIcon } from './icons/LockIcon';
 import { TrendingUpIcon } from './icons/TrendingUpIcon';
-import { PlusIcon } from './icons/PlusIcon';
-import { ProtocolReconciliation } from './ProtocolReconciliation';
 import { HistoryIcon } from './icons/HistoryIcon';
 import { IdentityVault } from './IdentityVault';
+import { ProtocolReconciliation } from './ProtocolReconciliation';
 
 export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
     const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -40,7 +39,8 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
     }, [user.id]);
 
     const handleCopyAddress = () => {
-        navigator.clipboard.writeText(user.publicKey || "").then(() => {
+        if (!user.publicKey) return;
+        navigator.clipboard.writeText(user.publicKey).then(() => {
             setIsCopied(true);
             setTimeout(() => setIsCopied(false), 2000);
             addToast("Node Anchor Copied.", "info");
@@ -72,26 +72,33 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                                 <span className="text-2xl font-black text-gray-700 font-mono tracking-widest uppercase">UBT</span>
                              </div>
                              <div className="flex items-center gap-3 pl-1">
-                                <span className="label-caps !text-[12px] text-gray-600">Calculated Value</span>
+                                <span className="label-caps !text-[12px] text-gray-600">Oracle Valuation</span>
                                 <span className="data-mono text-xl text-brand-gold font-black">&approx; ${usdValue.toFixed(6)} USD</span>
                              </div>
                         </div>
                     </div>
 
-                    <div className="w-full lg:w-80 glass-card p-6 rounded-[2rem] border-white/10 flex flex-col gap-4 shadow-2xl hover:border-brand-gold/30 transition-all group cursor-pointer" onClick={handleCopyAddress}>
+                    <div className={`w-full lg:w-80 glass-card p-6 rounded-[2rem] border-white/10 flex flex-col gap-4 shadow-2xl transition-all group ${user.publicKey ? 'hover:border-brand-gold/30 cursor-pointer' : 'opacity-50'}`} onClick={handleCopyAddress}>
                         <div className="flex justify-between items-center">
                             <p className="label-caps !text-[9px] text-gray-500">Public Anchor</p>
-                            <div className="text-gray-500 group-hover:text-brand-gold transition-colors">
-                                {isCopied ? <ClipboardCheckIcon className="h-4 w-4 text-emerald-500" /> : <ClipboardIcon className="h-4 w-4" />}
-                            </div>
+                            {user.publicKey && (
+                                <div className="text-gray-500 group-hover:text-brand-gold transition-colors">
+                                    {isCopied ? <ClipboardCheckIcon className="h-4 w-4 text-emerald-500" /> : <ClipboardIcon className="h-4 w-4" />}
+                                </div>
+                            )}
                         </div>
                         <p className="data-mono text-[9px] text-brand-gold break-all leading-relaxed uppercase opacity-60 group-hover:opacity-100 transition-opacity">
-                            {user.publicKey || 'PROVISIONING IDENTITY...'}
+                            {user.publicKey || 'ANCHORING_NODE_IDENTITY...'}
                         </p>
+                        {!user.publicKey && (
+                             <div className="flex items-center gap-2">
+                                <LoaderIcon className="h-3 w-3 animate-spin text-brand-gold" />
+                                <span className="text-[7px] text-gray-600 font-black uppercase tracking-widest">Protocol Sync in progress</span>
+                             </div>
+                        )}
                     </div>
                  </div>
 
-                 {/* CLEAN HUD ACTIONS - REMOVED VENTURES AND SUSTENANCE */}
                  <div className="relative z-10 grid grid-cols-2 gap-4 mt-12 pt-10 border-t border-white/5">
                     <HUDButton onClick={() => setIsSendOpen(true)} icon={<SendIcon className="h-6 w-6" />} label="Direct Dispatch" color="bg-brand-gold text-slate-950" />
                     <HUDButton onClick={() => setIsScanOpen(true)} icon={<QrCodeIcon className="h-6 w-6" />} label="Visual Handshake" color="bg-white/5 text-gray-300" />
@@ -114,9 +121,9 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                 <div className="min-h-[400px]">
                     {activeTab === 'vaults' && (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 animate-fade-in">
-                            <VaultCard name="Social Float" balance={hotBalance} price={currentPrice} description="Assets currently available for peer exchange." icon={<TrendingUpIcon className="h-6 w-6 text-emerald-400" />} color="border-emerald-500/20" />
+                            <VaultCard name="Social Float" balance={hotBalance} price={currentPrice} description="Assets available for local swap." icon={<TrendingUpIcon className="h-6 w-6 text-emerald-400" />} color="border-emerald-500/20" />
                             {vaults.map(v => (
-                                <VaultCard key={v.id} name={v.name} balance={v.balance} price={currentPrice} description={v.type === 'LOCKED' ? `Vested until ${v.lockedUntil?.toDate().toLocaleDateString()}` : "Locked venture equity."} icon={v.type === 'LOCKED' ? <LockIcon className="h-6 w-6 text-red-400" /> : <LockIcon className="h-6 w-6 text-blue-400" />} color={v.type === 'LOCKED' ? "border-red-500/20" : "border-blue-500/20"} />
+                                <VaultCard key={v.id} name={v.name} balance={v.balance} price={currentPrice} description={v.type === 'LOCKED' ? `Locked until ${v.lockedUntil?.toDate().toLocaleDateString()}` : "Operational node."} icon={v.type === 'LOCKED' ? <LockIcon className="h-6 w-6 text-red-400" /> : <LockIcon className="h-6 w-6 text-blue-400" />} color={v.type === 'LOCKED' ? "border-red-500/20" : "border-blue-500/20"} />
                             ))}
                         </div>
                     )}
@@ -133,7 +140,7 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                                             <p className="text-[11px] font-black text-white uppercase tracking-widest leading-none mb-1.5">{tx.reason}</p>
                                             <div className="flex items-center gap-3">
                                                 <span className="label-caps !text-[7px] text-gray-600">{formatTimeAgo(tx.timestamp.toDate().toISOString())}</span>
-                                                <span className="text-[7px] font-black text-emerald-500/60 uppercase font-mono">Ledger_Indexed</span>
+                                                <span className="text-[7px] font-black text-emerald-500/60 uppercase font-mono">Verified_Ledger</span>
                                             </div>
                                         </div>
                                     </div>
@@ -141,10 +148,10 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                                         <p className={`text-lg font-black font-mono tracking-tighter ${tx.type.includes('sent') || tx.type === 'debit' ? 'text-gray-400' : 'text-emerald-500'}`}>
                                             {tx.type.includes('sent') ? '-' : '+'} {tx.amount.toLocaleString()}
                                         </p>
-                                        <p className="text-[9px] font-black text-gray-600 font-mono tracking-widest mt-1">≈ ${(tx.amount * currentPrice).toFixed(6)}</p>
                                     </div>
                                 </div>
                             ))}
+                            {transactions.length === 0 && <p className="text-center py-20 text-gray-600 uppercase tracking-widest text-[10px]">No local events indexed</p>}
                         </div>
                     )}
 

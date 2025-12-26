@@ -1,10 +1,9 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App';
-import { ToastProvider } from './contexts/ToastContext';
-import { AuthProvider } from './contexts/AuthContext';
-import { ThemeProvider } from './contexts/ThemeContext';
+import App from './App.tsx';
+import { ToastProvider } from './contexts/ToastContext.tsx';
+import { AuthProvider } from './contexts/AuthContext.tsx';
+import { ThemeProvider } from './contexts/ThemeContext.tsx';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {
@@ -14,7 +13,7 @@ if (!rootElement) {
 // Register Service Worker for PWA functionality
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js')
+    navigator.serviceWorker.register('./service-worker.js')
       .then(registration => {
         console.log('SW registered: ', registration);
       })
