@@ -53,6 +53,7 @@ export const AdminDashboard: React.FC<{
     const unsubVentures = api.listenForVentures(user, setVentures, console.error);
     const unsubCvp = api.listenForCVP(user, setCvp, console.error);
     const unsubOracle = api.listenForPendingPurchases(setPendingPurchases, console.error);
+    // FIX: listenToSellRequests added to apiService.ts is now invoked here
     const unsubLiq = api.listenToSellRequests(setSellRequests, console.error);
     api.getBroadcasts().then(setBroadcasts).catch(console.error);
 
@@ -87,6 +88,7 @@ export const AdminDashboard: React.FC<{
         case 'dispatch':
             return <AdminDispatchTerminal admin={user} />;
         case 'oracle': 
+            // FIX: Pass sellRequests (liquidations) to the Oracle Terminal
             return <AdminOracleTerminal purchases={pendingPurchases} liquidations={sellRequests} admin={user} />;
         case 'registrar':
             return <AdminRegistrarTerminal admin={user} />;
@@ -114,6 +116,7 @@ export const AdminDashboard: React.FC<{
                   <TabButton label="Ops" icon={<LayoutDashboardIcon/>} isActive={view === 'dashboard'} onClick={() => setView('dashboard')} />
                   <TabButton label="Treasury" icon={<LockIcon/>} isActive={view === 'treasury'} onClick={() => setView('treasury')} />
                   <TabButton label="Dispatch" icon={<GlobeIcon/>} isActive={view === 'dispatch'} onClick={() => setView('dispatch')} />
+                  {/* FIX: Count includes pending sell requests */}
                   <TabButton label="Oracle" icon={<DollarSignIcon/>} isActive={view === 'oracle'} count={pendingPurchases.length + sellRequests.filter(r => r.status === 'PENDING').length} onClick={() => setView('oracle')} />
                   <TabButton label="Registrar" icon={<DatabaseIcon/>} isActive={view === 'registrar'} onClick={() => setView('registrar')} />
                   <TabButton label="Justice" icon={<ScaleIcon/>} isActive={view === 'justice'} count={reports.filter(r => r.status === 'new').length} onClick={() => setView('justice')} />

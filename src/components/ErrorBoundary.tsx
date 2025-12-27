@@ -1,5 +1,5 @@
 
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
 
@@ -16,8 +16,8 @@ interface State {
 /**
  * ErrorBoundary component to catch and handle UI-level crashes.
  */
-// Fix: Explicitly use React.Component to ensure inheritance is correctly resolved by the TypeScript compiler
-export class ErrorBoundary extends React.Component<Props, State> {
+// Fix: Explicitly extend Component from react and use provided generic types
+export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,
@@ -34,7 +34,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error:', error);
-    // Fix: setState is inherited from React.Component and captured errorInfo is persisted to state
+    // Fix: setState is inherited from Component and captured errorInfo is persisted to state
     this.setState({ error, errorInfo });
   }
 
@@ -71,7 +71,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    // Fix: props is inherited from React.Component
+    // Fix: props is inherited from Component
     return this.props.children;
   }
 }

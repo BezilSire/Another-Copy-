@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
-import { User, P2POffer, GlobalEconomy, SellRequest, PendingUbtPurchase, UbtTransaction, TreasuryVault } from '../types';
+import { User, GlobalEconomy, PendingUbtPurchase, UbtTransaction, TreasuryVault } from '../types';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
 import { LoaderIcon } from './icons/LoaderIcon';
@@ -86,14 +85,13 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
     const [economy, setEconomy] = useState<GlobalEconomy | null>(null);
     const [vaults, setVaults] = useState<TreasuryVault[]>([]);
     const [ledger, setLedger] = useState<UbtTransaction[]>([]);
-    const [swapType, setSwapType] = useState<'BUY' | 'SELL'>('BUY');
     const [swapAmount, setSwapAmount] = useState('');
     const [handshakeState, setHandshakeState] = useState<'input' | 'escrow'>('input');
     const [lastPurchaseId, setLastPurchaseId] = useState<string | null>(null);
     const [ecocashRef, setEcocashRef] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
-    const [myHistory, setMyHistory] = useState<(SellRequest | PendingUbtPurchase)[]>([]);
+    const [myHistory, setMyHistory] = useState<PendingUbtPurchase[]>([]);
     const { addToast } = useToast();
 
     useEffect(() => {
@@ -101,23 +99,12 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
         const unsubVaults = api.listenToVaults(setVaults, console.error);
         api.getPublicLedger(100).then(setLedger);
 
-        const unsubSell = onSnapshot(query(collection(db, 'sell_requests'), where('userId', '==', user.id), limit(20)), s => {
-            const sellData = s.docs.map(d => ({ ...d.data(), id: d.id, itemType: 'SELL' } as any));
-            setMyHistory(prev => {
-                const filtered = prev.filter(item => (item as any).itemType !== 'SELL');
-                return [...filtered, ...sellData].sort((a, b) => getMillis(b.createdAt) - getMillis(a.createdAt));
-            });
-        });
-
         const unsubBuy = onSnapshot(query(collection(db, 'pending_ubt_purchases'), where('userId', '==', user.id), limit(20)), s => {
             const buyData = s.docs.map(d => ({ ...d.data(), id: d.id, itemType: 'BUY' } as any));
-            setMyHistory(prev => {
-                const filtered = prev.filter(item => (item as any).itemType !== 'BUY');
-                return [...filtered, ...buyData].sort((a, b) => getMillis(b.createdAt) - getMillis(a.createdAt));
-            });
+            setMyHistory(buyData.sort((a, b) => getMillis(b.createdAt) - getMillis(a.createdAt)));
         });
 
-        return () => { unsubEcon(); unsubVaults(); unsubSell(); unsubBuy(); };
+        return () => { unsubEcon(); unsubVaults(); unsubBuy(); };
     }, [user.id]);
 
     const metrics = useMemo(() => {
@@ -150,20 +137,11 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
 
         setIsProcessing(true);
         try {
-            if (swapType === 'BUY') {
-                const purchaseDoc = await api.createPendingUbtPurchase(user, estTotal, amountUbt);
-                setLastPurchaseId(purchaseDoc.id);
-                setHandshakeState('escrow');
-                
-                // Immediate auto-dial
-                triggerDialer();
-                addToast("Handshake Block created. Opening dialer.", "success");
-            } else {
-                if (amountUbt > (user.ubtBalance || 0)) return addToast("Insufficient Node Liquidity.", "error");
-                await api.createSellRequest(user, amountUbt, estTotal);
-                addToast("Liquidation request anchored to ledger.", "success");
-                setSwapAmount('');
-            }
+            const purchaseDoc = await api.createPendingUbtPurchase(user, estTotal, amountUbt);
+            setLastPurchaseId(purchaseDoc.id);
+            setHandshakeState('escrow');
+            triggerDialer();
+            addToast("Handshake Block created. Opening dialer.", "success");
         } catch (e) {
             addToast("Handshake initialization failed.", "error");
         } finally {
@@ -220,11 +198,8 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                     {handshakeState === 'input' ? (
                         <div className="space-y-12 animate-fade-in">
                             <div className="flex justify-between items-center border-b border-white/10 pb-8">
-                                <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text">Market Swap</h2>
-                                <div className="flex bg-black/40 p-1 rounded-2xl border border-white/5">
-                                    <button onClick={() => setSwapType('BUY')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${swapType === 'BUY' ? 'bg-emerald-600 text-white shadow-lg' : 'text-gray-600'}`}>Buy</button>
-                                    <button onClick={() => setSwapType('SELL')} className={`px-6 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${swapType === 'SELL' ? 'bg-red-600 text-white shadow-lg' : 'text-gray-600'}`}>Sell</button>
-                                </div>
+                                <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text">Asset Ingress</h2>
+                                <div className="bg-emerald-900/20 text-emerald-400 px-4 py-1.5 rounded-xl border border-emerald-800/30 text-[9px] font-black uppercase tracking-widest">Buy UBT</div>
                             </div>
 
                             <div className="space-y-8">
@@ -241,7 +216,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                                 </div>
                             </div>
 
-                            <button onClick={initiateHandshake} disabled={isProcessing || !swapAmount} className={`w-full py-8 font-black rounded-3xl transition-all active:scale-[0.98] shadow-glow-gold uppercase tracking-[0.5em] text-[12px] flex justify-center items-center gap-4 ${swapType === 'SELL' ? 'bg-red-600 text-white shadow-red-900/40' : 'bg-brand-gold text-slate-950 shadow-glow-gold'}`}>
+                            <button onClick={initiateHandshake} disabled={isProcessing || !swapAmount} className="w-full py-8 font-black rounded-3xl transition-all active:scale-[0.98] bg-brand-gold text-slate-950 shadow-glow-gold uppercase tracking-[0.5em] text-[12px] flex justify-center items-center gap-4">
                                 {isProcessing ? <LoaderIcon className="h-6 w-6 animate-spin" /> : <>Initialize Handshake <ShieldCheckIcon className="h-6 w-6"/></>}
                             </button>
                         </div>
@@ -311,18 +286,18 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
 
                 <div className="xl:col-span-4 glass-card p-10 rounded-[3.5rem] border-white/10 shadow-inner h-full overflow-y-auto no-scrollbar max-h-[80vh]">
                     <h3 className="label-caps !text-[11px] mb-8 flex items-center gap-3 text-white">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div> Ledger History
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div> Buy History
                     </h3>
                     <div className="space-y-4">
                         {myHistory.map(item => (
                             <div key={item.id} className="p-6 bg-black/40 rounded-3xl border border-white/5 flex justify-between items-center transition-all hover:border-brand-gold/20">
                                 <div>
                                     <p className="text-lg font-black text-white font-mono">{item.amountUbt} UBT</p>
-                                    <p className={`text-[8px] font-black uppercase mt-2 tracking-widest ${item.status === 'PENDING' || item.status === 'CLAIMED' || item.status === 'AWAITING_CONFIRMATION' ? 'text-yellow-500' : 'text-emerald-500'}`}>{item.status}</p>
+                                    <p className={`text-[8px] font-black uppercase mt-2 tracking-widest ${item.status === 'PENDING' || item.status === 'AWAITING_CONFIRMATION' ? 'text-yellow-500' : 'text-emerald-500'}`}>{item.status}</p>
                                 </div>
                                 <div className="text-right">
                                      <p className="text-[10px] font-bold text-gray-600">${item.amountUsd.toFixed(2)}</p>
-                                     <p className="text-[8px] text-gray-700 font-mono mt-1">{(item as any).itemType}</p>
+                                     <p className="text-[8px] text-gray-700 font-mono mt-1">BUY</p>
                                 </div>
                             </div>
                         ))}
@@ -332,16 +307,3 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
         </div>
     );
 };
-
-const MetricBox = ({ label, value, color }: { label: string, value: string, color: string }) => (
-    <div className="bg-black/60 p-5 rounded-2xl border border-white/10 text-center min-w-[150px] shadow-inner">
-        <p className="label-caps !text-[9px] text-gray-600 mb-2">{label}</p>
-        <p className={`text-2xl font-black ${color} font-mono tracking-tighter`}>{value}</p>
-    </div>
-);
-
-const NavBtn = ({ active, onClick, label }: { active: boolean, onClick: () => void, label: string }) => (
-    <button onClick={onClick} className={`flex-1 py-4 rounded-[2.2rem] text-[11px] font-black uppercase tracking-[0.3em] transition-all duration-500 border-2 ${active ? 'bg-brand-gold text-slate-950 border-brand-gold' : 'text-gray-500 hover:text-white border-transparent'}`}>
-        {label}
-    </button>
-);

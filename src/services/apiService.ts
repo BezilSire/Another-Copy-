@@ -1,3 +1,4 @@
+
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -44,8 +45,8 @@ import {
     User, Agent, Member, NewMember, MemberUser, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
-    Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase, SellRequest, P2POffer, UserVault,
-    CitizenResource, Dispute, Meeting
+    Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase, P2POffer, UserVault,
+    CitizenResource, Dispute, Meeting, SellRequest
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -62,7 +63,6 @@ const resourcesCollection = collection(db, 'resources');
 const disputesCollection = collection(db, 'disputes');
 const globalsCollection = collection(db, 'globals');
 const pendingPurchasesCollection = collection(db, 'pending_ubt_purchases');
-const sellRequestsCollection = collection(db, 'sell_requests');
 const p2pCollection = collection(db, 'p2p_offers');
 const redemptionCyclesCollection = collection(db, 'redemption_cycles');
 const sustenanceCollection = collection(db, 'sustenance_cycles');
@@ -243,7 +243,6 @@ export const api = {
     listenForReports: (admin: User, cb: (r: Report[]) => void, err?: any): Unsubscribe => onSnapshot(reportsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Report))), err),
     listenForPayoutRequests: (admin: User, cb: (r: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(payoutsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
     listenForPendingPurchases: (cb: (p: PendingUbtPurchase[]) => void, err?: any): Unsubscribe => onSnapshot(query(pendingPurchasesCollection, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), err),
-    listenToSellRequests: (cb: (r: SellRequest[]) => void, err?: any): Unsubscribe => onSnapshot(sellRequestsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest))), err),
     listenToP2POffers: (cb: (o: P2POffer[]) => void, err?: any): Unsubscribe => onSnapshot(query(p2pCollection, where('status', '==', 'OPEN')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as P2POffer))), err),
     listenForCVP: (admin: User, cb: (cvp: CommunityValuePool | null) => void, err?: any): Unsubscribe => onSnapshot(doc(globalsCollection, 'cvp'), s => cb(s.exists() ? s.data() as CommunityValuePool : null), err),
     listenForVentures: (admin: User, cb: (v: Venture[]) => void, err?: any): Unsubscribe => onSnapshot(venturesCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err),
@@ -415,13 +414,8 @@ export const api = {
         t.update(ref, { [v === 'for' ? 'votesFor' : 'votesAgainst']: arrayUnion(uid), [v === 'for' ? 'voteCountFor' : 'voteCountAgainst']: increment(1) });
     }),
     getProposal: async (id: string) => { const s = await getDoc(doc(proposalsCollection, id)); return s.exists() ? { id: s.id, ...s.data() } as Proposal : null; },
-    createSellRequest: (u: User, amt: number, val: number) => addDoc(sellRequestsCollection, { userId: u.id, userName: u.name, userPhone: u.phone || 'N/A', amountUbt: amt, amountUsd: val, status: 'PENDING', createdAt: serverTimestamp() }),
     createPendingUbtPurchase: (u: User, val: number, amt: number) => addDoc(pendingPurchasesCollection, { userId: u.id, userName: u.name, amountUsd: val, amountUbt: amt, status: 'PENDING', createdAt: serverTimestamp(), payment_method: 'FIAT' }),
     updatePendingPurchaseReference: (purchaseId: string, ref: string) => updateDoc(doc(pendingPurchasesCollection, purchaseId), { ecocashRef: ref, status: 'AWAITING_CONFIRMATION' }),
-    cancelSellRequest: (u: User, id: string) => updateDoc(doc(sellRequestsCollection, id), { status: 'CANCELLED' }),
-    completeSellRequest: (u: User, req: SellRequest) => updateDoc(doc(sellRequestsCollection, req.id), { status: 'COMPLETED', completedAt: serverTimestamp() }),
-    claimSellRequest: (u: User, id: string) => updateDoc(doc(sellRequestsCollection, id), { status: 'CLAIMED', claimerId: u.id, claimerName: u.name, claimerRole: u.role, claimedAt: serverTimestamp() }),
-    dispatchSellPayment: (u: User, id: string, ref: string) => updateDoc(doc(sellRequestsCollection, id), { status: 'DISPATCHED', ecocashRef: ref, dispatchedAt: serverTimestamp() }),
     getAgentMembers: async (a: Agent) => {
         const q = query(membersCollection, where('agent_id', '==', a.id));
         const s = await getDocs(q);
@@ -553,4 +547,29 @@ export const api = {
             t.set(doc(ledgerCollection, tx.id), { ...tx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         });
     },
+
+    // FIX: Added missing sell request methods for liquidation facilitation
+    createSellRequest: (u: User, amtUbt: number, amtUsd: number) => addDoc(collection(db, 'sell_requests'), {
+        userId: u.id,
+        userName: u.name,
+        userPhone: u.phone || '',
+        amountUbt: amtUbt,
+        amountUsd: amtUsd,
+        status: 'PENDING',
+        createdAt: serverTimestamp()
+    }),
+    listenToSellRequests: (cb: (r: SellRequest[]) => void, err?: any): Unsubscribe => 
+        onSnapshot(query(collection(db, 'sell_requests'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest))), err),
+    claimSellRequest: (claimer: User, requestId: string) => updateDoc(doc(db, 'sell_requests', requestId), {
+        status: 'CLAIMED',
+        claimerId: claimer.id,
+        claimerName: claimer.name,
+        claimerRole: claimer.role,
+        claimedAt: serverTimestamp()
+    }),
+    dispatchSellPayment: (claimer: User, requestId: string, ref: string) => updateDoc(doc(db, 'sell_requests', requestId), {
+        status: 'DISPATCHED',
+        ecocashRef: ref,
+        dispatchedAt: serverTimestamp()
+    }),
 };

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Agent, Member, NewMember, Broadcast, User, NotificationItem, PublicUserProfile, SellRequest } from '../types';
+import { Agent, Member, NewMember, Broadcast, User, NotificationItem, PublicUserProfile } from '../types';
 import { RegisterMemberForm } from './RegisterMemberForm';
 import { MemberList } from './MemberList';
 import { AgentProfile } from './AgentProfile';
@@ -16,12 +16,10 @@ import { DownloadIcon } from './icons/DownloadIcon';
 import { NotificationsPage } from './NotificationsPage';
 import { KnowledgeBasePage } from './KnowledgeBasePage';
 import { WalletPage } from './WalletPage';
-import { LiquidationBountyBoard } from './LiquidationBountyBoard';
-// FIX: Added missing import for TrendingUpIcon
 import { TrendingUpIcon } from './icons/TrendingUpIcon';
 
 
-type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge' | 'wallet' | 'bounties';
+type AgentView = 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge' | 'wallet';
 
 interface AgentDashboardProps {
   user: Agent;
@@ -49,7 +47,6 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
   const [members, setMembers] = useState<Member[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
-  const [sellRequests, setSellRequests] = useState<SellRequest[]>([]);
   
   // State for member list view
   const [searchQuery, setSearchQuery] = useState('');
@@ -82,12 +79,8 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
         setIsLoading(false);
       }
     };
-    
-    // FIX: Added required error callback for sell requests listener to resolve build error
-    const unsubBounties = api.listenToSellRequests(setSellRequests, (err: Error) => console.error('Bounty listener error:', err));
 
     fetchMembers();
-    return () => { unsubBounties(); };
   }, [user, addToast]);
   
 
@@ -130,7 +123,6 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
       .toFixed(2);
   }, [members]);
 
-  const availableBounties = sellRequests.filter(r => r.status === 'PENDING').length;
 
   const renderDashboardView = () => (
     <div className="space-y-8 animate-fade-in">
@@ -139,7 +131,7 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
         <p className="text-lg text-gray-400">Agent Node {user.agent_code}</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <StatCard 
             icon={<UsersIcon className="h-6 w-6 text-green-400" />}
             title="Total Members"
@@ -151,13 +143,6 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
             title="Total Commission"
             value={`$${totalCommission}`}
             description="From completed payments."
-        />
-        <StatCard 
-            icon={<TrendingUpIcon className="h-6 w-6 text-blue-400" />}
-            title="Bounty Board"
-            value={availableBounties}
-            description="Available liquidations."
-            onClick={() => setActiveView('bounties')}
         />
         <StatCard 
             icon={<BriefcaseIcon className="h-6 w-6 text-green-400" />}
@@ -269,8 +254,6 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
         return renderDashboardView();
       case 'members':
         return renderMembersView();
-      case 'bounties':
-        return <LiquidationBountyBoard user={user} requests={sellRequests} />;
       case 'profile':
         return renderProfileView();
       case 'notifications':
