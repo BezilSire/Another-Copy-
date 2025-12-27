@@ -1,3 +1,4 @@
+
 {
   "name": "ubuntium-global-commons",
   "version": "5.1.0",
@@ -5,25 +6,28 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build",
+    "prebuild": "node scripts/generate-icon-stubs.js",
+    "build": "npm run prebuild && tsc && vite build",
     "preview": "vite preview"
   },
   "dependencies": {
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "@google/genai": "latest",
+    "@google/genai": "^1.34.0",
     "firebase": "^10.12.5",
-    "tweetnacl": "latest",
-    "qrcode": "latest",
-    "html5-qrcode": "latest",
-    "bip39": "latest",
-    "buffer": "latest"
+    "tweetnacl": "^1.0.3",
+    "qrcode": "^1.5.4",
+    "html5-qrcode": "^2.3.8",
+    "bip39": "^3.1.0",
+    "buffer": "^6.0.3"
   },
   "devDependencies": {
     "vite": "^5.0.0",
     "typescript": "^5.0.0",
     "@vitejs/plugin-react": "^4.2.0",
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "@types/react-dom": "^19.0.0",
+    "@types/node": "^20.0.0",
+    "@types/qrcode": "^1.5.5"
   }
 }
