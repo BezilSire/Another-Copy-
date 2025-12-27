@@ -1,5 +1,4 @@
-
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
 
@@ -13,8 +12,8 @@ interface State {
   errorInfo: ErrorInfo | null;
 }
 
-// FIX: Explicitly using named Component import to resolve 'setState' and 'props' access issues
-export class ErrorBoundary extends Component<Props, State> {
+// FIX: Explicitly extending React.Component to resolve 'setState' and 'props' access issues
+export class ErrorBoundary extends React.Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,
@@ -25,7 +24,7 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error, errorInfo: null };
   }
 
-  // FIX: Using named ErrorInfo type to ensure correct parameter signature
+  // FIX: Using this.setState from React.Component to update error state in case of a crash
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error:', error, errorInfo);
     this.setState({ error, errorInfo });
@@ -64,7 +63,7 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // FIX: Accessing this.props.children which is now correctly recognized via Component inheritance
+    // FIX: Accessing this.props.children which is provided by React.Component base class
     return this.props.children;
   }
 }

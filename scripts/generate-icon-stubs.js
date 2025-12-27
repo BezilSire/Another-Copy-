@@ -1,7 +1,5 @@
-
-#!/usr/bin/env node
-const fs = require("fs");
-const path = require("path");
+import fs from "fs";
+import path from "path";
 
 const ROOT_DIR = process.cwd();
 const ICONS_DIR = path.join(ROOT_DIR, "components", "icons");
