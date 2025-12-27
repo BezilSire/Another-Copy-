@@ -40,6 +40,9 @@ const NavItem: React.FC<{
 );
 
 export const MorePage: React.FC<MorePageProps> = ({ user, onNavigate, onLogout, notificationCount }) => {
+  const isNotificationDenied = typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'denied';
+  const isNotificationGranted = typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted';
+
   return (
     <div className="animate-fade-in space-y-10 max-w-2xl mx-auto pb-20">
       {/* Node Status Header */}
@@ -58,6 +61,24 @@ export const MorePage: React.FC<MorePageProps> = ({ user, onNavigate, onLogout, 
         <h3 className="label-caps !text-[9px] !text-gray-600 pl-4 mb-4">Node Operations</h3>
         <NavItem icon={<UserIcon className="h-4 w-4" />} label="Identity Profile" onClick={() => onNavigate('profile')} />
         <NavItem icon={<BellIcon className="h-4 w-4" />} label="Protocol Alerts" onClick={() => onNavigate('notifications')} badgeCount={notificationCount} />
+        
+        {/* Notification Status Button */}
+        <button
+            onClick={() => onNavigate('notifications')}
+            className="w-full flex items-center p-5 rounded-[2rem] transition-all duration-300 border border-white/5 bg-slate-900/40 hover:bg-slate-900"
+        >
+            <div className="flex-shrink-0 p-3 rounded-xl bg-slate-800 text-gray-500">
+                <BellIcon className="h-4 w-4" />
+            </div>
+            <div className="flex-1 ml-5 text-left">
+                <span className="block font-black uppercase tracking-[0.2em] text-[10px] text-gray-400">Push Handshake</span>
+                <span className={`text-[8px] font-black uppercase tracking-widest ${isNotificationGranted ? 'text-emerald-500' : isNotificationDenied ? 'text-red-500' : 'text-yellow-500'}`}>
+                    {isNotificationGranted ? 'Active_Synchronized' : isNotificationDenied ? 'Blocked_Hardware_Lock' : 'Awaiting_Authorization'}
+                </span>
+            </div>
+            <ChevronRightIcon className="h-4 w-4 text-gray-700 ml-2" />
+        </button>
+
         <NavItem icon={<VideoIcon className="h-4 w-4" />} label="Sovereign Meetings" onClick={() => onNavigate('meetings')} highlight />
         <NavItem icon={<LockIcon className="h-4 w-4" />} label="Identity Vault" onClick={() => onNavigate('security')} />
       </div>

@@ -36,13 +36,12 @@ export const WalletAdminPage: React.FC<WalletAdminPageProps> = ({ adminUser, all
             setPriceInput(String(economy.ubt_to_usd_rate || 0));
         }
 
-        let timer: number | undefined;
+        let timer: number;
         const calculateTime = () => {
              if (economy?.ubtRedemptionWindowOpen && economy?.ubtRedemptionWindowClosesAt) {
                 const timeLeftMs = economy.ubtRedemptionWindowClosesAt.toDate().getTime() - new Date().getTime();
                 if (timeLeftMs <= 0) {
                     setRedemptionTimeLeft('Closed');
-                    clearInterval(timer);
                 } else {
                     const days = Math.floor(timeLeftMs / (1000 * 60 * 60 * 24));
                     const hours = Math.floor((timeLeftMs % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
@@ -64,11 +63,12 @@ export const WalletAdminPage: React.FC<WalletAdminPageProps> = ({ adminUser, all
             }
         };
         
-        calculateTime(); // initial call
-        timer = setInterval(calculateTime, 1000); // update every second
+        calculateTime();
+        timer = window.setInterval(calculateTime, 1000);
 
-        return () => clearInterval(timer);
-
+        return () => {
+            window.clearInterval(timer);
+        };
     }, [economy]);
 
     const handleSavePrice = async (e: React.FormEvent) => {
@@ -118,10 +118,6 @@ export const WalletAdminPage: React.FC<WalletAdminPageProps> = ({ adminUser, all
     }, [filteredUsers, currentPage]);
 
     const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
-
-    const handleModalClose = () => {
-        setUserToUpdate(null);
-    };
 
     return (
         <>
@@ -210,7 +206,7 @@ export const WalletAdminPage: React.FC<WalletAdminPageProps> = ({ adminUser, all
             {userToUpdate && (
                 <UpdateBalanceModal 
                     isOpen={!!userToUpdate}
-                    onClose={handleModalClose}
+                    onClose={() => setUserToUpdate(null)}
                     userToUpdate={userToUpdate}
                     adminUser={adminUser}
                 />

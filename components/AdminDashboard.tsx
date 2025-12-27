@@ -71,10 +71,18 @@ export const AdminDashboard: React.FC<{
     </button>
   );
 
+  const handleSendBroadcast = async (msg: string) => {
+    try {
+        await api.sendBroadcast(user, msg);
+    } catch (e) {
+        console.error("Broadcast failed", e);
+    }
+  };
+
   const renderActiveView = () => {
     switch (view) {
         case 'dashboard': 
-            return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={(msg) => api.sendBroadcast(user, msg)} />;
+            return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={handleSendBroadcast} />;
         case 'meetings':
             return <MeetingHub user={user} />;
         case 'treasury':

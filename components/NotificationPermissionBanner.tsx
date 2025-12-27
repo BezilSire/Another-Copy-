@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { BellIcon } from './icons/BellIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
@@ -12,41 +11,56 @@ export const NotificationPermissionBanner: React.FC<NotificationPermissionBanner
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {
-    // Only show if permission is 'default' (not asked yet) and browser supports it
-    if (typeof window !== 'undefined' && 'Notification' in window && permission === 'default') {
-        setIsVisible(true);
+    // Only show if permission is 'default' (not asked yet)
+    // Check Notification.permission directly for the latest state
+    const currentPermission = typeof window !== 'undefined' && 'Notification' in window ? Notification.permission : 'default';
+    
+    if (currentPermission === 'default') {
+        const timer = setTimeout(() => setIsVisible(true), 4000);
+        return () => clearTimeout(timer);
     }
   }, [permission]);
 
-  if (!isVisible) return null;
+  if (!isVisible || permission !== 'default') return null;
+
+  const handleAction = (e: React.MouseEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      console.log("Authorize button triggered");
+      onRequestPermission();
+  };
 
   return (
-    <div className="fixed top-20 right-4 z-50 max-w-sm w-full bg-slate-800 border border-green-500/50 rounded-lg shadow-2xl p-4 animate-fade-in">
-      <div className="flex items-start space-x-4">
-        <div className="flex-shrink-0 bg-green-900/50 p-2 rounded-full">
-            <BellIcon className="h-6 w-6 text-green-400" />
+    <div className="fixed bottom-28 left-4 right-4 z-[9999] sm:left-auto sm:right-8 sm:max-w-md animate-fade-in pointer-events-auto">
+      <div className="module-frame glass-module p-6 rounded-[2.5rem] border border-brand-gold/40 shadow-[0_0_40px_-5px_rgba(212,175,55,0.4)] flex items-start gap-5 bg-slate-900/95 backdrop-blur-2xl">
+        <div className="flex-shrink-0 bg-brand-gold/10 p-3 rounded-2xl border border-brand-gold/20 text-brand-gold">
+            <BellIcon className="h-6 w-6" />
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-bold text-white">Enable Notifications</p>
-          <p className="text-xs text-gray-300 mt-1">
-            Stay updated! Allow the Commons to send you alerts even when you're not using the app.
+          <h4 className="text-sm font-black text-white uppercase tracking-widest">Enable Dispatch Alerts</h4>
+          <p className="text-[10px] text-gray-400 mt-2 leading-relaxed uppercase font-black tracking-widest opacity-80">
+            Authorize push notifications to receive real-time network updates and peer handshake signatures.
           </p>
-          <div className="mt-3 flex space-x-3">
+          <div className="mt-5 flex gap-3">
              <button 
-                onClick={onRequestPermission}
-                className="text-xs bg-green-600 hover:bg-green-700 text-white font-semibold px-3 py-1.5 rounded-md transition-colors"
+                onClick={handleAction}
+                className="px-6 py-2.5 bg-brand-gold text-slate-950 font-black rounded-xl text-[10px] uppercase tracking-widest shadow-glow-gold active:scale-95 transition-all cursor-pointer hover:bg-brand-gold-light"
              >
-                 Allow Notifications
+                 Authorize
              </button>
              <button 
                 onClick={() => setIsVisible(false)}
-                className="text-xs text-gray-400 hover:text-white font-medium px-2 py-1.5"
+                className="px-4 py-2.5 bg-white/5 text-gray-500 font-black rounded-xl text-[10px] uppercase tracking-widest hover:text-white transition-all cursor-pointer"
              >
                  Later
              </button>
           </div>
         </div>
-        <button onClick={() => setIsVisible(false)} className="text-gray-500 hover:text-white">
+        <button 
+            onClick={() => setIsVisible(false)} 
+            className="text-gray-700 hover:text-white transition-colors p-1"
+            aria-label="Close Banner"
+        >
             <XCircleIcon className="h-5 w-5" />
         </button>
       </div>

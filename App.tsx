@@ -19,14 +19,16 @@ import { LoaderIcon } from './components/icons/LoaderIcon';
 import { AlertTriangleIcon } from './components/icons/AlertTriangleIcon';
 import { PinVaultLogin } from './components/PinVaultLogin';
 import { RecoveryProtocol } from './components/RecoveryProtocol';
-import { cryptoService } from './services/cryptoService';
+import { cryptoService, VaultData } from './services/cryptoService';
 import { RadarModal } from './components/RadarModal';
 import { GuestMeetingPage } from './components/GuestMeetingPage';
+import { usePushNotifications } from './hooks/usePushNotifications';
+import { NotificationPermissionBanner } from './components/NotificationPermissionBanner';
 
 const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [logs, setLogs] = useState<string[]>([]);
   const sequence = [
-    "> BOOTING UBUNTIUM_CORE_v5.0.3...",
+    "> BOOTING UBUNTIUM_CORE_v5.1.0...",
     "> INITIALIZING CRYPTO_LAYER... [ OK ]",
     "> CONNECTING TO GLOBAL_DAG_MAINNET...",
     "> RESOLVING SOVEREIGN_ID_PROVENANCE...",
@@ -36,16 +38,16 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 
   useEffect(() => {
     let i = 0;
-    const interval = setInterval(() => {
+    const interval = window.setInterval(() => {
       if (i < sequence.length) {
         setLogs(prev => [...prev, sequence[i]]);
         i++;
       } else {
-        clearInterval(interval);
+        window.clearInterval(interval);
         setTimeout(onComplete, 300);
       }
     }, 70);
-    return () => clearInterval(interval);
+    return () => window.clearInterval(interval);
   }, [onComplete]);
 
   return (
@@ -74,6 +76,8 @@ const App: React.FC = () => {
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const [isRadarOpen, setIsRadarOpen] = useState(false);
 
+  const { permission, requestPermission } = usePushNotifications(currentUser);
+
   const guestMeetingId = useMemo(() => {
     const params = new URLSearchParams(window.location.search);
     return params.get('join');
@@ -100,10 +104,12 @@ const App: React.FC = () => {
     setViewingProfileId(userId);
   };
 
-  const handleSecurityRecoveryComplete = async (m: string, p: string, data: any) => {
-    await cryptoService.saveVault({ mnemonic: m }, p);
-    await unlockSovereignSession(data, p);
-    setIsRecovering(false);
+  const handleSecurityRecoveryComplete = (mnemonic: string, pin: string, data: VaultData) => {
+    cryptoService.saveVault({ mnemonic }, pin).then(() => {
+        unlockSovereignSession(data, pin).then(() => {
+            setIsRecovering(false);
+        });
+    });
   };
   
   const renderMainContent = () => {
@@ -261,6 +267,7 @@ const App: React.FC = () => {
                 {renderMainContent()}
             </main>
             
+            <NotificationPermissionBanner permission={permission} onRequestPermission={requestPermission} />
             <ToastContainer />
             <ConfirmationDialog
                 isOpen={isLogoutConfirmOpen}

@@ -1,15 +1,15 @@
-
 import React, { useState, useRef, useEffect } from 'react';
-import { cryptoService } from '../services/cryptoService';
+import { cryptoService, VaultData } from '../services/cryptoService';
 import { api } from '../services/apiService';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 import { KeyIcon } from './icons/KeyIcon';
 import { User } from '../types';
+import { auth } from '../services/firebase';
 
 interface RecoveryProtocolProps {
-    onComplete: (mnemonic: string, pin: string) => void;
+    onComplete: (mnemonic: string, pin: string, data: VaultData) => void;
     onBack: () => void;
 }
 
@@ -75,7 +75,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
     const handleVerifySeed = async () => {
         const fullPhrase = phraseParts.join(' ').trim();
         if (!cryptoService.validateMnemonic(fullPhrase)) {
-            alert("INTEGRITY ERROR: The phrases provided do not match the required protocol format or are in the wrong order.");
+            alert("Phrases provided do not match the required protocol format.");
             return;
         }
 
@@ -83,10 +83,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
         setScanningStatus("SCANNING_LEDGER...");
         
         try {
-            // Derive the key from the mnemonic
             const keyPair = cryptoService.mnemonicToKeyPair(fullPhrase);
-            
-            // Search for this key in the user registry
             const user = await api.getUserByPublicKey(keyPair.publicKey);
             
             setTimeout(() => {
@@ -109,13 +106,16 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
 
     const handleReset = async () => {
         if (newPin.length !== 6 || newPin !== confirmPin) {
-            alert("PIN MISMATCH: Security codes must be identical 6-digit sequences.");
+            alert("Codes must be identical 6-digit sequences.");
             return;
         }
         setIsVerifying(true);
-        setTimeout(() => {
-            onComplete(phraseParts.join(' '), newPin);
-        }, 1200);
+        const mnemonic = phraseParts.join(' ').trim();
+        const data: VaultData = {
+            mnemonic,
+            email: recoveredAccount?.email || auth.currentUser?.email || undefined
+        };
+        onComplete(mnemonic, newPin, data);
     };
 
     return (
@@ -134,7 +134,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                 <div className="space-y-8 animate-fade-in relative z-10">
                     <div className="bg-brand-gold/5 border border-brand-gold/20 p-5 rounded-2xl text-center">
                         <p className="text-[10px] text-brand-gold font-black uppercase tracking-[0.2em] leading-loose">
-                            Enter your 12-word Identity Anchor in order to recover your <span className="text-white">existing Node and $UBT balance</span>.
+                            Enter your 12-word Identity Anchor in order to recover your Node and balance.
                         </p>
                     </div>
                     

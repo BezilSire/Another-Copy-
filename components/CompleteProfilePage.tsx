@@ -11,7 +11,6 @@ interface CompleteProfilePageProps {
 }
 
 export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, onProfileComplete }) => {
-  // FIX: Added isProcessingAuth from useAuth context
   const { isProcessingAuth } = useAuth();
   const [formData, setFormData] = useState({
     phone: user.phone || '',
@@ -44,9 +43,18 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
     }
 
     try {
-      const skillsAsArray = formData.skills.split(',').map(s => s.trim()).filter(Boolean);
-      const dataToSubmit = { ...formData, skills: skillsAsArray, isProfileComplete: true };
-      await onProfileComplete(dataToSubmit as Partial<User>);
+      const skillsArray = formData.skills.split(',').map(s => s.trim()).filter(Boolean);
+      const dataToSubmit: Partial<User> = {
+          phone: formData.phone,
+          address: formData.address,
+          bio: formData.bio,
+          profession: formData.profession,
+          skills: skillsArray,
+          id_card_number: formData.id_card_number,
+          circle: formData.circle,
+          isProfileComplete: true
+      };
+      await onProfileComplete(dataToSubmit);
       addToast('Identity anchored to mainnet.', 'success');
     } catch (error) {
       addToast('Sync failure.', 'error');
@@ -68,7 +76,7 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
                 <p className="text-[10px] text-gray-500 uppercase font-black tracking-[0.4em] mt-3">Finalizing Protocol Induction</p>
             </div>
 
-            <ProfileCompletionMeter profileData={{ ...user, ...formData }} role={user.role} />
+            <ProfileCompletionMeter profileData={{ ...user, ...formData, skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean) }} role={user.role} />
 
             <form onSubmit={handleSubmit} className="space-y-8">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

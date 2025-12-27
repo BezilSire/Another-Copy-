@@ -1,5 +1,3 @@
-
-
 import React, { useState, useEffect, useRef } from 'react';
 import { initializeChat, getChatBotResponse } from '../services/geminiService';
 import { XCircleIcon } from './icons/XCircleIcon';
@@ -10,22 +8,14 @@ import { LoaderIcon } from './icons/LoaderIcon';
 import { User } from '../types';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
 
-interface ChatBotProps {
-  isOpen: boolean;
-  onClose: () => void;
-  currentUser: User;
-}
-
 interface Message {
   author: 'user' | 'bot';
   text: string;
 }
 
 const mapMessagesToHistory = (messages: Message[]) => {
-  // Filter out the initial bot greeting message and map to the format Gemini expects.
-  // The history must be an alternating sequence of user and model parts.
   return messages.slice(1).map(message => ({
-    role: message.author === 'user' ? 'user' : 'model',
+    role: (message.author === 'user' ? 'user' : 'model') as 'user' | 'model',
     parts: [{ text: message.text }]
   }));
 };
@@ -54,17 +44,16 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose, currentUser }
       try {
         const savedMessagesRaw = localStorage.getItem(CHAT_HISTORY_KEY);
         if (savedMessagesRaw) {
-          const savedMessages = JSON.parse(savedMessagesRaw);
+          const savedMessages = JSON.parse(savedMessagesRaw) as Message[];
           setMessages(savedMessages);
           initializeChat(mapMessagesToHistory(savedMessages));
         } else {
-          const initialMessage = { author: 'bot', text: "Hello! I'm the Ubuntium Assistant. How can I help you today?" };
+          const initialMessage: Message = { author: 'bot', text: "Hello! I'm the Ubuntium Assistant. How can I help you today?" };
           setMessages([initialMessage]);
           initializeChat();
         }
       } catch (error) {
-        console.error("Failed to load or initialize chat:", error);
-        const initialMessage = { author: 'bot', text: "Hello! I'm the Ubuntium Assistant. How can I help you today?" };
+        const initialMessage: Message = { author: 'bot', text: "Hello! I'm the Ubuntium Assistant. How can I help you today?" };
         setMessages([initialMessage]);
         initializeChat();
       }
@@ -75,11 +64,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose, currentUser }
 
   useEffect(() => {
     if (isOpen && messages.length > 0) {
-      try {
-        localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(messages));
-      } catch (error) {
-        console.error("Failed to save chat history:", error);
-      }
+      localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(messages));
     }
   }, [messages, isOpen, CHAT_HISTORY_KEY]);
 
@@ -101,21 +86,17 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose, currentUser }
       const botMessage: Message = { author: 'bot', text: response };
       setMessages(prev => [...prev, botMessage]);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      const botErrorMessage: Message = { author: 'bot', text: `Sorry, I encountered an error: ${errorMessage}` };
+      const botErrorMessage: Message = { author: 'bot', text: "Handshake interrupted. Please retry." };
       setMessages(prev => [...prev, botErrorMessage]);
     } finally {
       setIsLoading(false);
     }
   };
 
-  if (!isOpen) {
-    return null;
-  }
+  if (!isOpen) return null;
 
   return (
     <div className="fixed bottom-0 right-0 sm:bottom-24 sm:right-8 w-full h-full sm:w-96 sm:h-[600px] bg-slate-800 border-t sm:border border-slate-700 rounded-none sm:rounded-lg shadow-2xl flex flex-col z-40 animate-fade-in">
-      {/* Header */}
       <div className="flex items-center justify-between p-3 border-b border-slate-700 flex-shrink-0">
         <div className="flex items-center space-x-2">
            {isMobile && (
@@ -133,7 +114,6 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose, currentUser }
         )}
       </div>
 
-      {/* Messages */}
       <div className="flex-1 p-4 overflow-y-auto space-y-4">
         {messages.map((msg, index) => (
           <div key={index} className={`flex items-start gap-3 ${msg.author === 'user' ? 'justify-end' : ''}`}>
@@ -156,7 +136,6 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose, currentUser }
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Input */}
       <div className="p-3 border-t border-slate-700">
         <form onSubmit={handleSend} className="flex items-center space-x-2">
           <input
@@ -176,3 +155,9 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose, currentUser }
     </div>
   );
 };
+
+interface ChatBotProps {
+  isOpen: boolean;
+  onClose: () => void;
+  currentUser: User;
+}
