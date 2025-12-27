@@ -10,14 +10,14 @@ export type AssetType = 'SOL' | 'USDT' | 'USDC';
 export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger' | 'wallet';
 export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more';
 
-// Added missing ParticipantStatus for Video Meetings
+// FIX: Added ParticipantStatus for Video Meetings
 export interface ParticipantStatus {
     isVideoOn: boolean;
     isMicOn: boolean;
     isSpeaking: boolean;
 }
 
-// Added missing Meeting interface
+// FIX: Added Meeting interface to resolve build error in MeetingHub and VideoMeeting
 export interface Meeting {
     id: string;
     hostId: string;

@@ -4,7 +4,7 @@ import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
 
 interface Props {
-  children: ReactNode;
+  children?: ReactNode;
 }
 
 interface State {
@@ -13,7 +13,10 @@ interface State {
   errorInfo: ErrorInfo | null;
 }
 
-// FIX: Explicitly extending Component from React to ensure proper inheritance and access to setState/props
+/**
+ * ErrorBoundary component to catch and handle UI-level crashes.
+ * FIXED: Explicitly extending Component from react to resolve inheritance issues in some TS environments.
+ */
 export class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
@@ -28,7 +31,10 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error, errorInfo: null };
   }
 
-  // FIX: setState is provided by Component base class
+  /**
+   * Captures error details for state reconciliation.
+   * FIXED: setState is inherited from Component.
+   */
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error:', error, errorInfo);
     this.setState({ error, errorInfo });
@@ -67,7 +73,7 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // FIX: props is provided by Component base class
+    // FIXED: props is inherited from Component.
     return this.props.children;
   }
 }

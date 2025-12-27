@@ -1,4 +1,3 @@
-
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -41,13 +40,12 @@ import {
 } from 'firebase/database';
 import { auth, db, rtdb } from './firebase';
 import { generateWelcomeMessage } from './geminiService';
-import { cryptoService } from './cryptoService';
 import { 
-    User, Agent, Member, NewMember, MemberUser, Broadcast, Post,
+    User, Agent, Member, NewMember, MemberUser, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
-    Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase, SellRequest, P2POffer, AssetType, UserVault,
-    CitizenResource, Dispute, Meeting
+    Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase, SellRequest, P2POffer, UserVault,
+    CitizenResource, Dispute, Meeting, Broadcast
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -71,7 +69,6 @@ const redemptionCyclesCollection = collection(db, 'redemption_cycles');
 const sustenanceCollection = collection(db, 'sustenance_cycles');
 const vouchersCollection = collection(db, 'sustenance_vouchers');
 const venturesCollection = collection(db, 'ventures');
-const meetingsCollection = collection(db, 'meetings');
 
 async function _deletePostAndSubcollections(postId: string) {
     const postRef = doc(postsCollection, postId);
@@ -99,7 +96,7 @@ export const api = {
         const isOnlineForDatabase = { state: 'online', last_changed: rtdbServerTimestamp() };
         onValue(ref(rtdb, '.info/connected'), (snapshot) => {
             if (snapshot.val() === false) return;
-            onDisconnect(userStatusDatabaseRef).set({ state: 'offline', last_changed: rtdbServerTimestamp() }).then(() => {
+            onDisconnect(userStatusDatabaseRef).set(isOfflineForDatabase).then(() => {
                 set(userStatusDatabaseRef, isOnlineForDatabase);
             });
         });
@@ -154,17 +151,15 @@ export const api = {
             const econRef = doc(globalsCollection, 'economy');
             const floatRef = doc(vaultsCollection, 'FLOAT');
             const isFloatSender = transaction.senderId === 'FLOAT';
-            const isFloatReceiver = transaction.receiverId === 'FLOAT';
             const senderRef = isFloatSender ? floatRef : doc(usersCollection, transaction.senderId);
-            const receiverRef = isFloatReceiver ? floatRef : doc(usersCollection, transaction.receiverId);
+            const receiverRef = doc(usersCollection, transaction.receiverId);
             const [econSnap, senderSnap] = await Promise.all([t.get(econRef), t.get(senderRef)]);
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
             const balKey = isFloatSender ? 'balance' : 'ubtBalance';
             const senderBal = senderSnap.data()?.[balKey] || 0;
             if (senderBal < transaction.amount) throw new Error("INSUFFICIENT_LIQUIDITY");
             t.update(senderRef, { [balKey]: increment(-transaction.amount) });
-            const recBalKey = isFloatReceiver ? 'balance' : 'ubtBalance';
-            t.update(receiverRef, { [recBalKey]: increment(transaction.amount) });
+            t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
             t.set(doc(ledgerCollection, transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         }); 
     },
@@ -261,7 +256,6 @@ export const api = {
     listenToResources: (circle: string, cb: (r: CitizenResource[]) => void): Unsubscribe => onSnapshot(circle === 'ANY' ? resourcesCollection : query(resourcesCollection, where('circle', '==', circle)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource)))),
     listenToTribunals: (cb: (d: Dispute[]) => void): Unsubscribe => onSnapshot(query(disputesCollection, where('status', '==', 'TRIBUNAL')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Dispute)))),
 
-    // Added missing treasury methods
     initializeTreasury: async (admin: Admin) => {
         const batch = writeBatch(db);
         const vaults = [
@@ -282,34 +276,37 @@ export const api = {
     toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
     registerResource: (data: Partial<CitizenResource>) => addDoc(resourcesCollection, { ...data, createdAt: serverTimestamp() }),
 
-    // Added missing meeting methods
     createMeeting: async (u: User, title: string, expiresAt: Date): Promise<string> => {
-        const meetingId = Math.floor(100000 + Math.random() * 900000).toString();
-        await setDoc(doc(meetingsCollection, meetingId), {
-            id: meetingId,
+        const id = Math.floor(100000 + Math.random() * 900000).toString();
+        await setDoc(doc(db, 'meetings', id), {
+            id,
             hostId: u.id,
             hostName: u.name,
-            title: title || 'Sovereign Assembly',
+            title,
             createdAt: serverTimestamp(),
             expiresAt: Timestamp.fromDate(expiresAt),
         });
-        return meetingId;
+        return id;
     },
-    joinMeeting: async (meetingId: string): Promise<Meeting | null> => {
-        const s = await getDoc(doc(meetingsCollection, meetingId));
-        if (!s.exists()) return null;
-        const data = s.data() as Meeting;
-        if (data.expiresAt && data.expiresAt.toMillis() < Date.now()) throw new Error("PROTOCOL_EXPIRED");
-        return { id: s.id, ...data } as Meeting;
+    
+    joinMeeting: async (id: string): Promise<Meeting | null> => {
+        const s = await getDoc(doc(db, 'meetings', id));
+        return s.exists() ? { id: s.id, ...s.data() } as Meeting : null;
     },
-    updateMeetingSignal: (meetingId: string, data: any) => setDoc(doc(meetingsCollection, meetingId), data, { merge: true }),
-    listenForMeetingSignals: (meetingId: string, cb: (m: Meeting) => void): Unsubscribe => 
-        onSnapshot(doc(meetingsCollection, meetingId), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
-    addIceCandidate: (meetingId: string, type: 'caller' | 'callee', candidate: any) => 
-        addDoc(collection(db, 'meetings', meetingId, type + 'Candidates'), candidate),
-    listenForIceCandidates: (meetingId: string, type: 'caller' | 'callee', cb: (c: any) => void): Unsubscribe =>
-        onSnapshot(collection(db, 'meetings', meetingId, type + 'Candidates'), s => s.docChanges().forEach(change => change.type === 'added' && cb(change.doc.data()))),
-    deleteMeeting: (meetingId: string) => deleteDoc(doc(meetingsCollection, meetingId)),
+    
+    updateMeetingSignal: (id: string, data: Partial<Meeting>) => updateDoc(doc(db, 'meetings', id), data),
+    
+    listenForMeetingSignals: (id: string, cb: (m: Meeting) => void): Unsubscribe => onSnapshot(doc(db, 'meetings', id), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
+    
+    addIceCandidate: (id: string, type: 'caller' | 'callee', candidate: any) => addDoc(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), candidate),
+    
+    listenForIceCandidates: (id: string, type: 'caller' | 'callee', cb: (c: any) => void): Unsubscribe => onSnapshot(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), s => {
+        s.docChanges().forEach(change => {
+            if (change.type === 'added') cb(change.doc.data());
+        });
+    }),
+    
+    deleteMeeting: (id: string) => deleteDoc(doc(db, 'meetings', id)),
 
     createPost: async (u: User, content: string, type: Post['types'], award: number, skills: string[] = []) => addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: skills, commentCount: 0, repostCount: 0, ccapAwarded: award }),
     repostPost: async (original: Post, u: User, comment: string) => {
@@ -381,7 +378,7 @@ export const api = {
         if (ids.length === 0) return [];
         const results: MemberUser[] = [];
         for (let i = 0; i < ids.length; i += 10) {
-            const chunk = uids.slice(i, i + 10);
+            const chunk = ids.slice(i, i + 10);
             const q = query(usersCollection, where('__name__', 'in', chunk));
             const snapshot = await getDocs(q);
             results.push(...snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MemberUser)));

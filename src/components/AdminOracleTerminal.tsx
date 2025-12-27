@@ -19,7 +19,6 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
     const { addToast } = useToast();
     const [busyId, setBusyId] = useState<string | null>(null);
     const [sourceNode, setSourceNode] = useState<'FLOAT' | 'GENESIS'>('FLOAT');
-    const [usdInjection, setUsdInjection] = useState('');
 
     const handleSettleBridge = async (p: PendingUbtPurchase) => {
         if (!window.confirm(`AUTHORIZE SETTLEMENT: Transfer ${p.amountUbt} UBT from ${sourceNode} Node to citizen ${p.userName}?`)) return;
@@ -35,7 +34,6 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
         }
     };
 
-    // FIX: Implemented handleRejectBridge to resolve build error
     const handleRejectBridge = async (id: string) => {
         if (!window.confirm("CRITICAL: Reject this block? This will blacklist the associated reference anchor.")) return;
         setBusyId(id);
@@ -44,21 +42,6 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
             addToast("BLOCK_REJECTED", "info");
         } catch (e: any) {
             addToast("Protocol error rejecting block.", "error");
-        } finally {
-            setBusyId(null);
-        }
-    };
-
-    const handleInjectUSD = async () => {
-        const val = parseFloat(usdInjection);
-        if (isNaN(val) || val <= 0) return;
-        setBusyId('injection');
-        try {
-            await api.injectCVPUSD(val);
-            addToast(`QUANTUM_INJECTION: +$${val} RESERVE_USD ANCHORED.`, "success");
-            setUsdInjection('');
-        } catch (e) {
-            addToast("Sync failure.", "error");
         } finally {
             setBusyId(null);
         }
@@ -89,18 +72,16 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
 
     return (
         <div className="bg-black border border-brand-gold/30 rounded-[3rem] overflow-hidden shadow-2xl font-mono text-[11px] animate-fade-in max-w-6xl mx-auto mb-20">
-            {/* TERMINAL HEADER */}
             <div className="bg-brand-gold/10 p-6 border-b border-brand-gold/20 flex flex-col sm:flex-row justify-between items-center gap-6">
                 <div className="flex items-center gap-4">
                     <div className="p-3 bg-brand-gold/20 rounded-2xl border border-brand-gold/30 shadow-glow-gold">
                         <DatabaseIcon className="h-5 w-5 text-brand-gold" />
                     </div>
                     <div>
-                        <h2 className="text-sm font-black text-white uppercase tracking-[0.4em]">Oracle Terminal v4.2</h2>
-                        <p className="text-[9px] text-gray-500 uppercase tracking-widest mt-1">Active Equilibrium Logic</p>
+                        <h2 className="text-sm font-black text-white uppercase tracking-[0.4em]">Oracle Terminal v5.0</h2>
+                        <p className="text-[9px] text-gray-500 uppercase tracking-widest mt-1">Settlement Engine Active</p>
                     </div>
                 </div>
-                
                 <div className="flex items-center gap-8">
                     <div className="flex flex-col items-end">
                         <span className="text-[8px] text-gray-500 uppercase tracking-widest mb-2">Protocol Source Node</span>
@@ -109,21 +90,13 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
                             <button onClick={() => setSourceNode('GENESIS')} className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${sourceNode === 'GENESIS' ? 'bg-brand-gold text-slate-950' : 'text-gray-600'}`}>Treasury</button>
                         </div>
                     </div>
-                    <div className="flex flex-col items-end">
-                         <span className="text-[8px] text-gray-500 uppercase tracking-widest mb-2">Manual USD Backing</span>
-                         <div className="flex gap-2">
-                            <input type="number" value={usdInjection} onChange={e => setUsdInjection(e.target.value)} className="bg-black border border-white/10 px-3 py-1.5 rounded-lg text-emerald-500 w-24 text-right text-[10px]" placeholder="0.00" />
-                            <button onClick={handleInjectUSD} disabled={busyId === 'injection'} className="px-4 py-1.5 bg-brand-gold text-black rounded-lg font-black uppercase text-[8px] hover:bg-brand-gold-light active:scale-95">Inject</button>
-                         </div>
-                    </div>
                 </div>
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 divide-y xl:divide-y-0 xl:divide-x divide-white/10 min-h-[600px] bg-slate-950/40">
-                {/* INGRESS QUEUE */}
                 <div className="p-8 space-y-8 overflow-y-auto max-h-[70vh] no-scrollbar">
                     <div className="flex items-center justify-between border-b border-white/5 pb-4">
-                        <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded border border-emerald-500/20 font-black text-[9px] tracking-widest uppercase">Bridge_Ingress_Queue</span>
+                        <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded border border-emerald-500/20 font-black text-[9px] tracking-widest uppercase">Bridge_Ingress</span>
                         <span className="text-gray-600 font-bold">{purchases.length} PENDING</span>
                     </div>
 
@@ -155,10 +128,9 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
                     </div>
                 </div>
 
-                {/* EGRESS QUEUE */}
                 <div className="p-8 space-y-8 overflow-y-auto max-h-[70vh] no-scrollbar bg-white/[0.01]">
                     <div className="flex items-center justify-between border-b border-white/5 pb-4">
-                        <span className="px-3 py-1 bg-red-500/10 text-red-500 rounded border border-red-500/20 font-black text-[9px] tracking-widest uppercase">Liquidation_Egress_Queue</span>
+                        <span className="px-3 py-1 bg-red-500/10 text-red-500 rounded border border-red-500/20 font-black text-[9px] tracking-widest uppercase">Liquidation_Queue</span>
                         <span className="text-gray-600 font-bold">{liquidations.filter(r => r.status !== 'COMPLETED').length} REQS</span>
                     </div>
 

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { PendingUbtPurchase, SellRequest, Admin } from '../types';
 import { api } from '../services/apiService';
@@ -7,7 +6,6 @@ import { LoaderIcon } from './icons/LoaderIcon';
 import { formatTimeAgo } from '../utils';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
-import { GlobeIcon } from './icons/GlobeIcon';
 import { DollarSignIcon } from './icons/DollarSignIcon';
 import { PhoneIcon } from './icons/PhoneIcon';
 
@@ -23,13 +21,12 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
     const [sourceNode, setSourceNode] = useState<'FLOAT' | 'GENESIS'>('FLOAT');
 
     const handleSettleBridge = async (p: PendingUbtPurchase) => {
-        const rate = (p.amountUsd / p.amountUbt).toFixed(6);
-        if (!window.confirm(`AUTHORIZE SETTLEMENT: Release ${p.amountUbt} UBT to ${p.userName}? WARNING: This will force a Global Price Jump to $${rate}.`)) return;
+        if (!window.confirm(`AUTHORIZE SETTLEMENT: Transfer ${p.amountUbt} UBT to citizen ${p.userName}?`)) return;
         
         setBusyId(p.id);
         try {
             await api.approveUbtPurchase(admin, p, sourceNode);
-            addToast(`SETTLEMENT_SUCCESS: Global Equilibrium re-anchored at $${rate}.`, "success");
+            addToast(`HANDSHAKE_SETTLED via ${sourceNode}`, "success");
         } catch (e: any) {
             addToast(`SETTLEMENT_ABORTED: ${e.message}`, "error");
         } finally {
@@ -38,13 +35,13 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
     };
 
     const handleRejectBridge = async (id: string) => {
-        if (!window.confirm("CRITICAL: Reject this block?")) return;
+        if (!window.confirm("CRITICAL: Reject this block? This will blacklist the associated reference anchor.")) return;
         setBusyId(id);
         try {
             await api.rejectUbtPurchase(id);
             addToast("BLOCK_REJECTED", "info");
         } catch (e: any) {
-            addToast("Protocol error.", "error");
+            addToast("Protocol error rejecting block.", "error");
         } finally {
             setBusyId(null);
         }
@@ -75,21 +72,19 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
 
     return (
         <div className="bg-black border border-brand-gold/30 rounded-[3rem] overflow-hidden shadow-2xl font-mono text-[11px] animate-fade-in max-w-6xl mx-auto mb-20">
-            {/* TERMINAL HEADER */}
             <div className="bg-brand-gold/10 p-6 border-b border-brand-gold/20 flex flex-col sm:flex-row justify-between items-center gap-6">
                 <div className="flex items-center gap-4">
                     <div className="p-3 bg-brand-gold/20 rounded-2xl border border-brand-gold/30 shadow-glow-gold">
                         <DatabaseIcon className="h-5 w-5 text-brand-gold" />
                     </div>
                     <div>
-                        <h2 className="text-sm font-black text-white uppercase tracking-[0.4em]">Oracle Authority v5.0</h2>
-                        <p className="text-[9px] text-gray-500 uppercase tracking-widest mt-1">Native Protocol Settlement</p>
+                        <h2 className="text-sm font-black text-white uppercase tracking-[0.4em]">Oracle Terminal v5.0</h2>
+                        <p className="text-[9px] text-gray-500 uppercase tracking-widest mt-1">Settlement Engine Active</p>
                     </div>
                 </div>
-                
                 <div className="flex items-center gap-8">
                     <div className="flex flex-col items-end">
-                        <span className="text-[8px] text-gray-500 uppercase tracking-widest mb-2">Protocol Distribution Source</span>
+                        <span className="text-[8px] text-gray-500 uppercase tracking-widest mb-2">Protocol Source Node</span>
                         <div className="flex bg-slate-900 p-1 rounded-xl border border-white/5 shadow-inner">
                             <button onClick={() => setSourceNode('FLOAT')} className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${sourceNode === 'FLOAT' ? 'bg-brand-gold text-slate-950' : 'text-gray-600'}`}>Liquidity</button>
                             <button onClick={() => setSourceNode('GENESIS')} className={`px-4 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${sourceNode === 'GENESIS' ? 'bg-brand-gold text-slate-950' : 'text-gray-600'}`}>Treasury</button>
@@ -99,10 +94,9 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
             </div>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 divide-y xl:divide-y-0 xl:divide-x divide-white/10 min-h-[600px] bg-slate-950/40">
-                {/* INGRESS QUEUE */}
                 <div className="p-8 space-y-8 overflow-y-auto max-h-[70vh] no-scrollbar">
                     <div className="flex items-center justify-between border-b border-white/5 pb-4">
-                        <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded border border-emerald-500/20 font-black text-[9px] tracking-widest uppercase">Bridge_Ingress_Settlement</span>
+                        <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded border border-emerald-500/20 font-black text-[9px] tracking-widest uppercase">Bridge_Ingress</span>
                         <span className="text-gray-600 font-bold">{purchases.length} PENDING</span>
                     </div>
 
@@ -120,13 +114,12 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
                                     <div className="text-right">
                                         <p className="text-emerald-500 font-black text-xl font-mono tracking-tighter leading-none">{p.amountUbt} UBT</p>
                                         <p className="text-gray-600 text-[10px] font-bold mt-1.5 tracking-widest">${p.amountUsd.toFixed(2)} USD</p>
-                                        <p className="text-[8px] text-emerald-400 font-black mt-1">@ ${(p.amountUsd / p.amountUbt).toFixed(6)}</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
-                                    <div className="flex-1 bg-black/60 p-4 rounded-2xl border border-white/5 text-brand-gold font-bold tracking-[0.1em] text-[10px] truncate select-all">{p.ecocashRef || 'AWAITING_REFERENCE'}</div>
+                                    <div className="flex-1 bg-black/60 p-4 rounded-2xl border border-white/5 text-brand-gold font-bold tracking-[0.1em] text-[10px] truncate select-all">{p.ecocashRef || 'AWAITING_REF'}</div>
                                     <button onClick={() => handleSettleBridge(p)} disabled={!!busyId} className="px-8 py-4 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-lg active:scale-95 transition-all flex items-center gap-2">
-                                        {busyId === p.id ? <LoaderIcon className="h-4 w-4 animate-spin" /> : "SETTLE & MOVE PRICE"}
+                                        {busyId === p.id ? <LoaderIcon className="h-4 w-4 animate-spin" /> : "SETTLE"}
                                     </button>
                                     <button onClick={() => handleRejectBridge(p.id)} className="p-4 text-red-500 hover:text-white hover:bg-red-600 rounded-2xl transition-all">✕</button>
                                 </div>
@@ -135,10 +128,9 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
                     </div>
                 </div>
 
-                {/* EGRESS QUEUE */}
                 <div className="p-8 space-y-8 overflow-y-auto max-h-[70vh] no-scrollbar bg-white/[0.01]">
                     <div className="flex items-center justify-between border-b border-white/5 pb-4">
-                        <span className="px-3 py-1 bg-red-500/10 text-red-500 rounded border border-red-500/20 font-black text-[9px] tracking-widest uppercase">Liquidation_Egress_Bazaar</span>
+                        <span className="px-3 py-1 bg-red-500/10 text-red-500 rounded border border-red-500/20 font-black text-[9px] tracking-widest uppercase">Liquidation_Queue</span>
                         <span className="text-gray-600 font-bold">{liquidations.filter(r => r.status !== 'COMPLETED').length} REQS</span>
                     </div>
 
@@ -163,7 +155,7 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
                                 </div>
                                 <div className="flex items-center gap-3">
                                     <div className="flex-1 text-[9px] font-black uppercase tracking-[0.4em] text-gray-500">Status: <span className="text-brand-gold">{req.status}</span></div>
-                                    <button onClick={() => handleLiquidation(req)} disabled={!!busyId} className={`px-10 py-4 font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-lg transition-all active:scale-95 ${req.status === 'PENDING' ? 'bg-slate-800 text-white hover:bg-slate-700' : 'bg-red-600 text-white hover:bg-red-500'}`}>
+                                    <button onClick={() => handleLiquidation(req)} disabled={!!busyId} className={`px-10 py-4 font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-lg transition-all active:scale-95 ${req.status === 'PENDING' ? 'bg-slate-800 text-white' : 'bg-red-600 text-white'}`}>
                                         {busyId === req.id ? <LoaderIcon className="h-4 w-4 animate-spin" /> : req.status === 'PENDING' ? "CLAIM" : "SETTLE"}
                                     </button>
                                 </div>
