@@ -25,7 +25,7 @@ export const LiquidationBountyBoard: React.FC<LiquidationBountyBoardProps> = ({ 
         try {
             await api.claimSellRequest(user, requestId);
             addToast("Protocol claimed. Please dispatch funds to member.", "success");
-        } catch (e)) {
+        } catch (e) {
             addToast("Claim failed.", "error");
         } finally {
             setProcessingId(null);
@@ -152,4 +152,29 @@ export const LiquidationBountyBoard: React.FC<LiquidationBountyBoardProps> = ({ 
                                         <UsersIcon className="h-4 w-4 text-gray-600" />
                                     </div>
                                     <div className="min-w-0">
-                                        <p className="text-[9px] font-black text-gray-60
+                                        <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Origin Node</p>
+                                        <p className="text-xs font-black text-white truncate uppercase">{req.userName}</p>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button 
+                                onClick={() => handleClaim(req.id)}
+                                disabled={processingId === req.id}
+                                className="w-full py-5 bg-slate-900 border border-white/5 group-hover:border-brand-gold text-white font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-xl flex justify-center items-center gap-2"
+                            >
+                                {processingId === req.id ? <LoaderIcon className="h-4 w-4 animate-spin"/> : "Claim Liquidation Protocol"}
+                            </button>
+                        </div>
+                    ))}
+                    {pendingRequests.length === 0 && (
+                        <div className="col-span-full py-24 text-center glass-card rounded-[3rem] border-white/5">
+                            <LoaderIcon className="h-10 w-10 text-gray-800 mx-auto mb-4 opacity-30" />
+                            <p className="text-[10px] font-black text-gray-700 uppercase tracking-[0.5em]">No Liquidation Bounties Indexed</p>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};

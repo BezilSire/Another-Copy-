@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { SellRequest, User } from '../types';
 import { api } from '../services/apiService';
@@ -9,7 +8,6 @@ import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { PhoneIcon } from './icons/PhoneIcon';
 import { DollarSignIcon } from './icons/DollarSignIcon';
 import { formatTimeAgo } from '../utils';
-// FIX: Added missing import for UsersIcon
 import { UsersIcon } from './icons/UsersIcon';
 
 interface LiquidationBountyBoardProps {
@@ -27,7 +25,7 @@ export const LiquidationBountyBoard: React.FC<LiquidationBountyBoardProps> = ({ 
         try {
             await api.claimSellRequest(user, requestId);
             addToast("Protocol claimed. Please dispatch funds to member.", "success");
-        } catch (e) {
+        } catch (e)) {
             addToast("Claim failed.", "error");
         } finally {
             setProcessingId(null);
@@ -163,7 +161,7 @@ export const LiquidationBountyBoard: React.FC<LiquidationBountyBoardProps> = ({ 
                             <button 
                                 onClick={() => handleClaim(req.id)}
                                 disabled={processingId === req.id}
-                                className="w-full py-5 bg-slate-900 border border-brand-gold/20 group-hover:border-brand-gold text-white font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-xl flex justify-center items-center gap-2"
+                                className="w-full py-5 bg-slate-900 border border-white/5 group-hover:border-brand-gold text-white font-black rounded-2xl text-[10px] uppercase tracking-widest transition-all active:scale-95 shadow-xl flex justify-center items-center gap-2"
                             >
                                 {processingId === req.id ? <LoaderIcon className="h-4 w-4 animate-spin"/> : "Claim Liquidation Protocol"}
                             </button>
