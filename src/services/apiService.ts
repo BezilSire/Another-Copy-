@@ -82,7 +82,6 @@ async function _deletePostAndSubcollections(postId: string) {
     await batch.commit();
 }
 
-// FIX: Combined all methods into the exported api object to resolve multiple "Property does not exist on type 'api'" errors.
 export const api = {
     login: (email: string, password: string): Promise<FirebaseUser> => {
         return signInWithEmailAndPassword(auth, email, password)
@@ -132,7 +131,7 @@ export const api = {
         return results;
     },
 
-    createMeeting: async (u: User, title: string, expiresAt: Date): Promise<string> => {
+    createMeeting: async (u: User, title?: string, expiresAt?: Date): Promise<string> => {
         const meetingId = Math.floor(100000 + Math.random() * 900000).toString();
         await setDoc(doc(meetingsCollection, meetingId), {
             id: meetingId,
@@ -140,7 +139,7 @@ export const api = {
             hostName: u.name,
             title: title || 'Sovereign Assembly',
             createdAt: serverTimestamp(),
-            expiresAt: Timestamp.fromDate(expiresAt),
+            expiresAt: expiresAt ? Timestamp.fromDate(expiresAt) : Timestamp.fromDate(new Date(Date.now() + 2 * 60 * 60 * 1000)),
         });
         return meetingId;
     },
@@ -486,7 +485,6 @@ export const api = {
     runSustenanceLottery: (u: User): Promise<{ winners_count: number }> => Promise.resolve({ winners_count: 0 }),
     requestVeqPayout: (u: User, h: VentureEquityHolding, s: number, n: string, p: string) => addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'veq_redemption', amount: s, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp(), meta: { ventureId: h.ventureId, ventureName: h.ventureName } }),
     claimBonusPayout: (id: string, n: string, p: string) => updateDoc(doc(payoutsCollection, id), { ecocashName: n, ecocashNumber: p, status: 'pending' }),
-    setGlobalEconomy: (u: User, d: any) => setDoc(doc(globalsCollection, 'economy'), d, { merge: true }),
     updateUbtRedemptionWindow: (u: User, open: boolean) => {
         const ref = doc(globalsCollection, 'economy');
         if (open) {
@@ -497,6 +495,7 @@ export const api = {
         }
         return setDoc(ref, { ubtRedemptionWindowOpen: false, ubtRedemptionWindowClosesAt: null }, { merge: true });
     },
+    setGlobalEconomy: (u: User, d: any) => setDoc(doc(globalsCollection, 'economy'), d, { merge: true }),
     getPublicLedger: async (l: number = 200) => {
         const s = await getDocs(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)));
         return s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
@@ -507,5 +506,32 @@ export const api = {
         const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
         const res = [...s1.docs, ...s2.docs].map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
         return Array.from(new Map(res.map(i => [i.id, i])).values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    },
+    vouchForCitizen: (transaction: UbtTransaction) => runTransaction(db, async (t) => {
+        const receiverRef = doc(usersCollection, transaction.receiverId);
+        const econRef = doc(globalsCollection, 'economy');
+        const econSnap = await t.get(econRef);
+        const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+        t.update(receiverRef, { credibility_score: increment(5), vouchCount: increment(1) });
+        t.set(doc(ledgerCollection, transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+    }),
+    initiateDispute: (c: User, r: User, reason: string, evidence: string) => 
+        addDoc(disputesCollection, { claimantId: c.id, claimantName: c.name, respondentId: r.id, respondentName: r.name, reason, evidence, status: 'TRIBUNAL', juryIds: [], votesForClaimant: 0, votesForRespondent: 0, signedVotes: {}, timestamp: serverTimestamp() }),
+    castJuryVote: (did: string, uid: string, vote: string, sig: string) => 
+        runTransaction(db, async t => {
+            const ref = doc(disputesCollection, did);
+            const snap = await t.get(ref);
+            if (!snap.exists()) return;
+            t.update(ref, { juryIds: arrayUnion(uid), [`signedVotes.${uid}`]: sig, [vote === 'claimant' ? 'votesForClaimant' : 'votesForRespondent']: increment(1) });
+        }),
+    processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
+        return runTransaction(db, async (t) => {
+            const econRef = doc(globalsCollection, 'economy');
+            const econSnap = await t.get(econRef);
+            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+            t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
+            if (rid && rid !== 'EXTERNAL_NODE') t.update(doc(usersCollection, rid), { ubtBalance: increment(amt) });
+            t.set(doc(ledgerCollection, tx.id), { ...tx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+        }).then(() => api.syncEconomyOracle());
     },
 };

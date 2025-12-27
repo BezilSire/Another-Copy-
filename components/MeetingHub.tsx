@@ -1,20 +1,19 @@
 import React, { useState } from 'react';
-import { User, Meeting } from '../types.ts';
-import { api } from '../services/apiService.ts';
-import { useToast } from '../contexts/ToastContext.tsx';
-import { VideoIcon } from './icons/VideoIcon.tsx';
-import { KeyIcon } from './icons/KeyIcon.tsx';
-import { LoaderIcon } from './icons/LoaderIcon.tsx';
+import { User, Meeting } from '../types';
+import { api } from '../services/apiService';
+import { useToast } from '../contexts/ToastContext';
+import { VideoIcon } from './icons/VideoIcon';
+import { KeyIcon } from './icons/KeyIcon';
+import { LoaderIcon } from './icons/LoaderIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
-import { VideoMeeting } from './VideoMeeting.tsx';
-import { ArrowRightIcon } from './icons/ArrowRightIcon.tsx';
-import { ClipboardIcon } from './icons/ClipboardIcon.tsx';
-import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon.tsx';
-import { ClockIcon } from './icons/ClockIcon.tsx';
-import { ShareIcon } from './icons/ShareIcon.tsx';
-import { FilePenIcon } from './icons/FilePenIcon.tsx';
-// Import formatTimeAgo utility for displaying expiry relative time
-import { formatTimeAgo } from '../utils.ts';
+import { VideoMeeting } from './VideoMeeting';
+import { ArrowRightIcon } from './icons/ArrowRightIcon';
+import { ClipboardIcon } from './icons/ClipboardIcon';
+import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
+import { ClockIcon } from './icons/ClockIcon';
+import { ShareIcon } from './icons/ShareIcon';
+import { FilePenIcon } from './icons/FilePenIcon';
+import { formatTimeAgo } from '../utils';
 
 interface MeetingHubProps {
   user: User;
@@ -43,7 +42,7 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ user }) => {
 
         setIsJoining(true);
         try {
-            const id = await api.createMeeting(user, meetingTitle, expiresAt);
+            const id = await api.createMeeting(user, meetingTitle || 'Sovereign Assembly', expiresAt);
             const m = await api.joinMeeting(id);
             setGeneratedMeeting(m);
             addToast("Meeting Node Initialized.", "success");
@@ -67,9 +66,7 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ user }) => {
         if (navigator.share) {
             try {
                 await navigator.share(shareData);
-            } catch (e) {
-                // User cancelled or share failed
-            }
+            } catch (e) {}
         } else {
             handleCopyLink();
         }
@@ -137,7 +134,6 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ user }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                {/* Host Card */}
                 <div className="module-frame glass-module p-10 rounded-[3rem] border-white/5 hover:border-brand-gold/30 transition-all shadow-xl group flex flex-col justify-between">
                     <div className="space-y-6">
                         <div className="p-4 bg-brand-gold/10 rounded-2xl w-fit border border-brand-gold/20 shadow-glow-gold/10">
@@ -210,7 +206,6 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ user }) => {
                     </div>
                 </div>
 
-                {/* Join Card */}
                 <div className="module-frame glass-module p-10 rounded-[3rem] border-white/5 hover:border-blue-500/30 transition-all shadow-xl flex flex-col justify-between">
                     <form onSubmit={handleJoin} className="space-y-8">
                         <div className="space-y-6">

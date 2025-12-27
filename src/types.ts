@@ -7,16 +7,27 @@ export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity
 export type ProtocolMode = 'MAINNET' | 'TESTNET';
 export type AssetType = 'SOL' | 'USDT' | 'USDC';
 
-export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger' | 'meetings';
+export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger' | 'meetings' | 'wallet';
 export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more';
 
+export interface ParticipantStatus {
+    isVideoOn: boolean;
+    isMicOn: boolean;
+    isSpeaking: boolean;
+}
+
 export interface Meeting {
-    id: string; // The short ID (e.g. 772-123)
+    id: string;
     hostId: string;
     hostName: string;
+    title: string;
     createdAt: Timestamp;
+    expiresAt: Timestamp;
     offer?: any;
     answer?: any;
+    callerStatus?: ParticipantStatus;
+    calleeStatus?: ParticipantStatus;
+    kickedParticipantId?: string;
 }
 
 export interface User {
@@ -501,9 +512,9 @@ export interface PendingUbtPurchase {
     userName: string;
     amountUsd: number;
     amountUbt: number;
-    ecocashRef?: string; // For Fiat
-    cryptoAsset?: AssetType; // For Crypto
-    cryptoAddress?: string; // Generated child-address for user
+    ecocashRef?: string;
+    cryptoAsset?: AssetType;
+    cryptoAddress?: string;
     payment_method: 'FIAT' | 'CRYPTO';
     status: 'PENDING' | 'AWAITING_CONFIRMATION' | 'VERIFIED' | 'REJECTED';
     createdAt: Timestamp;
