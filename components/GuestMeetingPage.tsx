@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext.tsx';
-import { LogoIcon } from './icons/LogoIcon.tsx';
-import { LoaderIcon } from './icons/LoaderIcon.tsx';
-import { VideoIcon } from './icons/VideoIcon.tsx';
+import { useAuth } from '../contexts/AuthContext';
+import { LogoIcon } from './icons/LogoIcon';
+import { LoaderIcon } from './icons/LoaderIcon';
+import { VideoIcon } from './icons/VideoIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
-import { VideoMeeting } from './VideoMeeting.tsx';
-import { AlertTriangleIcon } from './icons/AlertTriangleIcon.tsx';
-import { api } from '../services/apiService.ts';
-import { Meeting } from '../types.ts';
+import { VideoMeeting } from './VideoMeeting';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
+import { api } from '../services/apiService';
+import { Meeting } from '../types';
 
 interface GuestMeetingPageProps {
   meetingId: string;

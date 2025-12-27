@@ -1,5 +1,6 @@
 
 import React from 'react';
+// FIX: Normalized extensionless imports
 import { HomeIcon } from './icons/HomeIcon';
 import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon';
 import { WalletIcon } from './icons/WalletIcon';

@@ -1,10 +1,10 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
-import App from './App.tsx';
-import { ToastProvider } from './contexts/ToastContext.tsx';
-import { AuthProvider } from './contexts/AuthContext.tsx';
-import { ThemeProvider } from './contexts/ThemeContext.tsx';
-import { ErrorBoundary } from './components/ErrorBoundary.tsx';
+import App from './App';
+import { ToastProvider } from './contexts/ToastContext';
+import { AuthProvider } from './contexts/AuthContext';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

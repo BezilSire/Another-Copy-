@@ -1,11 +1,11 @@
 import React from 'react';
-import { User } from '../types.ts';
-import { LogoIcon } from './icons/LogoIcon.tsx';
-import { UserCircleIcon } from './icons/UserCircleIcon.tsx';
-import { MessageSquareIcon } from './icons/MessageSquareIcon.tsx';
-import { useOnlineStatus } from '../hooks/useOnlineStatus.ts';
-import { WifiOffIcon } from './icons/WifiOffIcon.tsx';
-import { VideoIcon } from './icons/VideoIcon.tsx';
+import { User } from '../types';
+import { LogoIcon } from './icons/LogoIcon';
+import { UserCircleIcon } from './icons/UserCircleIcon';
+import { MessageSquareIcon } from './icons/MessageSquareIcon';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
+import { WifiOffIcon } from './icons/WifiOffIcon';
+import { VideoIcon } from './icons/VideoIcon';
 
 interface HeaderProps {
   user: User | null;

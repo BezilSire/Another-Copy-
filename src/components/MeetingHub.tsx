@@ -1,21 +1,22 @@
 
 import React, { useState } from 'react';
-import { User, Meeting } from '../types.ts';
-import { api } from '../services/apiService.ts';
-import { useToast } from '../contexts/ToastContext.tsx';
-import { VideoIcon } from './icons/VideoIcon.tsx';
-import { KeyIcon } from './icons/KeyIcon.tsx';
-import { LoaderIcon } from './icons/LoaderIcon.tsx';
+// FIX: Normalized extensionless imports
+import { User, Meeting } from '../types';
+import { api } from '../services/apiService';
+import { useToast } from '../contexts/ToastContext';
+import { VideoIcon } from './icons/VideoIcon';
+import { KeyIcon } from './icons/KeyIcon';
+import { LoaderIcon } from './icons/LoaderIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
-import { VideoMeeting } from './VideoMeeting.tsx';
-import { ArrowRightIcon } from './icons/ArrowRightIcon.tsx';
-import { ClipboardIcon } from './icons/ClipboardIcon.tsx';
-import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon.tsx';
-import { ClockIcon } from './icons/ClockIcon.tsx';
-import { ShareIcon } from './icons/ShareIcon.tsx';
-import { FilePenIcon } from './icons/FilePenIcon.tsx';
+import { VideoMeeting } from './VideoMeeting';
+import { ArrowRightIcon } from './icons/ArrowRightIcon';
+import { ClipboardIcon } from './icons/ClipboardIcon';
+import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
+import { ClockIcon } from './icons/ClockIcon';
+import { ShareIcon } from './icons/ShareIcon';
+import { FilePenIcon } from './icons/FilePenIcon';
 // Import formatTimeAgo utility for displaying expiry relative time
-import { formatTimeAgo } from '../utils.ts';
+import { formatTimeAgo } from '../utils';
 
 interface MeetingHubProps {
   user: User;

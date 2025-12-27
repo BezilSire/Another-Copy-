@@ -42,6 +42,7 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ user }) => {
 
         setIsJoining(true);
         try {
+            // Corrected API call to satisfy strict TypeScript parameters
             const id = await api.createMeeting(user, meetingTitle || 'Sovereign Assembly', expiresAt);
             const m = await api.joinMeeting(id);
             setGeneratedMeeting(m);
@@ -155,7 +156,7 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ user }) => {
                                         value={meetingTitle}
                                         onChange={e => setMeetingTitle(e.target.value)}
                                         placeholder="E.G. CIRCLE LEADERSHIP SYNC"
-                                        className="w-full bg-slate-950 border-2 border-white/10 rounded-2xl p-4 text-white font-black uppercase text-xs tracking-widest focus:border-brand-gold outline-none transition-all"
+                                        className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-4 text-white font-black uppercase text-xs tracking-widest focus:border-brand-gold outline-none transition-all"
                                     />
                                 </div>
                                 <div className="space-y-3">
@@ -166,7 +167,7 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ user }) => {
                                         type="datetime-local"
                                         value={expiryDateTime}
                                         onChange={e => setExpiryDateTime(e.target.value)}
-                                        className="w-full bg-slate-950 border-2 border-white/10 rounded-2xl p-4 text-white font-mono text-sm focus:border-brand-gold outline-none transition-all"
+                                        className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-4 text-white font-mono text-sm focus:border-brand-gold outline-none transition-all"
                                     />
                                 </div>
                                 <button 

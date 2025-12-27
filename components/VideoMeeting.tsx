@@ -1,17 +1,17 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { User, Meeting, ParticipantStatus } from '../types.ts';
-import { api } from '../services/apiService.ts';
-import { useToast } from '../contexts/ToastContext.tsx';
-import { LoaderIcon } from './icons/LoaderIcon.tsx';
-import { MicIcon } from './icons/MicIcon.tsx';
-import { MicOffIcon } from './icons/MicOffIcon.tsx';
-import { VideoIcon } from './icons/VideoIcon.tsx';
-import { VideoOffIcon } from './icons/VideoOffIcon.tsx';
-import { PhoneOffIcon } from './icons/PhoneOffIcon.tsx';
-import { ShieldCheckIcon } from './icons/ShieldCheckIcon.tsx';
-import { LogoIcon } from './icons/LogoIcon.tsx';
-import { UserMinusIcon } from './icons/UserMinusIcon.tsx';
-import { ClockIcon } from './icons/ClockIcon.tsx';
+import { User, Meeting, ParticipantStatus } from '../types';
+import { api } from '../services/apiService';
+import { useToast } from '../contexts/ToastContext';
+import { LoaderIcon } from './icons/LoaderIcon';
+import { MicIcon } from './icons/MicIcon';
+import { MicOffIcon } from './icons/MicOffIcon';
+import { VideoIcon } from './icons/VideoIcon';
+import { VideoOffIcon } from './icons/VideoOffIcon';
+import { PhoneOffIcon } from './icons/PhoneOffIcon';
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
+import { LogoIcon } from './icons/LogoIcon';
+import { UserMinusIcon } from './icons/UserMinusIcon';
+import { ClockIcon } from './icons/ClockIcon';
 
 const servers = {
     iceServers: [

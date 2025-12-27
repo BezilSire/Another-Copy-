@@ -138,7 +138,6 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
         const receiver = JSON.parse(scannedData);
         const amount = parseFloat(sendAmount);
 
-        // FIX: Using setIsProcessing as defined in state
         setIsProcessing(true);
         try {
             const timestamp = Date.now();

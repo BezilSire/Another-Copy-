@@ -1,16 +1,18 @@
+
 import React from 'react';
-import { MemberUser, FilterType, MemberView } from '../types.ts';
-import { HomeIcon } from './icons/HomeIcon.tsx';
-import { UsersIcon } from './icons/UsersIcon.tsx';
-import { WalletIcon } from './icons/WalletIcon.tsx';
-import { BriefcaseIcon } from './icons/BriefcaseIcon.tsx';
-import { UserCircleIcon } from './icons/UserCircleIcon.tsx';
-import { MessageSquareIcon } from './icons/MessageSquareIcon.tsx';
-import { SparkleIcon } from './icons/SparkleIcon.tsx';
-import { GlobeIcon } from './icons/GlobeIcon.tsx';
-import { ShieldCheckIcon } from './icons/ShieldCheckIcon.tsx';
-import { TrendingUpIcon } from './icons/TrendingUpIcon.tsx';
-import { VideoIcon } from './icons/VideoIcon.tsx';
+// FIX: Normalized extensionless imports
+import { MemberUser, FilterType, MemberView } from '../types';
+import { HomeIcon } from './icons/HomeIcon';
+import { UsersIcon } from './icons/UsersIcon';
+import { WalletIcon } from './icons/WalletIcon';
+import { BriefcaseIcon } from './icons/BriefcaseIcon';
+import { UserCircleIcon } from './icons/UserCircleIcon';
+import { MessageSquareIcon } from './icons/MessageSquareIcon';
+import { SparkleIcon } from './icons/SparkleIcon';
+import { GlobeIcon } from './icons/GlobeIcon';
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
+import { TrendingUpIcon } from './icons/TrendingUpIcon';
+import { VideoIcon } from './icons/VideoIcon';
 
 interface CommunityHubSidebarProps {
   activeView: MemberView;

@@ -1,10 +1,12 @@
+
 import React from 'react';
-import { HomeIcon } from './icons/HomeIcon.tsx';
-import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon.tsx';
-import { WalletIcon } from './icons/WalletIcon.tsx';
-import { MessageSquareIcon } from './icons/MessageSquareIcon.tsx';
-import { TrendingUpIcon } from './icons/TrendingUpIcon.tsx';
-import { GlobeIcon } from './icons/GlobeIcon.tsx';
+// FIX: Normalized extensionless imports
+import { HomeIcon } from './icons/HomeIcon';
+import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon';
+import { WalletIcon } from './icons/WalletIcon';
+import { MessageSquareIcon } from './icons/MessageSquareIcon';
+import { TrendingUpIcon } from './icons/TrendingUpIcon';
+import { GlobeIcon } from './icons/GlobeIcon';
 
 type MemberView = 'home' | 'state' | 'ledger' | 'chats' | 'meetings' | 'hub' | 'more' | 'wallet';
 

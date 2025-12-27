@@ -1,4 +1,6 @@
+
 import React from 'react';
+// FIX: Normalized extensionless imports
 import { MemberUser, FilterType, MemberView } from '../types';
 import { HomeIcon } from './icons/HomeIcon';
 import { UsersIcon } from './icons/UsersIcon';
