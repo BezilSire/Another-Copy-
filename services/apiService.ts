@@ -47,7 +47,7 @@ import {
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
     Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase, SellRequest, P2POffer, AssetType, UserVault,
-    CitizenResource, Dispute
+    CitizenResource, Dispute, Meeting
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -71,6 +71,7 @@ const redemptionCyclesCollection = collection(db, 'redemption_cycles');
 const sustenanceCollection = collection(db, 'sustenance_cycles');
 const vouchersCollection = collection(db, 'sustenance_vouchers');
 const venturesCollection = collection(db, 'ventures');
+const meetingsCollection = collection(db, 'meetings');
 
 async function _deletePostAndSubcollections(postId: string) {
     const postRef = doc(postsCollection, postId);
@@ -260,6 +261,56 @@ export const api = {
     listenToResources: (circle: string, cb: (r: CitizenResource[]) => void): Unsubscribe => onSnapshot(circle === 'ANY' ? resourcesCollection : query(resourcesCollection, where('circle', '==', circle)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource)))),
     listenToTribunals: (cb: (d: Dispute[]) => void): Unsubscribe => onSnapshot(query(disputesCollection, where('status', '==', 'TRIBUNAL')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Dispute)))),
 
+    // Added missing treasury methods
+    initializeTreasury: async (admin: Admin) => {
+        const batch = writeBatch(db);
+        const vaults = [
+            { id: 'GENESIS', name: 'Genesis Mother Node', type: 'GENESIS', balance: 15000000, description: 'Protocol asset root.' },
+            { id: 'FLOAT', name: 'Social Float', type: 'FLOAT', balance: 0, description: 'Assets for peer exchange.' },
+            { id: 'SUSTENANCE', name: 'Sustenance Reserve', type: 'SUSTENANCE', balance: 0, description: 'Dividend allocation node.' },
+            { id: 'DISTRESS', name: 'Emergency Fund', type: 'DISTRESS', balance: 0, description: 'Social safety anchor.' },
+            { id: 'VENTURE', name: 'Launchpad Treasury', type: 'VENTURE', balance: 0, description: 'Community growth capital.' }
+        ];
+        for (const v of vaults) {
+            batch.set(doc(vaultsCollection, v.id), { ...v, publicKey: `UBT-VAULT-${v.id}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`, isLocked: false });
+        }
+        const txId = `genesis-mint-${Date.now().toString(36)}`;
+        batch.set(doc(ledgerCollection, txId), { id: txId, senderId: 'SYSTEM', receiverId: 'GENESIS', amount: 15000000, timestamp: Date.now(), type: 'SYSTEM_MINT', protocol_mode: 'MAINNET', senderPublicKey: 'ROOT_PROTOCOL', serverTimestamp: serverTimestamp() });
+        await batch.commit();
+        await api.syncEconomyOracle();
+    },
+    toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
+    registerResource: (data: Partial<CitizenResource>) => addDoc(resourcesCollection, { ...data, createdAt: serverTimestamp() }),
+
+    // Added missing meeting methods
+    createMeeting: async (u: User, title: string, expiresAt: Date): Promise<string> => {
+        const meetingId = Math.floor(100000 + Math.random() * 900000).toString();
+        await setDoc(doc(meetingsCollection, meetingId), {
+            id: meetingId,
+            hostId: u.id,
+            hostName: u.name,
+            title: title || 'Sovereign Assembly',
+            createdAt: serverTimestamp(),
+            expiresAt: Timestamp.fromDate(expiresAt),
+        });
+        return meetingId;
+    },
+    joinMeeting: async (meetingId: string): Promise<Meeting | null> => {
+        const s = await getDoc(doc(meetingsCollection, meetingId));
+        if (!s.exists()) return null;
+        const data = s.data() as Meeting;
+        if (data.expiresAt && data.expiresAt.toMillis() < Date.now()) throw new Error("PROTOCOL_EXPIRED");
+        return { id: s.id, ...data } as Meeting;
+    },
+    updateMeetingSignal: (meetingId: string, data: any) => setDoc(doc(meetingsCollection, meetingId), data, { merge: true }),
+    listenForMeetingSignals: (meetingId: string, cb: (m: Meeting) => void): Unsubscribe => 
+        onSnapshot(doc(meetingsCollection, meetingId), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
+    addIceCandidate: (meetingId: string, type: 'caller' | 'callee', candidate: any) => 
+        addDoc(collection(db, 'meetings', meetingId, type + 'Candidates'), candidate),
+    listenForIceCandidates: (meetingId: string, type: 'caller' | 'callee', cb: (c: any) => void): Unsubscribe =>
+        onSnapshot(collection(db, 'meetings', meetingId, type + 'Candidates'), s => s.docChanges().forEach(change => change.type === 'added' && cb(change.doc.data()))),
+    deleteMeeting: (meetingId: string) => deleteDoc(doc(meetingsCollection, meetingId)),
+
     createPost: async (u: User, content: string, type: Post['types'], award: number, skills: string[] = []) => addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: skills, commentCount: 0, repostCount: 0, ccapAwarded: award }),
     repostPost: async (original: Post, u: User, comment: string) => {
         const batch = writeBatch(db);
@@ -330,7 +381,7 @@ export const api = {
         if (ids.length === 0) return [];
         const results: MemberUser[] = [];
         for (let i = 0; i < ids.length; i += 10) {
-            const chunk = ids.slice(i, i + 10);
+            const chunk = uids.slice(i, i + 10);
             const q = query(usersCollection, where('__name__', 'in', chunk));
             const snapshot = await getDocs(q);
             results.push(...snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MemberUser)));

@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { MemberUser, Conversation, User, FilterType, MemberView } from '../types';
 import { MemberBottomNav } from './MemberBottomNav';

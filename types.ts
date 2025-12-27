@@ -10,6 +10,28 @@ export type AssetType = 'SOL' | 'USDT' | 'USDC';
 export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger' | 'wallet';
 export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more';
 
+// Added missing ParticipantStatus for Video Meetings
+export interface ParticipantStatus {
+    isVideoOn: boolean;
+    isMicOn: boolean;
+    isSpeaking: boolean;
+}
+
+// Added missing Meeting interface
+export interface Meeting {
+    id: string;
+    hostId: string;
+    hostName: string;
+    title: string;
+    createdAt: Timestamp;
+    expiresAt: Timestamp;
+    offer?: any;
+    answer?: any;
+    callerStatus?: ParticipantStatus;
+    calleeStatus?: ParticipantStatus;
+    kickedParticipantId?: string;
+}
+
 export interface User {
   id: string;
   name: string;

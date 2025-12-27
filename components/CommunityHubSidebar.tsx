@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { MemberUser, FilterType, MemberView } from '../types';
 import { HomeIcon } from './icons/HomeIcon';

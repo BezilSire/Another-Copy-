@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { HomeIcon } from './icons/HomeIcon';
 import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon';

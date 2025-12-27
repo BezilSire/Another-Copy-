@@ -10,14 +10,14 @@ export type AssetType = 'SOL' | 'USDT' | 'USDC';
 export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger' | 'wallet';
 export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more';
 
-// FIX: Added ParticipantStatus interface for Sovereign Meetings
+// Added missing ParticipantStatus for Video Meetings
 export interface ParticipantStatus {
     isVideoOn: boolean;
     isMicOn: boolean;
     isSpeaking: boolean;
 }
 
-// FIX: Added Meeting interface to resolve TS2305 error in VideoMeeting and MeetingHub
+// Added missing Meeting interface
 export interface Meeting {
     id: string;
     hostId: string;

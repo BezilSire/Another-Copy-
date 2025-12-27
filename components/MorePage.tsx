@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { User, NavView } from '../types';
 import { UserIcon } from './icons/UserIcon';
