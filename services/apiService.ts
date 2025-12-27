@@ -45,7 +45,7 @@ import {
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
     Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase, SellRequest, P2POffer, UserVault,
-    CitizenResource, Dispute, Meeting, Broadcast
+    CitizenResource, Dispute, Meeting
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -64,7 +64,6 @@ const globalsCollection = collection(db, 'globals');
 const pendingPurchasesCollection = collection(db, 'pending_ubt_purchases');
 const sellRequestsCollection = collection(db, 'sell_requests');
 const p2pCollection = collection(db, 'p2p_offers');
-const broadcastsCollection = collection(db, 'broadcasts');
 const redemptionCyclesCollection = collection(db, 'redemption_cycles');
 const sustenanceCollection = collection(db, 'sustenance_cycles');
 const vouchersCollection = collection(db, 'sustenance_vouchers');
@@ -433,12 +432,12 @@ export const api = {
         const ref = await addDoc(membersCollection, { ...d, agent_id: a.id, agent_name: a.name, date_registered: serverTimestamp(), welcome_message: welcome, membership_card_id: `UGC-M-${Math.random().toString(36).substring(2, 8).toUpperCase()}` });
         return { id: ref.id, ...d, agent_id: a.id, agent_name: a.name, welcome_message: welcome } as any;
     },
+    sendBroadcast: (u: User, m: string) => addDoc(collection(db, 'broadcasts'), { authorId: u.id, authorName: u.name, message: m, date: new Date().toISOString() }),
     getBroadcasts: async () => {
-        const q = query(broadcastsCollection, orderBy('date', 'desc'), limit(10));
+        const q = query(collection(db, 'broadcasts'), orderBy('date', 'desc'), limit(10));
         const s = await getDocs(q);
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as Broadcast));
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as any));
     },
-    sendBroadcast: (u: User, m: string) => addDoc(broadcastsCollection, { authorId: u.id, authorName: u.name, message: m, date: new Date().toISOString() }),
     updateMemberAndUserProfile: async (uid: string, mid: string, uData: any, mData: any) => {
         const batch = writeBatch(db);
         batch.update(doc(usersCollection, uid), uData);
@@ -533,12 +532,16 @@ export const api = {
     }),
     initiateDispute: (c: User, r: User, reason: string, evidence: string) => 
         addDoc(disputesCollection, { claimantId: c.id, claimantName: c.name, respondentId: r.id, respondentName: r.name, reason, evidence, status: 'TRIBUNAL', juryIds: [], votesForClaimant: 0, votesForRespondent: 0, signedVotes: {}, timestamp: serverTimestamp() }),
-    castJuryVote: (did: string, uid: string, vote: string, sig: string) => 
+    castJuryVote: (did: string, uid: string, vote: string, signature: string) => 
         runTransaction(db, async t => {
             const ref = doc(disputesCollection, did);
             const snap = await t.get(ref);
             if (!snap.exists()) return;
-            t.update(ref, { juryIds: arrayUnion(uid), [`signedVotes.${uid}`]: sig, [vote === 'claimant' ? 'votesForClaimant' : 'votesForRespondent']: increment(1) });
+            t.update(ref, { 
+                juryIds: arrayUnion(uid), 
+                [`signedVotes.${uid}`]: signature, 
+                [vote === 'claimant' ? 'votesForClaimant' : 'votesForRespondent']: increment(1) 
+            });
         }),
     processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
         return runTransaction(db, async (t) => {
@@ -548,6 +551,6 @@ export const api = {
             t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
             if (rid && rid !== 'EXTERNAL_NODE') t.update(doc(usersCollection, rid), { ubtBalance: increment(amt) });
             t.set(doc(ledgerCollection, tx.id), { ...tx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
-        }).then(() => api.syncEconomyOracle());
+        });
     },
 };

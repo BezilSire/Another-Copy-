@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { Member, User, Post, PublicUserProfile, VentureEquityHolding, MemberUser, FilterType } from '../types';
 import { api } from '../services/apiService';
@@ -103,14 +104,14 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
         setIsSaving(true);
         try {
             const skillsAsArray = (editData.skills || '').split(',').map(s => s.trim()).filter(Boolean);
+            const interestsAsArray = (editData.interests || '').split(',').map(s => s.trim()).filter(Boolean);
             const userUpdateData = { 
                 ...editData, 
                 skills: skillsAsArray, 
                 skills_lowercase: skillsAsArray.map(s => s.toLowerCase()),
-                interests: (editData.interests || '').split(',').map(s => s.trim()).filter(Boolean),
-                passions: (editData.passions || '').split(',').map(s => s.trim()).filter(Boolean)
+                interests: interestsAsArray
             };
-            const memberUpdateData = { ...editData, skills: skillsAsArray, national_id: editData.id_card_number };
+            const memberUpdateData = { ...editData, skills: skillsAsArray, interests: interestsAsArray, national_id: editData.id_card_number };
             await api.updateMemberAndUserProfile(currentUser.id, currentUser.member_id, userUpdateData as any, memberUpdateData as any);
             addToast('Identity Sync Successful.', 'success');
             setIsEditing(false);
@@ -155,7 +156,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
         </div>
         
         <div className="mt-12">
-            <ProfileCompletionMeter profileData={activeTab === 'profile' && isEditing ? {...currentUser, ...editData, skills: editData.skills.split(',').map(s => s.trim()).filter(Boolean)} : currentUser} role="member" />
+            <ProfileCompletionMeter profileData={isEditing ? {...editData, skills: editData.skills.split(','), interests: editData.interests.split(',')} : currentUser} role="member" />
         </div>
       </div>
       

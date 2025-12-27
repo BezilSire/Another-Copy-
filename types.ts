@@ -1,4 +1,3 @@
-
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -10,14 +9,19 @@ export type AssetType = 'SOL' | 'USDT' | 'USDC';
 export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger' | 'wallet';
 export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more';
 
-// FIX: Added ParticipantStatus for Video Meetings
+export interface LoginCredentials {
+  email: string;
+  password?: string;
+}
+
+// Added ParticipantStatus interface for video meetings
 export interface ParticipantStatus {
     isVideoOn: boolean;
     isMicOn: boolean;
     isSpeaking: boolean;
 }
 
-// FIX: Added Meeting interface to resolve build error in MeetingHub and VideoMeeting
+// Added Meeting interface to resolve build errors in Meeting components
 export interface Meeting {
     id: string;
     hostId: string;

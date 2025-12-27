@@ -1,4 +1,3 @@
-
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -45,8 +44,8 @@ import {
     User, Agent, Member, NewMember, MemberUser, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
-    Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase, SellRequest, P2POffer, AssetType, UserVault,
-    CitizenResource, Dispute, Meeting, Broadcast
+    Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase, SellRequest, P2POffer, UserVault,
+    CitizenResource, Dispute, Meeting
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -199,6 +198,7 @@ export const api = {
     injectCVPUSD: async (amount: number) => {
         return updateDoc(doc(globalsCollection, 'economy'), { cvp_usd_backing: increment(amount) }).then(() => api.syncEconomyOracle());
     },
+    addFundsToCVP: (admin: User, amount: number) => updateDoc(doc(globalsCollection, 'cvp'), { total_usd_value: increment(amount) }),
     getPublicUserProfile: async (uid: string): Promise<PublicUserProfile | null> => {
         const userDoc = await getDoc(doc(usersCollection, uid));
         return userDoc.exists() ? { id: userDoc.id, ...userDoc.data() } as PublicUserProfile : null;
@@ -274,6 +274,38 @@ export const api = {
     },
     toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
     registerResource: (data: Partial<CitizenResource>) => addDoc(resourcesCollection, { ...data, createdAt: serverTimestamp() }),
+
+    createMeeting: async (u: User, title: string, expiresAt: Date): Promise<string> => {
+        const id = Math.floor(100000 + Math.random() * 900000).toString();
+        await setDoc(doc(db, 'meetings', id), {
+            id,
+            hostId: u.id,
+            hostName: u.name,
+            title,
+            createdAt: serverTimestamp(),
+            expiresAt: Timestamp.fromDate(expiresAt),
+        });
+        return id;
+    },
+    
+    joinMeeting: async (id: string): Promise<Meeting | null> => {
+        const s = await getDoc(doc(db, 'meetings', id));
+        return s.exists() ? { id: s.id, ...s.data() } as Meeting : null;
+    },
+    
+    updateMeetingSignal: (id: string, data: Partial<Meeting>) => updateDoc(doc(db, 'meetings', id), data),
+    
+    listenForMeetingSignals: (id: string, cb: (m: Meeting) => void): Unsubscribe => onSnapshot(doc(db, 'meetings', id), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
+    
+    addIceCandidate: (id: string, type: 'caller' | 'callee', candidate: any) => addDoc(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), candidate),
+    
+    listenForIceCandidates: (id: string, type: 'caller' | 'callee', cb: (c: any) => void): Unsubscribe => onSnapshot(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), s => {
+        s.docChanges().forEach(change => {
+            if (change.type === 'added') cb(change.doc.data());
+        });
+    }),
+    
+    deleteMeeting: (id: string) => deleteDoc(doc(db, 'meetings', id)),
 
     createPost: async (u: User, content: string, type: Post['types'], award: number, skills: string[] = []) => addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: skills, commentCount: 0, repostCount: 0, ccapAwarded: award }),
     repostPost: async (original: Post, u: User, comment: string) => {
@@ -521,37 +553,4 @@ export const api = {
             t.set(doc(ledgerCollection, tx.id), { ...tx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         });
     },
-    
-    // FIX: Added missing meeting methods
-    createMeeting: async (u: User, title: string, expiresAt: Date): Promise<string> => {
-        const id = Math.floor(100000 + Math.random() * 900000).toString();
-        await setDoc(doc(db, 'meetings', id), {
-            id,
-            hostId: u.id,
-            hostName: u.name,
-            title,
-            createdAt: serverTimestamp(),
-            expiresAt: Timestamp.fromDate(expiresAt),
-        });
-        return id;
-    },
-    
-    joinMeeting: async (id: string): Promise<Meeting | null> => {
-        const s = await getDoc(doc(db, 'meetings', id));
-        return s.exists() ? { id: s.id, ...s.data() } as Meeting : null;
-    },
-    
-    updateMeetingSignal: (id: string, data: Partial<Meeting>) => updateDoc(doc(db, 'meetings', id), data),
-    
-    listenForMeetingSignals: (id: string, cb: (m: Meeting) => void): Unsubscribe => onSnapshot(doc(db, 'meetings', id), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
-    
-    addIceCandidate: (id: string, type: 'caller' | 'callee', candidate: any) => addDoc(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), candidate),
-    
-    listenForIceCandidates: (id: string, type: 'caller' | 'callee', cb: (c: any) => void): Unsubscribe => onSnapshot(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), s => {
-        s.docChanges().forEach(change => {
-            if (change.type === 'added') cb(change.doc.data());
-        });
-    }),
-    
-    deleteMeeting: (id: string) => deleteDoc(doc(db, 'meetings', id)),
 };
