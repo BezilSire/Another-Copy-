@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MemberDashboard } from './components/MemberDashboard';
@@ -20,14 +20,15 @@ import { LoaderIcon } from './components/icons/LoaderIcon';
 import { AlertTriangleIcon } from './components/icons/AlertTriangleIcon';
 import { PinVaultLogin } from './components/PinVaultLogin';
 import { RecoveryProtocol } from './components/RecoveryProtocol';
-import { cryptoService } from './services/cryptoService';
+import { cryptoService, VaultData } from './services/cryptoService';
 import { RadarModal } from './components/RadarModal';
-import { GuestMeetingPage } from './components/GuestMeetingPage';
+import { usePushNotifications } from './hooks/usePushNotifications';
+import { NotificationPermissionBanner } from './components/NotificationPermissionBanner';
 
 const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [logs, setLogs] = useState<string[]>([]);
   const sequence = [
-    "> BOOTING UBUNTIUM_CORE_v5.0.3...",
+    "> BOOTING UBUNTIUM_CORE_v5.1.0...",
     "> INITIALIZING CRYPTO_LAYER... [ OK ]",
     "> CONNECTING TO GLOBAL_DAG_MAINNET...",
     "> RESOLVING SOVEREIGN_ID_PROVENANCE...",
@@ -37,16 +38,16 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 
   useEffect(() => {
     let i = 0;
-    const interval = setInterval(() => {
+    const interval = window.setInterval(() => {
       if (i < sequence.length) {
         setLogs(prev => [...prev, sequence[i]]);
         i++;
       } else {
-        clearInterval(interval);
+        window.clearInterval(interval);
         setTimeout(onComplete, 300);
       }
     }, 70);
-    return () => clearInterval(interval);
+    return () => window.clearInterval(interval);
   }, [onComplete]);
 
   return (
@@ -75,11 +76,7 @@ const App: React.FC = () => {
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const [isRadarOpen, setIsRadarOpen] = useState(false);
 
-  // FIX: Restored guestMeetingId detection from URL parameters
-  const guestMeetingId = useMemo(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('join');
-  }, []);
+  const { permission, requestPermission } = usePushNotifications(currentUser);
 
   useEffect(() => {
     if (currentUser) {
@@ -102,21 +99,17 @@ const App: React.FC = () => {
     setViewingProfileId(userId);
   };
 
-  const handleSecurityRecoveryComplete = async (m: string, p: string, data: any) => {
-    await cryptoService.saveVault({ mnemonic: m }, p);
-    await unlockSovereignSession(data, p);
-    setIsRecovering(false);
+  const handleSecurityRecoveryComplete = (mnemonic: string, pin: string, data: VaultData) => {
+    cryptoService.saveVault({ mnemonic }, pin).then(() => {
+        unlockSovereignSession(data, pin).then(() => {
+            setIsRecovering(false);
+        });
+    });
   };
   
   const renderMainContent = () => {
     if (isBooting) return null;
 
-    // FIX: Restored GUEST MEETING GATE to prioritize guest access via meeting links
-    if (guestMeetingId && (!firebaseUser || firebaseUser.isAnonymous)) {
-        return <GuestMeetingPage meetingId={guestMeetingId} />;
-    }
-
-    // 1. VAULT GATE (MUST HAPPEN FIRST)
     if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
         if (isRecovering) {
             return (
@@ -132,7 +125,6 @@ const App: React.FC = () => {
         );
     }
 
-    // 2. MAIN DASHBOARD ACCESS
     if (currentUser) {
         if (chatTarget) {
             return (
@@ -214,7 +206,6 @@ const App: React.FC = () => {
         );
     }
 
-    // 3. AUTH LOADING (ONLY IF NO USER DATA)
     if (isLoadingAuth || isProcessingAuth) {
       return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-black p-10 text-center animate-fade-in">
@@ -229,17 +220,15 @@ const App: React.FC = () => {
       );
     }
 
-    // 4. LOGIN PAGE FALLBACK
     if (!firebaseUser) {
         return <AuthPage />;
     }
 
-    // 5. DATA NOT FOUND ERROR
     return (
         <div className="flex flex-col items-center justify-center min-h-screen bg-black p-6 text-center animate-fade-in">
             <AlertTriangleIcon className="h-12 w-12 text-brand-gold mb-6 opacity-40" />
             <h2 className="text-xl font-black text-white uppercase tracking-tighter mb-4">Identity Not Indexed</h2>
-            <p className="text-sm text-gray-500 max-w-xs mx-auto uppercase tracking-widest leading-loose">
+            <p className="text-sm text-gray-400 max-w-xs mx-auto uppercase tracking-widest leading-loose">
                 Session verified but citizen record missing. Re-sign to establishing node anchor.
             </p>
             <div className="flex flex-col gap-4 mt-10 w-full max-w-xs">
@@ -269,6 +258,7 @@ const App: React.FC = () => {
                 {renderMainContent()}
             </main>
             
+            <NotificationPermissionBanner permission={permission} onRequestPermission={requestPermission} />
             <ToastContainer />
             <ConfirmationDialog
                 isOpen={isLogoutConfirmOpen}

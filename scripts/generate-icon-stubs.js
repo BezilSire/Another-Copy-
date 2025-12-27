@@ -1,3 +1,4 @@
+
 import fs from "fs";
 import path from "path";
 
@@ -39,7 +40,7 @@ iconImports.forEach((iconName) => {
   console.log(`[Build Engine] Generating stub for missing icon: ${iconName}`);
   const stub = `import React from "react";
 
-export const ${iconName}: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+export const ${iconName} = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width="24"

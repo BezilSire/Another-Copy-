@@ -1,3 +1,4 @@
+
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -6,28 +7,8 @@ export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity
 export type ProtocolMode = 'MAINNET' | 'TESTNET';
 export type AssetType = 'SOL' | 'USDT' | 'USDC';
 
-export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger' | 'meetings' | 'wallet';
+export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger' | 'wallet';
 export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more';
-
-export interface ParticipantStatus {
-    isVideoOn: boolean;
-    isMicOn: boolean;
-    isSpeaking: boolean;
-}
-
-export interface Meeting {
-    id: string;
-    hostId: string;
-    hostName: string;
-    title: string;
-    createdAt: Timestamp;
-    expiresAt: Timestamp;
-    offer?: any;
-    answer?: any;
-    callerStatus?: ParticipantStatus;
-    calleeStatus?: ParticipantStatus;
-    kickedParticipantId?: string;
-}
 
 export interface User {
   id: string;

@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { MemberUser, Conversation, User, FilterType, MemberView } from '../types';
 import { MemberBottomNav } from './MemberBottomNav';
 import { PostsFeed } from './PostsFeed';
@@ -30,7 +30,6 @@ import { GenesisNodeFlow } from './GenesisNodeFlow';
 import { StateRegistry } from './StateRegistry';
 import { IdentityVault } from './IdentityVault';
 import { ProtocolReconciliation } from './ProtocolReconciliation';
-import { MeetingHub } from './MeetingHub';
 
 interface MemberDashboardProps {
   user: MemberUser;
@@ -85,10 +84,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
             <div className="space-y-6">
               {!hasVault && <SovereignUpgradeBanner onUpgrade={() => setIsUpgrading(true)} />}
               {user.status !== 'active' && (
-                <VerificationHub 
-                  onGetVerifiedClick={() => setIsVerificationModalOpen(true)}
-                  onLearnMoreClick={() => setView('knowledge')}
-                />
+                <div className="space-y-6">
+                    <VerificationHub 
+                    onGetVerifiedClick={() => setIsVerificationModalOpen(true)}
+                    onLearnMoreClick={() => setView('knowledge')}
+                    />
+                </div>
               )}
               <div className="md:hidden">
                  <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} />
@@ -106,8 +107,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
         return <PulseHub user={user} />;
       case 'sustenance':
         return <SustenancePage user={user} />;
-      case 'meetings':
-        return <MeetingHub user={user} />;
       case 'wallet':
         return <WalletPage user={user} />;
       case 'chats':

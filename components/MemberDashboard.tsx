@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+
+import React, { useState } from 'react';
 import { MemberUser, Conversation, User, FilterType, MemberView } from '../types';
 import { MemberBottomNav } from './MemberBottomNav';
 import { PostsFeed } from './PostsFeed';
@@ -29,7 +30,6 @@ import { GenesisNodeFlow } from './GenesisNodeFlow';
 import { StateRegistry } from './StateRegistry';
 import { IdentityVault } from './IdentityVault';
 import { ProtocolReconciliation } from './ProtocolReconciliation';
-import { MeetingHub } from './MeetingHub';
 
 interface MemberDashboardProps {
   user: MemberUser;
@@ -107,8 +107,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
         return <PulseHub user={user} />;
       case 'sustenance':
         return <SustenancePage user={user} />;
-      case 'meetings':
-        return <MeetingHub user={user} />;
       case 'wallet':
         return <WalletPage user={user} />;
       case 'chats':
@@ -158,7 +156,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       {isNewChatModalOpen && <MemberSearchModal isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} currentUser={user} onSelectUser={setSelectedChat} />}
       {isNewPostModalOpen && <NewPostModal isOpen={isNewPostModalOpen} onClose={() => setIsNewPostModalOpen(false)} user={user} onPostCreated={handlePostCreated} />}
        {isDistressModalOpen && <DistressCallDialog isOpen={isDistressModalOpen} onClose={() => setIsDistressModalOpen(false)} onConfirm={async (c) => { setIsDistressLoading(true); try { await api.sendDistressPost(user, c); addToast('Emergency protocol initiated.', 'success'); setIsDistressModalOpen(false); } catch (e:any) { addToast(e.message, 'error'); } finally { setIsDistressLoading(false); } }} isLoading={isDistressLoading} />}
-      <VerificationRedirectModal isOpen={isVerificationModalOpen} onClose={() => setIsVerificationModalOpen(false)} buyUrl="https://ubuntium.org/buy" />
+      <VerificationRedirectModal isOpen={isVerificationModalOpen} onClose={() => setIsVerificationModalOpen(false)} />
     </div>
   );
 };

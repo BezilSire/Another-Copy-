@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { User } from '../types';
 import { LogoIcon } from './icons/LogoIcon';
@@ -5,7 +6,6 @@ import { UserCircleIcon } from './icons/UserCircleIcon';
 import { MessageSquareIcon } from './icons/MessageSquareIcon';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { WifiOffIcon } from './icons/WifiOffIcon';
-import { VideoIcon } from './icons/VideoIcon';
 
 interface HeaderProps {
   user: User | null;
@@ -14,10 +14,9 @@ interface HeaderProps {
   onChatClick?: () => void;
   onRadarClick?: () => void;
   onScanClick?: () => void;
-  onLiveClick?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, onChatClick, onLiveClick }) => {
+export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, onChatClick }) => {
   const isOnline = useOnlineStatus();
 
   return (
@@ -37,17 +36,6 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, o
         {user && (
           <div className="flex-1 flex justify-center">
              <div className="flex items-center bg-white/5 p-1 rounded-2xl border border-white/10 shadow-inner">
-                {onLiveClick && (
-                    <button 
-                        onClick={onLiveClick} 
-                        className="flex items-center gap-3 px-6 py-2.5 rounded-xl text-brand-gold hover:bg-brand-gold/10 transition-all group"
-                        title="Sovereign Meetings"
-                    >
-                        <VideoIcon className="h-5 w-5 group-hover:scale-110 transition-transform" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] hidden sm:block">Live</span>
-                    </button>
-                )}
-                <div className="w-px h-6 bg-white/10 mx-1"></div>
                 {onChatClick && (
                     <button 
                         onClick={onChatClick} 

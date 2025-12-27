@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useMemo } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MemberDashboard } from './components/MemberDashboard';
@@ -21,7 +22,6 @@ import { PinVaultLogin } from './components/PinVaultLogin';
 import { RecoveryProtocol } from './components/RecoveryProtocol';
 import { cryptoService, VaultData } from './services/cryptoService';
 import { RadarModal } from './components/RadarModal';
-import { GuestMeetingPage } from './components/GuestMeetingPage';
 import { usePushNotifications } from './hooks/usePushNotifications';
 import { NotificationPermissionBanner } from './components/NotificationPermissionBanner';
 
@@ -78,11 +78,6 @@ const App: React.FC = () => {
 
   const { permission, requestPermission } = usePushNotifications(currentUser);
 
-  const guestMeetingId = useMemo(() => {
-    const params = new URLSearchParams(window.location.search);
-    return params.get('join');
-  }, []);
-
   useEffect(() => {
     if (currentUser) {
         const unsubNotifs = api.listenForNotifications(currentUser.id, (notifications) => {
@@ -114,10 +109,6 @@ const App: React.FC = () => {
   
   const renderMainContent = () => {
     if (isBooting) return null;
-
-    if (guestMeetingId && (!firebaseUser || firebaseUser.isAnonymous)) {
-        return <GuestMeetingPage meetingId={guestMeetingId} />;
-    }
 
     if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
         if (isRecovering) {

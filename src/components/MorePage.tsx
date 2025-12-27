@@ -11,7 +11,6 @@ import { LockIcon } from './icons/LockIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import { ScaleIcon } from './icons/ScaleIcon';
-import { VideoIcon } from './icons/VideoIcon';
 
 interface MorePageProps {
   user: User;
@@ -43,7 +42,6 @@ const NavItem: React.FC<{
 export const MorePage: React.FC<MorePageProps> = ({ user, onNavigate, onLogout, notificationCount }) => {
   return (
     <div className="animate-fade-in space-y-10 max-w-2xl mx-auto pb-20">
-      {/* Node Status Header */}
       <div className="flex items-center space-x-6 p-8 bg-slate-950/60 rounded-[3rem] border border-white/5 shadow-2xl relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-tr from-brand-gold/[0.03] to-transparent pointer-events-none"></div>
         <div className="w-20 h-20 bg-slate-900 rounded-2xl border border-white/10 flex items-center justify-center shadow-inner">
@@ -59,7 +57,6 @@ export const MorePage: React.FC<MorePageProps> = ({ user, onNavigate, onLogout, 
         <h3 className="label-caps !text-[9px] !text-gray-600 pl-4 mb-4">Node Operations</h3>
         <NavItem icon={<UserIcon className="h-4 w-4" />} label="Identity Profile" onClick={() => onNavigate('profile')} />
         <NavItem icon={<BellIcon className="h-4 w-4" />} label="Protocol Alerts" onClick={() => onNavigate('notifications')} badgeCount={notificationCount} />
-        <NavItem icon={<VideoIcon className="h-4 w-4" />} label="Sovereign Meetings" onClick={() => onNavigate('meetings')} highlight />
         <NavItem icon={<LockIcon className="h-4 w-4" />} label="Identity Vault" onClick={() => onNavigate('security')} />
       </div>
 

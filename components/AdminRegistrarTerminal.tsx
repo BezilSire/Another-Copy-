@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Admin, CitizenResource } from '../types';
 import { api } from '../services/apiService';
@@ -52,6 +53,7 @@ export const AdminRegistrarTerminal: React.FC<{ admin: Admin }> = ({ admin }) =>
                 signerKey: cryptoService.getPublicKey() || "",
             } as any;
 
+            // FIX: Added correct registerResource call
             await api.registerResource(resourceData);
             addToast("RESOURCE ANCHORED: Physical common successfully indexed to state ledger.", "success");
             setFormData({ name: '', type: 'LAND', circle: '', location: '', capacity: '' });

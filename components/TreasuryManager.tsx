@@ -39,6 +39,7 @@ export const TreasuryManager: React.FC<{ admin: Admin }> = ({ admin }) => {
         
         setIsSyncing(true);
         try {
+            // FIX: Corrected missing initializeTreasury call
             await api.initializeTreasury(admin);
             addToast("Protocol hard cap minted and anchored successfully.", "success");
         } catch (e) {
@@ -52,6 +53,7 @@ export const TreasuryManager: React.FC<{ admin: Admin }> = ({ admin }) => {
 
     const handleToggleLock = async (vaultId: string, currentLock: boolean) => {
         try {
+            // FIX: Corrected missing toggleVaultLock call
             await api.toggleVaultLock(vaultId, !currentLock);
             addToast(`Vault ${!currentLock ? 'locked' : 'unlocked'} successfully.`, "info");
         } catch (e) {
