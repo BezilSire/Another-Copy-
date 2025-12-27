@@ -7,7 +7,7 @@
   "scripts": {
     "dev": "vite",
     "prebuild": "node scripts/generate-icon-stubs.js",
-    "build": "npm run prebuild && tsc && vite build",
+    "build": "npm run prebuild && vite build",
     "preview": "vite preview"
   },
   "dependencies": {

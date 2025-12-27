@@ -14,11 +14,10 @@ interface State {
 }
 
 /**
- * ErrorBoundary component to catch and handle UI-level crashes.
+ * Sovereign Error Boundary - Protocol Breach Containment
  */
-// Fix: Explicitly extend Component from react and use provided generic types to ensure setState/props are indexed correctly
+// Fix: Explicitly extend Component and use local interfaces to ensure setState and props are correctly typed
 export class ErrorBoundary extends Component<Props, State> {
-  // Correctly define initial state
   public state: State = {
     hasError: false,
     error: null,
@@ -30,14 +29,12 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public static getDerivedStateFromError(error: Error): State {
-    // Update state so the next render will show the fallback UI.
     return { hasError: true, error, errorInfo: null };
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught error:', error, errorInfo);
-    // Captured errorInfo is persisted to state
-    // Fix: setState is available on the Component instance
+    console.error('Handshake Failure Exception:', error);
+    // Fix: setState is inherited from Component
     this.setState({ error, errorInfo });
   }
 
@@ -58,7 +55,7 @@ export class ErrorBoundary extends Component<Props, State> {
             <p className="label-caps !text-[10px] !text-red-500/80 mb-8 !tracking-[0.4em]">Critical System Exception Detected</p>
             
             <div className="bg-black/60 p-6 rounded-3xl border border-white/5 shadow-inner mb-10 text-left overflow-hidden">
-                <p className="data-mono text-[11px] text-red-400/80 break-words">
+                <p className="data-mono text-[11px] text-red-400/80 break-words leading-relaxed">
                     {this.state.error?.name}: {this.state.error?.message}
                 </p>
             </div>
@@ -74,7 +71,7 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Fix: props is inherited from Component when correctly extended
+    // Fix: props is inherited from Component
     return this.props.children;
   }
 }

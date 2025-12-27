@@ -42,7 +42,6 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
     const [isReportModalOpen, setIsReportModalOpen] = useState(false);
     const [isVouching, setIsVouching] = useState(false);
     const [activeTab, setActiveTab] = useState<'activity' | 'about' | 'card' | 'venture'>('activity');
-    // FIXED: Re-added missing typeFilter state variable to resolve reference error
     const [typeFilter, setTypeFilter] = useState<FilterType>('all');
     const { addToast } = useToast();
 
