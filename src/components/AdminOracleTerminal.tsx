@@ -1,6 +1,5 @@
-
 import React, { useState } from 'react';
-import { PendingUbtPurchase, Admin, SellRequest } from '../types';
+import { PendingUbtPurchase, Admin } from '../types';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
 import { LoaderIcon } from './icons/LoaderIcon';
@@ -10,12 +9,10 @@ import { DatabaseIcon } from './icons/DatabaseIcon';
 
 interface AdminOracleTerminalProps {
     purchases: PendingUbtPurchase[];
-    // FIX: Added liquidations prop to AdminOracleTerminalProps
-    liquidations: SellRequest[];
     admin: Admin;
 }
 
-export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purchases, liquidations, admin }) => {
+export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purchases, admin }) => {
     const { addToast } = useToast();
     const [busyId, setBusyId] = useState<string | null>(null);
     const [sourceNode, setSourceNode] = useState<'FLOAT' | 'GENESIS'>('FLOAT');
@@ -47,20 +44,6 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
         }
     };
 
-    // FIX: Added handlers for sell request settlement from terminal
-    const handleSettleLiquidation = async (req: SellRequest) => {
-        if (!window.confirm(`SETTLE LIQUIDATION: Payout $${req.amountUsd} to ${req.userName}?`)) return;
-        setBusyId(req.id);
-        try {
-            await api.claimSellRequest(admin, req.id);
-            addToast("Liquidation claimed.", "success");
-        } catch (e: any) {
-            addToast("Protocol failure.", "error");
-        } finally {
-            setBusyId(null);
-        }
-    }
-
     return (
         <div className="bg-black border border-brand-gold/30 rounded-[3rem] overflow-hidden shadow-2xl font-mono text-[11px] animate-fade-in max-w-4xl mx-auto mb-20">
             <div className="bg-brand-gold/10 p-6 border-b border-brand-gold/20 flex flex-col sm:flex-row justify-between items-center gap-6">
@@ -86,12 +69,11 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
 
             <div className="p-8 space-y-8 min-h-[400px] bg-slate-950/40">
                 <div className="flex items-center justify-between border-b border-white/5 pb-4">
-                    <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded border border-emerald-500/20 font-black text-[9px] tracking-widest uppercase">Settlement_Stream</span>
-                    <span className="text-gray-600 font-bold">{purchases.length + liquidations.filter(r => r.status === 'PENDING').length} PENDING</span>
+                    <span className="px-3 py-1 bg-emerald-500/10 text-emerald-500 rounded border border-emerald-500/20 font-black text-[9px] tracking-widest uppercase">Bridge_Ingress</span>
+                    <span className="text-gray-600 font-bold">{purchases.length} PENDING</span>
                 </div>
 
                 <div className="space-y-4">
-                    {/* Bridge Purchases */}
                     {purchases.map(p => (
                         <div key={p.id} className="p-6 bg-white/[0.02] border border-white/5 rounded-[2rem] hover:bg-white/[0.04] transition-all flex flex-col gap-6 relative group">
                             <div className="flex justify-between items-start">
@@ -99,7 +81,7 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
                                     <div className="w-12 h-12 rounded-xl bg-slate-900 border border-white/10 flex items-center justify-center text-brand-gold/40 group-hover:text-brand-gold transition-colors"><ShieldCheckIcon className="h-6 w-6" /></div>
                                     <div>
                                         <p className="text-white font-black uppercase text-sm tracking-tight">{p.userName}</p>
-                                        <p className="text-[8px] text-gray-600 font-bold uppercase tracking-widest mt-1">BUY &bull; {formatTimeAgo(p.createdAt.toDate().toISOString())}</p>
+                                        <p className="text-[8px] text-gray-600 font-bold uppercase tracking-widest mt-1">{formatTimeAgo(p.createdAt.toDate().toISOString())}</p>
                                     </div>
                                 </div>
                                 <div className="text-right">
@@ -116,36 +98,10 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
                             </div>
                         </div>
                     ))}
-
-                    {/* FIX: Render Sell Requests (Liquidations) in Terminal */}
-                    {liquidations.filter(r => r.status === 'PENDING').map(req => (
-                        <div key={req.id} className="p-6 bg-red-500/5 border border-red-500/10 rounded-[2rem] hover:bg-red-500/10 transition-all flex flex-col gap-6 relative group">
-                            <div className="flex justify-between items-start">
-                                <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 rounded-xl bg-slate-900 border border-white/10 flex items-center justify-center text-red-500/40 group-hover:text-red-500 transition-colors"><DatabaseIcon className="h-6 w-6" /></div>
-                                    <div>
-                                        <p className="text-white font-black uppercase text-sm tracking-tight">{req.userName}</p>
-                                        <p className="text-[8px] text-gray-600 font-bold uppercase tracking-widest mt-1">SELL &bull; {formatTimeAgo(req.createdAt.toDate().toISOString())}</p>
-                                    </div>
-                                </div>
-                                <div className="text-right">
-                                    <p className="text-red-500 font-black text-xl font-mono tracking-tighter leading-none">-{req.amountUbt} UBT</p>
-                                    <p className="text-gray-600 text-[10px] font-bold mt-1.5 tracking-widest">${req.amountUsd.toFixed(2)} USD</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <div className="flex-1 bg-black/60 p-4 rounded-2xl border border-white/5 text-gray-400 font-bold tracking-[0.1em] text-[10px] truncate">{req.userPhone}</div>
-                                <button onClick={() => handleSettleLiquidation(req)} disabled={!!busyId} className="px-8 py-4 bg-slate-900 border border-red-500/20 hover:border-red-500 text-white font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-lg active:scale-95 transition-all flex items-center gap-2">
-                                    {busyId === req.id ? <LoaderIcon className="h-4 w-4 animate-spin" /> : "CLAIM_LIQ"}
-                                </button>
-                            </div>
-                        </div>
-                    ))}
-
-                    {purchases.length === 0 && liquidations.filter(r => r.status === 'PENDING').length === 0 && (
+                    {purchases.length === 0 && (
                         <div className="text-center py-32 opacity-30">
                             <DatabaseIcon className="h-16 w-16 text-gray-800 mx-auto mb-6" />
-                            <p className="label-caps !text-[12px] !tracking-[0.6em]">No Handshakes Pending Validation</p>
+                            <p className="label-caps !text-[12px] !tracking-[0.6em]">No Bridge Handshakes Pending</p>
                         </div>
                     )}
                 </div>

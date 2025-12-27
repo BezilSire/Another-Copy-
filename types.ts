@@ -1,4 +1,3 @@
-
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -528,7 +527,9 @@ export interface PendingUbtPurchase {
     verifiedAt?: Timestamp;
 }
 
-// FIX: Added missing SellRequest interface for liquidation facilitation
+/**
+ * Interface representing a member's request to liquidate UBT back to USD via Ecocash.
+ */
 export interface SellRequest {
     id: string;
     userId: string;

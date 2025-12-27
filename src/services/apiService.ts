@@ -1,4 +1,3 @@
-
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -548,18 +547,22 @@ export const api = {
         });
     },
 
-    // FIX: Added missing sell request methods for liquidation facilitation
-    createSellRequest: (u: User, amtUbt: number, amtUsd: number) => addDoc(collection(db, 'sell_requests'), {
-        userId: u.id,
-        userName: u.name,
-        userPhone: u.phone || '',
-        amountUbt: amtUbt,
-        amountUsd: amtUsd,
+    /**
+     * Creates a new sell request for a member wanting to liquidate UBT.
+     */
+    createSellRequest: (user: User, amountUbt: number, amountUsd: number) => addDoc(collection(db, 'sell_requests'), {
+        userId: user.id,
+        userName: user.name,
+        userPhone: user.phone || '',
+        amountUbt,
+        amountUsd,
         status: 'PENDING',
         createdAt: serverTimestamp()
     }),
-    listenToSellRequests: (cb: (r: SellRequest[]) => void, err?: any): Unsubscribe => 
-        onSnapshot(query(collection(db, 'sell_requests'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest))), err),
+
+    /**
+     * Marks a sell request as claimed by a facilitator or the treasury.
+     */
     claimSellRequest: (claimer: User, requestId: string) => updateDoc(doc(db, 'sell_requests', requestId), {
         status: 'CLAIMED',
         claimerId: claimer.id,
@@ -567,9 +570,18 @@ export const api = {
         claimerRole: claimer.role,
         claimedAt: serverTimestamp()
     }),
+
+    /**
+     * Confirms that the payment has been dispatched to the member's Ecocash.
+     */
     dispatchSellPayment: (claimer: User, requestId: string, ref: string) => updateDoc(doc(db, 'sell_requests', requestId), {
         status: 'DISPATCHED',
         ecocashRef: ref,
         dispatchedAt: serverTimestamp()
     }),
+
+    /**
+     * Listen to active sell requests for the bounty board and treasury HUD.
+     */
+    listenToSellRequests: (cb: (r: SellRequest[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'sell_requests'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest))), err),
 };

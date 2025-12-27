@@ -1,4 +1,3 @@
-
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -340,7 +339,7 @@ export const api = {
     togglePinPost: (admin: User, id: string, pin: boolean) => updateDoc(doc(postsCollection, id), { isPinned: pin }),
     sendDistressPost: async (u: MemberUser, content: string) => addDoc(postsCollection, { authorId: u.id, authorName: 'Anonymous Member', authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress' }),
     deleteDistressPost: (admin: User, pid: string, uid: string) => deleteDoc(doc(postsCollection, pid)),
-    reportPost: (u: User, post: Post, reason: string, details: string) => addDoc(reportsCollection, { reporterId: u.id, reporterName: u.name, reportedUserId: post.authorId, reportedUserName: post.authorName, postId: post.id, postContent: post.content, postAuthorId: post.authorId, reason, details, date: new Date().toISOString(), status: 'new' }),
+    reportPost: (u: User, post: Post, reason: string, details: string) => addDoc(reportsCollection, { reporterId: u.id, reporterName: r.name, reportedUserId: post.authorId, reportedUserName: post.authorName, postId: post.id, postContent: post.content, postAuthorId: post.authorId, reason, details, date: new Date().toISOString(), status: 'new' }),
     addComment: (pid: string, data: any, coll: 'posts'|'proposals' = 'posts') => {
         const batch = writeBatch(db);
         batch.set(doc(collection(db, coll, pid, 'comments')), { ...data, timestamp: serverTimestamp() });
@@ -548,18 +547,22 @@ export const api = {
         });
     },
 
-    // FIX: Added missing sell request methods for liquidation facilitation
-    createSellRequest: (u: User, amtUbt: number, amtUsd: number) => addDoc(collection(db, 'sell_requests'), {
-        userId: u.id,
-        userName: u.name,
-        userPhone: u.phone || '',
-        amountUbt: amtUbt,
-        amountUsd: amtUsd,
+    /**
+     * Creates a new sell request for a member wanting to liquidate UBT.
+     */
+    createSellRequest: (user: User, amountUbt: number, amountUsd: number) => addDoc(collection(db, 'sell_requests'), {
+        userId: user.id,
+        userName: user.name,
+        userPhone: user.phone || '',
+        amountUbt,
+        amountUsd,
         status: 'PENDING',
         createdAt: serverTimestamp()
     }),
-    listenToSellRequests: (cb: (r: SellRequest[]) => void, err?: any): Unsubscribe => 
-        onSnapshot(query(collection(db, 'sell_requests'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest))), err),
+
+    /**
+     * Marks a sell request as claimed by a facilitator or the treasury.
+     */
     claimSellRequest: (claimer: User, requestId: string) => updateDoc(doc(db, 'sell_requests', requestId), {
         status: 'CLAIMED',
         claimerId: claimer.id,
@@ -567,9 +570,18 @@ export const api = {
         claimerRole: claimer.role,
         claimedAt: serverTimestamp()
     }),
+
+    /**
+     * Confirms that the payment has been dispatched to the member's Ecocash.
+     */
     dispatchSellPayment: (claimer: User, requestId: string, ref: string) => updateDoc(doc(db, 'sell_requests', requestId), {
         status: 'DISPATCHED',
         ecocashRef: ref,
         dispatchedAt: serverTimestamp()
     }),
+
+    /**
+     * Listen to active sell requests for the bounty board and treasury HUD.
+     */
+    listenToSellRequests: (cb: (r: SellRequest[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'sell_requests'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest))), err),
 };
