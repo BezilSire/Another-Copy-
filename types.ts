@@ -526,24 +526,3 @@ export interface PendingUbtPurchase {
     createdAt: Timestamp;
     verifiedAt?: Timestamp;
 }
-
-/**
- * Interface representing a member's request to liquidate UBT back to USD via Ecocash.
- */
-export interface SellRequest {
-    id: string;
-    userId: string;
-    userName: string;
-    userPhone: string;
-    amountUbt: number;
-    amountUsd: number;
-    status: 'PENDING' | 'CLAIMED' | 'DISPATCHED' | 'COMPLETED' | 'CANCELLED';
-    createdAt: Timestamp;
-    claimerId?: string;
-    claimerName?: string;
-    claimerRole?: UserRole;
-    ecocashRef?: string;
-    claimedAt?: Timestamp;
-    dispatchedAt?: Timestamp;
-    completedAt?: Timestamp;
-}

@@ -286,7 +286,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
 
                 <div className="xl:col-span-4 glass-card p-10 rounded-[3.5rem] border-white/10 shadow-inner h-full overflow-y-auto no-scrollbar max-h-[80vh]">
                     <h3 className="label-caps !text-[11px] mb-8 flex items-center gap-3 text-white">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div> Buy History
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-ping"></div> Ledger History
                     </h3>
                     <div className="space-y-4">
                         {myHistory.map(item => (

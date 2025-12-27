@@ -45,7 +45,7 @@ import {
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
     Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase, P2POffer, UserVault,
-    CitizenResource, Dispute, Meeting, SellRequest
+    CitizenResource, Dispute, Meeting
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -546,42 +546,4 @@ export const api = {
             t.set(doc(ledgerCollection, tx.id), { ...tx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         });
     },
-
-    /**
-     * Creates a new sell request for a member wanting to liquidate UBT.
-     */
-    createSellRequest: (user: User, amountUbt: number, amountUsd: number) => addDoc(collection(db, 'sell_requests'), {
-        userId: user.id,
-        userName: user.name,
-        userPhone: user.phone || '',
-        amountUbt,
-        amountUsd,
-        status: 'PENDING',
-        createdAt: serverTimestamp()
-    }),
-
-    /**
-     * Marks a sell request as claimed by a facilitator or the treasury.
-     */
-    claimSellRequest: (claimer: User, requestId: string) => updateDoc(doc(db, 'sell_requests', requestId), {
-        status: 'CLAIMED',
-        claimerId: claimer.id,
-        claimerName: claimer.name,
-        claimerRole: claimer.role,
-        claimedAt: serverTimestamp()
-    }),
-
-    /**
-     * Confirms that the payment has been dispatched to the member's Ecocash.
-     */
-    dispatchSellPayment: (claimer: User, requestId: string, ref: string) => updateDoc(doc(db, 'sell_requests', requestId), {
-        status: 'DISPATCHED',
-        ecocashRef: ref,
-        dispatchedAt: serverTimestamp()
-    }),
-
-    /**
-     * Listen to active sell requests for the bounty board and treasury HUD.
-     */
-    listenToSellRequests: (cb: (r: SellRequest[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'sell_requests'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as SellRequest))), err),
 };

@@ -16,7 +16,7 @@ interface State {
 /**
  * ErrorBoundary component to catch and handle UI-level crashes.
  */
-// Fix: Explicitly extend Component from react and use provided generic types
+// Fix: Explicitly extend Component from react and use provided generic types to ensure props and setState are indexed
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
@@ -71,7 +71,7 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Fix: props is inherited from Component
+    // Fix: props is inherited from Component when correctly extended
     return this.props.children;
   }
 }

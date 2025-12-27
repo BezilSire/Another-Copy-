@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { Admin, Agent, Member, Broadcast, Report, User, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PendingUbtPurchase, SellRequest } from '../types';
+import { Admin, Agent, Member, Broadcast, Report, User, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PendingUbtPurchase } from '../types';
 import { api } from '../services/apiService';
 import { LayoutDashboardIcon } from './icons/LayoutDashboardIcon';
 import { DollarSignIcon } from './icons/DollarSignIcon';
@@ -40,7 +39,6 @@ export const AdminDashboard: React.FC<{
   const [cvp, setCvp] = useState<CommunityValuePool | null>(null);
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [pendingPurchases, setPendingPurchases] = useState<PendingUbtPurchase[]>([]);
-  const [sellRequests, setSellRequests] = useState<SellRequest[]>([]);
   const [typeFilter, setTypeFilter] = useState<PostFilterType>('all');
 
   useEffect(() => {
@@ -53,13 +51,11 @@ export const AdminDashboard: React.FC<{
     const unsubVentures = api.listenForVentures(user, setVentures, console.error);
     const unsubCvp = api.listenForCVP(user, setCvp, console.error);
     const unsubOracle = api.listenForPendingPurchases(setPendingPurchases, console.error);
-    // FIX: listenToSellRequests added to apiService.ts is now invoked here
-    const unsubLiq = api.listenToSellRequests(setSellRequests, console.error);
     api.getBroadcasts().then(setBroadcasts).catch(console.error);
 
     return () => {
         unsubUsers(); unsubMembers(); unsubAgents(); unsubPending(); unsubReports();
-        unsubPayouts(); unsubVentures(); unsubCvp(); unsubOracle(); unsubLiq();
+        unsubPayouts(); unsubVentures(); unsubCvp(); unsubOracle();
     };
   }, [user]);
 
@@ -88,8 +84,7 @@ export const AdminDashboard: React.FC<{
         case 'dispatch':
             return <AdminDispatchTerminal admin={user} />;
         case 'oracle': 
-            // FIX: Pass sellRequests (liquidations) to the Oracle Terminal
-            return <AdminOracleTerminal purchases={pendingPurchases} liquidations={sellRequests} admin={user} />;
+            return <AdminOracleTerminal purchases={pendingPurchases} admin={user} />;
         case 'registrar':
             return <AdminRegistrarTerminal admin={user} />;
         case 'justice':
@@ -116,8 +111,7 @@ export const AdminDashboard: React.FC<{
                   <TabButton label="Ops" icon={<LayoutDashboardIcon/>} isActive={view === 'dashboard'} onClick={() => setView('dashboard')} />
                   <TabButton label="Treasury" icon={<LockIcon/>} isActive={view === 'treasury'} onClick={() => setView('treasury')} />
                   <TabButton label="Dispatch" icon={<GlobeIcon/>} isActive={view === 'dispatch'} onClick={() => setView('dispatch')} />
-                  {/* FIX: Count includes pending sell requests */}
-                  <TabButton label="Oracle" icon={<DollarSignIcon/>} isActive={view === 'oracle'} count={pendingPurchases.length + sellRequests.filter(r => r.status === 'PENDING').length} onClick={() => setView('oracle')} />
+                  <TabButton label="Oracle" icon={<DollarSignIcon/>} isActive={view === 'oracle'} count={pendingPurchases.length} onClick={() => setView('oracle')} />
                   <TabButton label="Registrar" icon={<DatabaseIcon/>} isActive={view === 'registrar'} onClick={() => setView('registrar')} />
                   <TabButton label="Justice" icon={<ScaleIcon/>} isActive={view === 'justice'} count={reports.filter(r => r.status === 'new').length} onClick={() => setView('justice')} />
                   <TabButton label="Ledger" icon={<GlobeIcon/>} isActive={view === 'wallet'} onClick={() => setView('wallet')} />
