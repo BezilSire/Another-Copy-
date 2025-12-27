@@ -1,3 +1,4 @@
+
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -38,16 +39,16 @@ import {
     onDisconnect,
     serverTimestamp as rtdbServerTimestamp
 } from 'firebase/database';
-import { auth, db, rtdb } from './firebase.ts';
-import { generateWelcomeMessage } from './geminiService.ts';
-import { cryptoService } from './cryptoService.ts';
+import { auth, db, rtdb } from './firebase';
+import { generateWelcomeMessage } from './geminiService';
+import { cryptoService } from './cryptoService';
 import { 
     User, Agent, Member, NewMember, MemberUser, Broadcast, Post,
     Comment, Report, Conversation, Message, Notification, Activity,
     Proposal, PublicUserProfile, RedemptionCycle, PayoutRequest, SustenanceCycle, SustenanceVoucher, Venture, CommunityValuePool, VentureEquityHolding, 
     Distribution, Transaction, GlobalEconomy, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase, SellRequest, P2POffer, AssetType, UserVault,
     CitizenResource, Dispute, Meeting
-} from '../types.ts';
+} from '../types';
 
 const usersCollection = collection(db, 'users');
 const membersCollection = collection(db, 'members');
@@ -81,6 +82,7 @@ async function _deletePostAndSubcollections(postId: string) {
     await batch.commit();
 }
 
+// FIX: Combined all methods into the exported api object to resolve multiple "Property does not exist on type 'api'" errors.
 export const api = {
     login: (email: string, password: string): Promise<FirebaseUser> => {
         return signInWithEmailAndPassword(auth, email, password)
@@ -94,6 +96,7 @@ export const api = {
     },
     setupPresence: (userId: string) => {
         const userStatusDatabaseRef = ref(rtdb, '/status/' + userId);
+        const isOfflineForDatabase = { state: 'offline', last_changed: rtdbServerTimestamp() };
         const isOnlineForDatabase = { state: 'online', last_changed: rtdbServerTimestamp() };
         onValue(ref(rtdb, '.info/connected'), (snapshot) => {
             if (snapshot.val() === false) return;
@@ -129,7 +132,6 @@ export const api = {
         return results;
     },
 
-    // Sovereign Meetings (WebRTC Signaling)
     createMeeting: async (u: User, title: string, expiresAt: Date): Promise<string> => {
         const meetingId = Math.floor(100000 + Math.random() * 900000).toString();
         await setDoc(doc(meetingsCollection, meetingId), {
@@ -148,7 +150,7 @@ export const api = {
         
         const data = s.data() as Meeting;
         if (data.expiresAt && data.expiresAt.toMillis() < Date.now()) {
-            throw new Error("PROTOCOL_EXPIRED: The stipulated time for this meeting has elapsed.");
+            throw new Error("PROTOCOL_EXPIRED");
         }
         
         return { id: s.id, ...data } as Meeting;
@@ -206,7 +208,6 @@ export const api = {
         t.update(fromRef, { balance: increment(-amt) });
         t.update(toRef, { balance: increment(amt) });
         const txId = `internal-${Date.now().toString(36)}`;
-        // FIX: corrected typo 'ledger LedgerCollection' to 'ledgerCollection'
         t.set(doc(ledgerCollection, txId), { id: txId, senderId: from.id, receiverId: to.id, amount: amt, timestamp: Date.now(), reason, type: 'VAULT_SYNC', protocol_mode: 'MAINNET', senderPublicKey: admin.publicKey || "ROOT_AUTH", priceAtSync: econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001, serverTimestamp: serverTimestamp() });
     }).then(() => api.syncEconomyOracle()),
     approveUbtPurchase: (admin: Admin, p: PendingUbtPurchase, sourceVaultId: 'FLOAT' | 'GENESIS' = 'FLOAT') => runTransaction(db, async t => {
@@ -267,7 +268,7 @@ export const api = {
     listenForGlobalEconomy: (cb: (e: GlobalEconomy | null) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(doc(globalsCollection, 'economy'), s => cb(s.exists() ? s.data() as GlobalEconomy : null), err),
     listenToVaults: (cb: (v: TreasuryVault[]) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(vaultsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), err),
     listenForNotifications: (uid: string, cb: (n: Notification[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'notifications'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Notification))), err),
-    listenForUserTransactions: (uid: string, cb: (txs: Transaction[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'notifications'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))), err),
+    listenForUserTransactions: (uid: string, cb: (txs: Transaction[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'transactions'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Transaction))), err),
     listenToUserVaults: (uid: string, cb: (v: UserVault[]) => void): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'vaults'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UserVault))), console.error),
     listenForConversations: (uid: string, cb: (c: Conversation[]) => void, err?: any): Unsubscribe => onSnapshot(query(conversationsCollection, where('members', 'array-contains', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation))), err),
     listenForMessages: (cid: string, u: User, cb: (m: Message[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'conversations', cid, 'messages'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Message))), err),
@@ -361,9 +362,8 @@ export const api = {
     getGroupMembers: async (ids: string[]): Promise<MemberUser[]> => {
         if (ids.length === 0) return [];
         const results: MemberUser[] = [];
-        for (let i = 0; i < i + 10; i += 10) {
+        for (let i = 0; i < ids.length; i += 10) {
             const chunk = ids.slice(i, i + 10);
-            if (chunk.length === 0) break;
             const q = query(usersCollection, where('__name__', 'in', chunk));
             const snapshot = await getDocs(q);
             results.push(...snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as MemberUser)));
@@ -408,6 +408,54 @@ export const api = {
     completeSellRequest: (u: User, req: SellRequest) => updateDoc(doc(sellRequestsCollection, req.id), { status: 'COMPLETED', completedAt: serverTimestamp() }),
     claimSellRequest: (u: User, id: string) => updateDoc(doc(sellRequestsCollection, id), { status: 'CLAIMED', claimerId: u.id, claimerName: u.name, claimerRole: u.role, claimedAt: serverTimestamp() }),
     dispatchSellPayment: (u: User, id: string, ref: string) => updateDoc(doc(sellRequestsCollection, id), { status: 'DISPATCHED', ecocashRef: ref, dispatchedAt: serverTimestamp() }),
+    initializeTreasury: async (a: Admin) => {
+        return runTransaction(db, async (t) => {
+            const genesisRef = doc(vaultsCollection, 'GENESIS');
+            const floatRef = doc(vaultsCollection, 'FLOAT');
+            const economyRef = doc(globalsCollection, 'economy');
+            const totalCap = 15000000;
+            const floatInitial = 1000000;
+            t.set(genesisRef, { id: 'GENESIS', name: "Genesis Node", balance: totalCap - floatInitial, type: 'GENESIS', isLocked: true, createdAt: serverTimestamp(), publicKey: 'ROOT_AUTHORITY_CHAIN', description: "Master Protocol Asset Reservoir" });
+            t.set(floatRef, { id: 'FLOAT', name: "Liquidity Float", balance: floatInitial, type: 'FLOAT', isLocked: false, createdAt: serverTimestamp(), publicKey: 'LIQUIDITY_FLOAT_CHAIN', description: "Public Pool for Secondary Market Buy/Sell" });
+            t.set(economyRef, { total_ubt_supply: totalCap, circulating_ubt: floatInitial, cvp_usd_backing: 1000, ubt_to_usd_rate: 0.001, last_oracle_sync: serverTimestamp() });
+        });
+    },
+    toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
+    processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
+        return runTransaction(db, async (t) => {
+            const econRef = doc(globalsCollection, 'economy');
+            const econSnap = await t.get(econRef);
+            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+            t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
+            if (rid && rid !== 'EXTERNAL_NODE') t.update(doc(usersCollection, rid), { ubtBalance: increment(amt) });
+            t.set(doc(ledgerCollection, tx.id), { ...tx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+        }).then(() => api.syncEconomyOracle());
+    },
+    castJuryVote: (did: string, uid: string, vote: string, sig: string) => 
+        runTransaction(db, async t => {
+            const ref = doc(disputesCollection, did);
+            const snap = await t.get(ref);
+            if (!snap.exists()) return;
+            t.update(ref, { juryIds: arrayUnion(uid), [`signedVotes.${uid}`]: sig, [vote === 'claimant' ? 'votesForClaimant' : 'votesForRespondent']: increment(1) });
+        }),
+    registerResource: (d: any) => addDoc(resourcesCollection, { ...d, createdAt: serverTimestamp() }),
+    initiateDispute: (c: User, r: User, reason: string, evidence: string) => 
+        addDoc(disputesCollection, { claimantId: c.id, claimantName: c.name, respondentId: r.id, respondentName: r.name, reason, evidence, status: 'TRIBUNAL', juryIds: [], votesForClaimant: 0, votesForRespondent: 0, signedVotes: {}, timestamp: serverTimestamp() }),
+    vouchForCitizen: (transaction: UbtTransaction) => runTransaction(db, async (t) => {
+        const receiverRef = doc(usersCollection, transaction.receiverId);
+        const econRef = doc(globalsCollection, 'economy');
+        const econSnap = await t.get(econRef);
+        const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+        t.update(receiverRef, { 
+            credibility_score: increment(5), 
+            vouchCount: increment(1) 
+        });
+        t.set(doc(ledgerCollection, transaction.id), { 
+            ...transaction, 
+            priceAtSync: currentPrice, 
+            serverTimestamp: serverTimestamp() 
+        });
+    }),
     getAgentMembers: async (a: Agent) => {
         const q = query(membersCollection, where('agent_id', '==', a.id));
         const s = await getDocs(q);
@@ -453,9 +501,10 @@ export const api = {
     },
     awardKnowledgePoints: (uid: string) => updateDoc(doc(usersCollection, uid), { hasReadKnowledgeBase: true, knowledgePoints: increment(10) }).then(() => true),
     getCommunityValuePool: async () => {
-        const s = await getDoc(doc(globalsCollection, 'cvp'));
+        const s = await getDoc(doc(globalsCollection, 'economy'));
         if (!s.exists()) throw new Error("CVP offline.");
-        return { id: s.id, ...s.data() } as CommunityValuePool;
+        const data = s.data();
+        return { id: 'cvp', total_usd_value: data?.cvp_usd_backing || 0, total_circulating_ccap: data?.circulating_ubt || 0, ccap_to_usd_rate: data?.ubt_to_usd_rate || 0.001 } as CommunityValuePool;
     },
     getCurrentRedemptionCycle: async () => {
         const q = query(redemptionCyclesCollection, orderBy('endDate', 'desc'), limit(1));
@@ -507,52 +556,4 @@ export const api = {
         const res = [...s1.docs, ...s2.docs].map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
         return Array.from(new Map(res.map(i => [i.id, i])).values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     },
-    initializeTreasury: async (a: Admin) => {
-        return runTransaction(db, async (t) => {
-            const genesisRef = doc(vaultsCollection, 'GENESIS');
-            const floatRef = doc(vaultsCollection, 'FLOAT');
-            const economyRef = doc(globalsCollection, 'economy');
-            const totalCap = 15000000;
-            const floatInitial = 1000000;
-            t.set(genesisRef, { id: 'GENESIS', name: "Genesis Node", balance: totalCap - floatInitial, type: 'GENESIS', isLocked: true, createdAt: serverTimestamp(), publicKey: 'ROOT_AUTHORITY_CHAIN', description: "Master Protocol Asset Reservoir" });
-            t.set(floatRef, { id: 'FLOAT', name: "Liquidity Float", balance: floatInitial, type: 'FLOAT', isLocked: false, createdAt: serverTimestamp(), publicKey: 'LIQUIDITY_FLOAT_CHAIN', description: "Public Pool for Secondary Market Buy/Sell" });
-            t.set(economyRef, { total_ubt_supply: totalCap, circulating_ubt: floatInitial, cvp_usd_backing: 1000, ubt_to_usd_rate: 0.001, last_oracle_sync: serverTimestamp() });
-        });
-    },
-    toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
-    processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
-        return runTransaction(db, async (t) => {
-            const econRef = doc(globalsCollection, 'economy');
-            const econSnap = await t.get(econRef);
-            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
-            t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
-            if (rid && rid !== 'EXTERNAL_NODE') t.update(doc(usersCollection, rid), { ubtBalance: increment(amt) });
-            t.set(doc(ledgerCollection, tx.id), { ...tx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
-        }).then(() => api.syncEconomyOracle());
-    },
-    castJuryVote: (did: string, uid: string, vote: string, sig: string) => 
-        runTransaction(db, async t => {
-            const ref = doc(disputesCollection, did);
-            const snap = await t.get(ref);
-            if (!snap.exists()) return;
-            t.update(ref, { juryIds: arrayUnion(uid), [`signedVotes.${uid}`]: sig, [vote === 'claimant' ? 'votesForClaimant' : 'votesForRespondent']: increment(1) });
-        }),
-    registerResource: (d: any) => addDoc(resourcesCollection, { ...d, createdAt: serverTimestamp() }),
-    initiateDispute: (c: User, r: User, reason: string, evidence: string) => 
-        addDoc(disputesCollection, { claimantId: c.id, claimantName: c.name, respondentId: r.id, respondentName: r.name, reason, evidence, status: 'TRIBUNAL', juryIds: [], votesForClaimant: 0, votesForRespondent: 0, signedVotes: {}, timestamp: serverTimestamp() }),
-    vouchForCitizen: (transaction: UbtTransaction) => runTransaction(db, async (t) => {
-        const receiverRef = doc(usersCollection, transaction.receiverId);
-        const econRef = doc(globalsCollection, 'economy');
-        const econSnap = await t.get(econRef);
-        const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
-        t.update(receiverRef, { 
-            credibility_score: increment(5), 
-            vouchCount: increment(1) 
-        });
-        t.set(doc(ledgerCollection, transaction.id), { 
-            ...transaction, 
-            priceAtSync: currentPrice, 
-            serverTimestamp: serverTimestamp() 
-        });
-    }),
 };
