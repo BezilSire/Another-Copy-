@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Meeting, ParticipantStatus } from '../types';
 import { api } from '../services/apiService';
@@ -47,7 +46,6 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
     const initializedRef = useRef(false);
     const { addToast } = useToast();
 
-    // Fix: Added explicit type casting to resolve 'unknown' property access errors
     const remoteParticipant = Object.values(remoteParticipants)[0] as ParticipantStatus | undefined;
 
     useEffect(() => {
@@ -65,7 +63,9 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                     setMeetingTitle(m.title);
                     expiryDate = m.expiresAt.toDate();
                 }
-            } catch (e) {}
+            } catch (e) {
+                console.error("Meeting fetch error:", e);
+            }
         };
         fetchMeta();
 
@@ -88,6 +88,11 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
     }, [meetingId, addToast]);
 
     const stopProtocol = async () => {
+        // Remove self from participants list in DB so others see we left
+        try {
+            await api.updateMeetingSignal(meetingId, { [`participants.${user.id}`]: null } as any);
+        } catch (e) {}
+
         if (localStream.current) {
             localStream.current.getTracks().forEach(track => track.stop());
             localStream.current = null;
@@ -140,7 +145,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
         } catch (e) {
             console.error("Audio analyser failed", e);
         }
-    }, [isMicOn, isVideoOn, meetingId, user.id, user.name, user.role, isSpeaking]);
+    }, [isMicOn, isVideoOn, meetingId, user.id, user.name, user.role]);
 
     useEffect(() => {
         if (initializedRef.current) return;
@@ -176,8 +181,9 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                         return;
                     }
                     
+                    const participants = m.participants || {};
                     setRemoteParticipants(Object.fromEntries(
-                        Object.entries(m.participants).filter(([uid]) => uid !== user.id)
+                        Object.entries(participants).filter(([uid, data]) => uid !== user.id && data !== null)
                     ));
 
                     if (isHost) {
@@ -214,7 +220,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                 return () => unsub();
             } catch (e) {
                 console.error("WebRTC Protocol failure:", e);
-                addToast("Media handshake failed.", "error");
+                addToast("Media handshake failed. Ensure camera/mic permissions.", "error");
                 onEnd();
             }
         };
@@ -388,7 +394,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
             </div>
 
             <div className="absolute bottom-6 left-1/2 -translate-x-1/2 opacity-20 pointer-events-none text-center">
-                <p className="text-[7px] font-black text-gray-500 uppercase tracking-[0.6em] whitespace-nowrap">P2P Encryption &bull; NO STORAGE PROTOCOL &bull; SOVEREIGN ASSEMBLY</p>
+                <p className="text-[7px] font-black text-gray-500 uppercase tracking-[0.6em] whitespace-nowrap">P2P Encryption & bull; SOVEREIGN ASSEMBLY</p>
             </div>
         </div>
     );
