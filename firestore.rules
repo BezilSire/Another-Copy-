@@ -5,10 +5,13 @@ service cloud.firestore {
     // --- HELPER FUNCTIONS ---
     function isSignedIn() { return request.auth != null; }
     function isGuest() { return isSignedIn() && request.auth.token.firebase.sign_in_provider == 'anonymous'; }
-    function isMember() { return isSignedIn() && !isGuest(); }
+    function isMember() { 
+      return isSignedIn() && !isGuest(); 
+    }
     function isAdmin() { 
-      return isMember() && 
-        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; 
+      // Defensively check for document existence to prevent rules evaluation errors
+      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
+      return isMember() && userDoc != null && userDoc.data.role == 'admin'; 
     }
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
 
@@ -103,9 +106,14 @@ service cloud.firestore {
       allow create: if isMember(); 
       allow update: if isAdmin(); 
     }
+
+    match /broadcasts/{id} {
+      allow read, list: if isSignedIn();
+      allow write: if isAdmin();
+    }
     
     match /sustenance_cycles/{id} { allow read, list: if isMember(); allow write: if isAdmin(); }
-    match /sustenance_vouchers/{id} { allow read, list: if isMember(); allow write: if isAdmin(); }
+    match /vouchers/{id} { allow read, list: if isMember(); allow write: if isAdmin(); }
     match /activity/{id} { allow read, list: if isMember(); allow write: if isMember(); }
     match /reports/{id} { allow read, list, write: if isMember(); }
     match /price_verifications/{id} { allow read, list, create: if isMember(); allow update, delete: if isAdmin(); }

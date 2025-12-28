@@ -1,4 +1,3 @@
-
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -64,6 +63,8 @@ const disputesCollection = collection(db, 'disputes');
 const globalsCollection = collection(db, 'globals');
 const pendingPurchasesCollection = collection(db, 'pending_ubt_purchases');
 const meetingsCollection = collection(db, 'meetings');
+const broadcastsCollection = collection(db, 'broadcasts');
+const vouchersCollection = collection(db, 'vouchers');
 
 export const api = {
     login: (email: string, password: string): Promise<FirebaseUser> => {
@@ -247,7 +248,16 @@ export const api = {
     listenToUserVaults: (uid: string, cb: (v: any[]) => void): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'vaults'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), (error) => console.warn("Vault sync restricted:", error.message)),
     listenForConversations: (uid: string, cb: (c: Conversation[]) => void, err?: any): Unsubscribe => onSnapshot(query(conversationsCollection, where('members', 'array-contains', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation))), (error) => { if(err) err(error); else console.warn("Convo stream restricted:", error.message); }),
     listenForMessages: (cid: string, u: User, cb: (m: Message[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'conversations', cid, 'messages'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Message))), (error) => { if(err) err(error); else console.warn("Message sync restricted:", error.message); }),
-    listenForActivity: (circle: string, cb: (a: Activity[]) => void, err?: any): Unsubscribe => onSnapshot(query(activityCollection, where('causerCircle', '==', circle), orderBy('timestamp', 'desc'), limit(10)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), (error) => { if(err) err(error); else console.warn("Activity stream restricted:", error.message); }),
+    
+    listenForActivity: (circle: string, cb: (a: Activity[]) => void, err?: any): Unsubscribe => {
+        // Guard against undefined circle
+        if (!circle) {
+            console.warn("Activity listener aborted: No circle ID provided.");
+            return () => {};
+        }
+        return onSnapshot(query(activityCollection, where('causerCircle', '==', circle), orderBy('timestamp', 'desc'), limit(10)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), (error) => { if(err) err(error); else console.warn("Activity stream restricted:", error.message); });
+    },
+    
     listenForAllUsers: (admin: User, cb: (u: User[]) => void, err?: any): Unsubscribe => onSnapshot(usersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), (error) => { if(err) err(error); else console.warn("User list restricted:", error.message); }),
     listenForAllMembers: (admin: User, cb: (m: Member[]) => void, err?: any): Unsubscribe => onSnapshot(membersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), (error) => { if(err) err(error); else console.warn("Member list restricted:", error.message); }),
     listenForAllAgents: (admin: User, cb: (a: Agent[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Agent))), (error) => { if(err) err(error); else console.warn("Agent list restricted:", error.message); }),
@@ -259,7 +269,10 @@ export const api = {
     listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(query(payoutsCollection, where('userId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), (error) => { if(err) err(error); else console.warn("User payout restricted:", error.message); }),
     listenForReferredUsers: (uid: string, cb: (u: PublicUserProfile[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('referrerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile))), (error) => { if(err) err(error); else console.warn("Referral stream restricted:", error.message); }),
     listenForProposals: (cb: (p: Proposal[]) => void, err?: any): Unsubscribe => onSnapshot(query(proposalsCollection, orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Proposal))), (error) => { if(err) err(error); else console.warn("Proposal stream restricted:", error.message); }),
-    listenToResources: (circle: string, cb: (r: CitizenResource[]) => void): Unsubscribe => onSnapshot(circle === 'ANY' ? resourcesCollection : query(resourcesCollection, where('circle', '==', circle)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource))), (error) => console.warn("Resource stream restricted:", error.message)),
+    listenToResources: (circle: string, cb: (r: CitizenResource[]) => void): Unsubscribe => {
+        const q = circle === 'ANY' ? resourcesCollection : query(resourcesCollection, where('circle', '==', circle));
+        return onSnapshot(q, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource))), (error) => console.warn("Resource stream restricted:", error.message));
+    },
     listenToTribunals: (cb: (d: Dispute[]) => void): Unsubscribe => onSnapshot(query(disputesCollection, where('status', '==', 'TRIBUNAL')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Dispute))), (error) => console.warn("Tribunal stream restricted:", error.message)),
 
     listenForVentures: (admin: User, cb: (v: Venture[]) => void, err?: any): Unsubscribe => onSnapshot(collection(db, 'ventures'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), (error) => { if(err) err(error); else console.warn("Venture list restricted:", error.message); }),
@@ -374,9 +387,9 @@ export const api = {
         const ref = await addDoc(membersCollection, { ...d, agent_id: a.id, agent_name: a.name, date_registered: serverTimestamp(), welcome_message: welcome, membership_card_id: `UGC-M-${Math.random().toString(36).substring(2, 8).toUpperCase()}` });
         return { id: ref.id, ...d, agent_id: a.id, agent_name: a.name, welcome_message: welcome } as any;
     },
-    sendBroadcast: (u: User, m: string) => addDoc(collection(db, 'broadcasts'), { authorId: u.id, authorName: u.name, message: m, date: new Date().toISOString() }),
+    sendBroadcast: (u: User, m: string) => addDoc(broadcastsCollection, { authorId: u.id, authorName: u.name, message: m, date: new Date().toISOString() }),
     getBroadcasts: async () => {
-        const q = query(collection(db, 'broadcasts'), orderBy('date', 'desc'), limit(10));
+        const q = query(broadcastsCollection, orderBy('date', 'desc'), limit(10));
         const s = await getDocs(q);
         return s.docs.map(d => ({ id: d.id, ...d.data() } as any));
     },
@@ -559,7 +572,7 @@ export const api = {
     },
 
     getAllSustenanceVouchers: async (): Promise<SustenanceVoucher[]> => {
-        const snap = await getDocs(collection(db, 'vouchers'));
+        const snap = await getDocs(vouchersCollection);
         return snap.docs.map(d => ({ id: d.id, ...d.data() } as SustenanceVoucher));
     },
 

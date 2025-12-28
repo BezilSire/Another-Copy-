@@ -1,3 +1,4 @@
+
 import * as tweetnacl from 'tweetnacl';
 import * as bip39 from 'bip39';
 
@@ -39,6 +40,18 @@ const decodeBase64 = (s: string): Uint8Array => {
     }
 };
 
+/**
+ * Normalizes mnemonic input by removing extra spaces, line breaks, 
+ * and converting to lowercase for consistent mathematical derivation.
+ */
+const normalizeMnemonic = (phrase: string): string => {
+    return phrase
+        .trim()
+        .toLowerCase()
+        .replace(/[\r\n\t]/g, ' ') // Replace newlines/tabs with space
+        .replace(/\s+/g, ' ');      // Collapse multiple spaces into one
+};
+
 export const cryptoService = {
     generateMnemonic: (): string => {
         return bip39.generateMnemonic();
@@ -46,14 +59,18 @@ export const cryptoService = {
 
     validateMnemonic: (mnemonic: string): boolean => {
         try {
-            return bip39.validateMnemonic(mnemonic.trim().toLowerCase());
+            const normalized = normalizeMnemonic(mnemonic);
+            const wordCount = normalized.split(' ').length;
+            if (wordCount !== 12 && wordCount !== 24) return false;
+            return bip39.validateMnemonic(normalized);
         } catch (e) {
             return false;
         }
     },
 
     mnemonicToKeyPair: (mnemonic: string) => {
-        const seed = bip39.mnemonicToSeedSync(mnemonic.trim().toLowerCase());
+        const normalized = normalizeMnemonic(mnemonic);
+        const seed = bip39.mnemonicToSeedSync(normalized);
         const secretKey = seed.slice(0, 32);
         const keyPair = nacl.sign.keyPair.fromSeed(secretKey);
         
@@ -68,10 +85,11 @@ export const cryptoService = {
     },
 
     saveVault: async (data: VaultData, pin: string) => {
-        const encrypted = await cryptoService._encryptWithPin(JSON.stringify(data), pin);
+        const normalizedMnemonic = normalizeMnemonic(data.mnemonic);
+        const encrypted = await cryptoService._encryptWithPin(JSON.stringify({ ...data, mnemonic: normalizedMnemonic }), pin);
         localStorage.setItem(ENCRYPTED_VAULT_STORAGE, encrypted);
         
-        const keys = cryptoService.mnemonicToKeyPair(data.mnemonic);
+        const keys = cryptoService.mnemonicToKeyPair(normalizedMnemonic);
         localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, keys.publicKey);
         localStorage.setItem(SIGN_SECRET_KEY_STORAGE, keys.secretKey);
     },
@@ -83,12 +101,12 @@ export const cryptoService = {
         try {
             const dataStr = await cryptoService._decryptWithPin(encrypted, pin);
             const data = JSON.parse(dataStr) as VaultData;
-            if (!bip39.validateMnemonic(data.mnemonic)) return null;
+            const normalized = normalizeMnemonic(data.mnemonic);
             
-            const keys = cryptoService.mnemonicToKeyPair(data.mnemonic);
+            const keys = cryptoService.mnemonicToKeyPair(normalized);
             localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, keys.publicKey);
             localStorage.setItem(SIGN_SECRET_KEY_STORAGE, keys.secretKey);
-            return data;
+            return { ...data, mnemonic: normalized };
         } catch (e) {
             return null;
         }
@@ -115,12 +133,11 @@ export const cryptoService = {
             enc.encode(text)
         );
         
-        const vaultObj = {
+        return JSON.stringify({
             iv: encodeBase64(iv),
             salt: encodeBase64(salt),
             data: encodeBase64(new Uint8Array(ciphertext))
-        };
-        return JSON.stringify(vaultObj);
+        });
     },
 
     _decryptWithPin: async (vaultJson: string, pin: string): Promise<string> => {
@@ -157,11 +174,10 @@ export const cryptoService = {
 
     verifySignature: (payload: string, signatureBase64: string, publicKeyBase64WithPrefix: string): boolean => {
         try {
-            const publicKeyBase64 = publicKeyBase64WithPrefix.startsWith('UBT-') 
+            const publicKeyBase = publicKeyBase64WithPrefix.startsWith('UBT-') 
                 ? publicKeyBase64WithPrefix.substring(4) 
                 : publicKeyBase64WithPrefix;
-                
-            const publicKey = decodeBase64(publicKeyBase64);
+            const publicKey = decodeBase64(publicKeyBase);
             const signature = decodeBase64(signatureBase64);
             return nacl.sign.detached.verify(encodeUTF8(payload), signature, publicKey);
         } catch (e) {

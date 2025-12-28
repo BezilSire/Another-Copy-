@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, Meeting, ParticipantStatus, RTCSignal, ICESignal } from '../types';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
@@ -34,12 +34,16 @@ const ParticipantTile: React.FC<{
     isHost?: boolean;
     onRevoke?: () => void;
 }> = ({ participant, stream, isLocal, isHost, onRevoke }) => {
-    const videoRef = useRef<HTMLVideoElement>(null);
-
-    // Fix: Re-attach srcObject whenever the video element is mounted/re-mounted (isVideoOn changes)
-    useEffect(() => {
-        if (videoRef.current && stream && participant.isVideoOn) {
-            videoRef.current.srcObject = stream;
+    
+    /**
+     * Callback Ref for stable video attachment.
+     * This is more reliable than useEffect + useRef when nodes are conditionally rendered.
+     */
+    const videoRef = useCallback((node: HTMLVideoElement | null) => {
+        if (node && stream && participant.isVideoOn) {
+            node.srcObject = stream;
+            // Explicitly play to handle some browser edge cases during track re-enabling
+            node.play().catch(e => console.debug("Autoplay interrupted:", e));
         }
     }, [stream, participant.isVideoOn]);
 

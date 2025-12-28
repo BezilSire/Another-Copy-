@@ -10,6 +10,7 @@ import { auth } from '../services/firebase';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { GenesisNodeFlow } from './GenesisNodeFlow';
 import { UserCircleIcon } from './icons/UserCircleIcon';
+import { useToast } from '../contexts/ToastContext';
 
 interface RecoveryProtocolProps {
     onComplete: (mnemonic: string, pin: string, data: VaultData) => void;
@@ -22,6 +23,7 @@ const EXAMPLE_PHRASE = [
 ];
 
 export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, onBack }) => {
+    const { addToast } = useToast();
     const [phraseParts, setPhraseParts] = useState<string[]>(Array(12).fill(''));
     const [pin, setPin] = useState('');
     const [confirmPin, setConfirmPin] = useState('');
@@ -41,7 +43,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
     }, [step, isLazarusMode]);
 
     const handleWordChange = (val: string, index: number) => {
-        const cleanVal = val.trim().toLowerCase();
+        const cleanVal = val.trim().toLowerCase().replace(/[^a-z\s]/g, '');
         
         if (cleanVal.includes(' ')) {
             const words = cleanVal.split(/\s+/).slice(0, 12);
@@ -73,7 +75,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
     const handleVerifySeed = async () => {
         const fullPhrase = phraseParts.join(' ').trim();
         if (!cryptoService.validateMnemonic(fullPhrase)) {
-            alert("INTEGRITY ERROR: Recovery phrase invalid format.");
+            addToast("INTEGRITY ERROR: Recovery phrase invalid format.", "error");
             return;
         }
 
@@ -95,12 +97,12 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                 setScanningStatus("IDENTITY_FOUND");
                 setStep(2);
             } else {
-                setScanningStatus("NODE_IS_GENESIS");
+                setScanningStatus("NEW_NODE_DETECTION");
                 setStep(2);
             }
         } catch (e) {
             console.error("Recovery scan failed:", e);
-            alert("Handshake aborted. Protocol inaccessible.");
+            addToast("Handshake aborted. Check connection.", "error");
         } finally {
             setIsVerifying(false);
         }
@@ -108,7 +110,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
 
     const handleReset = () => {
         if (pin.length !== 6 || pin !== confirmPin) {
-            alert("PIN MISMATCH: Secure sequences must be identical.");
+            addToast("PIN MISMATCH: Secure sequences must be identical.", "error");
             return;
         }
 
@@ -116,7 +118,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
         const vaultData: VaultData = {
             mnemonic,
             email: recoveredAccount?.email || auth.currentUser?.email || undefined
-        };
+        } as any;
         onComplete(mnemonic, pin, vaultData);
     };
 
@@ -126,24 +128,36 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
             const vaultData: VaultData = {
                 mnemonic: newMnemonic,
                 email: auth.currentUser?.email || undefined
-            };
+            } as any;
             onComplete(newMnemonic, newPin, vaultData);
         } finally {
             setIsVerifying(false);
         }
     };
 
+    const initiateLazarus = () => {
+        if (!auth.currentUser) {
+            addToast("AUTHENTICATION_REQUIRED: You must be logged in to rotate node keys via Lazarus protocol.", "error");
+            onBack(); // Send them back to selector to login
+            return;
+        }
+
+        if(window.confirm("ACCOUNT_RECOVERY: This will overwrite your existing local vault using your authenticated credentials. Proceed?")) {
+            setIsLazarusMode(true);
+        }
+    };
+
     if (isLazarusMode) {
         return (
             <div className="space-y-8 animate-fade-in w-full max-w-2xl">
-                 <div className="module-frame glass-module p-10 rounded-[3rem] border-red-500/20 shadow-premium animate-fade-in text-center space-y-8">
+                 <div className="module-frame glass-module p-10 rounded-[3rem] border-red-500/20 shadow-premium text-center space-y-8">
                     <div className="p-5 bg-red-500/10 rounded-full w-20 h-20 mx-auto flex items-center justify-center border border-red-500/20 shadow-glow-matrix">
                         <AlertTriangleIcon className="h-10 w-10 text-red-500" />
                     </div>
                     <div className="space-y-4">
                         <h2 className="text-2xl font-black text-white uppercase tracking-tighter leading-none">Lazarus Protocol</h2>
                         <p className="text-sm text-gray-400 leading-relaxed max-w-sm mx-auto uppercase tracking-widest opacity-80">
-                            Emergency Key Rotation for node: <strong className="text-brand-gold">{auth.currentUser?.email}</strong>. Use your account authentication to establish a new Identity Anchor.
+                            Emergency Key Rotation for node: <strong className="text-brand-gold">{auth.currentUser?.email}</strong>. This replaces your lost phrase with a new one.
                         </p>
                     </div>
                 </div>
@@ -189,14 +203,14 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                     <KeyIcon className="h-10 w-10 text-brand-gold" />
                 </div>
                 <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text leading-none">Node Recovery</h2>
-                <p className="label-caps mt-3 !text-emerald-500/80 !text-[8px] !tracking-[0.4em]">Sovereign Reconstitution Protocol</p>
+                <p className="label-caps mt-3 !text-emerald-500/80 !text-[8px] !tracking-[0.4em]">Sovereign Replay Protocol</p>
             </div>
 
             {step === 1 ? (
-                <div className="space-y-8 animate-fade-in relative z-10">
+                <div className="space-y-8 animate-fade-in relative z-50">
                     <div className="bg-brand-gold/5 border border-brand-gold/20 p-5 rounded-2xl text-center">
                         <p className="text-[10px] text-brand-gold font-black uppercase tracking-[0.2em] leading-loose">
-                            Enter your 12-word Identity Anchor in order to recover your <span className="text-white">existing Node and protocol stake</span>.
+                            Paste or type your 12-word Identity Anchor to restore node functionality.
                         </p>
                     </div>
                     
@@ -219,11 +233,11 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                         ))}
                     </div>
 
-                    <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-4 relative z-50">
                         <button 
                             onClick={handleVerifySeed}
                             disabled={isVerifying || phraseParts.some(w => !w)}
-                            className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all disabled:opacity-20 flex justify-center items-center gap-3"
+                            className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all disabled:opacity-20 flex justify-center items-center gap-3 cursor-pointer"
                         >
                             {isVerifying ? (
                                 <>
@@ -231,26 +245,17 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                                     <span>{scanningStatus}</span>
                                 </>
                             ) : (
-                                "Authorize Identity Lookup"
+                                "Authorize Node Discovery"
                             )}
                         </button>
 
-                        <div className="pt-8 border-t border-white/5 space-y-6 text-center">
-                            <div className="flex items-center gap-3 justify-center">
-                                <div className="h-px w-8 bg-white/10"></div>
-                                <p className="text-[9px] text-gray-500 uppercase font-black tracking-widest">Forgotten PIN / Lost Phrase?</p>
-                                <div className="h-px w-8 bg-white/10"></div>
-                            </div>
-                            
+                        <div className="pt-8 border-t border-white/5 space-y-6 text-center relative z-50">
+                            <p className="text-[9px] text-gray-500 uppercase font-black tracking-widest">Lost Phrase / Forgotten PIN?</p>
                             <div className="p-6 bg-blue-900/5 rounded-3xl border border-blue-900/20 group hover:border-blue-500/30 transition-all">
                                 <p className="text-[10px] text-gray-400 mb-4 leading-relaxed uppercase tracking-widest font-black opacity-60">Restore access via cloud credentials.</p>
                                 <button 
-                                    onClick={() => {
-                                        if(window.confirm("ACCOUNT_RECOVERY: This will overwrite your existing local vault using your authenticated credentials. Proceed?")) {
-                                            setIsLazarusMode(true);
-                                        }
-                                    }}
-                                    className="px-8 py-4 bg-white/5 hover:bg-brand-gold hover:text-slate-950 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/10 flex items-center justify-center gap-3 mx-auto shadow-xl"
+                                    onClick={initiateLazarus}
+                                    className="px-8 py-4 bg-white/5 hover:bg-brand-gold hover:text-slate-950 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/10 flex items-center justify-center gap-3 mx-auto shadow-xl cursor-pointer relative z-50"
                                 >
                                     <UserCircleIcon className="h-5 w-5" /> Account Rotation
                                 </button>
@@ -266,23 +271,19 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                         </div>
                         {recoveredAccount ? (
                             <div>
-                                <p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest">Node Ownership Verified</p>
+                                <p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest">Protocol Handshake Match</p>
                                 <p className="text-lg text-white font-black uppercase mt-1">{recoveredAccount.name}</p>
-                                <div className="mt-4 p-4 bg-black/40 border border-white/5 rounded-2xl">
-                                    <p className="text-[8px] text-gray-500 uppercase font-black tracking-widest mb-1">Associated Address</p>
-                                    <p className="text-[10px] text-brand-gold font-mono truncate">{recoveredAccount.email}</p>
-                                </div>
                             </div>
                         ) : (
                             <div>
-                                <p className="text-sm text-gray-300 font-bold uppercase tracking-widest">Identity Verified</p>
-                                <p className="label-caps !text-[9px] !text-gray-500">New Sovereign Deployment</p>
+                                <p className="text-sm text-gray-300 font-bold uppercase tracking-widest">Node Verified</p>
+                                <p className="label-caps !text-[9px] !text-gray-500">New Deployment State</p>
                             </div>
                         )}
                     </div>
                     
                     <div className="space-y-4">
-                        <p className="text-[9px] text-gray-500 uppercase font-black tracking-widest text-center">Establish local node access PIN</p>
+                        <p className="text-[9px] text-gray-500 uppercase font-black tracking-widest text-center">Establish node access PIN</p>
                         <input 
                             type="password"
                             inputMode="numeric"
@@ -306,15 +307,15 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                     <button 
                         onClick={handleReset}
                         disabled={isVerifying || pin.length < 6 || pin !== confirmPin}
-                        className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all disabled:opacity-20"
+                        className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all disabled:opacity-20 cursor-pointer"
                     >
-                        {isVerifying ? <LoaderIcon className="h-6 w-6 animate-spin mx-auto"/> : "Complete Re-Anchor"}
+                        {isVerifying ? <LoaderIcon className="h-6 w-6 animate-spin mx-auto"/> : "Complete Handshake"}
                     </button>
                 </div>
             )}
 
-            <button onClick={onBack} className="w-full mt-10 text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-[0.5em] transition-colors flex items-center justify-center gap-3 relative z-10">
-                <ArrowLeftIcon className="h-3 w-3" /> Abort Protocol
+            <button onClick={onBack} className="w-full mt-10 text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-[0.5em] transition-colors flex items-center justify-center gap-3 relative z-10 cursor-pointer">
+                <ArrowLeftIcon className="h-3 w-3" /> Return
             </button>
         </div>
     );

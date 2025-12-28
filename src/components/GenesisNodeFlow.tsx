@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { cryptoService } from '../services/cryptoService';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
@@ -24,7 +25,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
             const timer = setTimeout(() => {
                 setMnemonic(cryptoService.generateMnemonic());
                 setIsGenerating(false);
-            }, 1000);
+            }, 800);
             return () => clearTimeout(timer);
         }
     }, [step, mnemonic]);
@@ -39,7 +40,9 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
             if (verifyInput.trim().toLowerCase() === words[verifyWordIndex]) {
                 setStep(3);
             } else {
-                alert("Verification failed. Protocol Integrity Mismatch.");
+                alert("INTEGRITY ERROR: Verification word mismatch. Re-verify your phrase.");
+                setStep(1);
+                setVerifyInput('');
             }
         } else if (step === 3) {
             if (pin.length === 6 && pin === confirmPin) {
@@ -70,7 +73,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                 <div className="space-y-8 animate-fade-in">
                     <div className="bg-red-950/20 border border-red-500/20 p-5 rounded-2xl text-center">
                         <p className="text-[10px] text-red-500 font-black uppercase tracking-[0.2em] leading-loose">
-                            These 12 words are your <span className="text-white">Total Sovereign Power</span>. Do not store them digitally. Write them on paper and store in a physical vault.
+                            These 12 words are your <span className="text-white">Total Sovereign Power</span>. Write them down offline. Loss results in permanent node lockout.
                         </p>
                     </div>
                     
@@ -88,7 +91,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                         ))}
                     </div>
 
-                    <button onClick={handleNextStep} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[11px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-3">
+                    <button onClick={handleNextStep} disabled={isGenerating} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[11px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-3">
                         I Have Anchored My Phrase <ArrowRightIcon className="h-4 w-4"/>
                     </button>
                 </div>
@@ -100,7 +103,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                     <input 
                         type="text" 
                         value={verifyInput}
-                        onChange={e => setVerifyInput(e.target.value)}
+                        onChange={e => setVerifyInput(e.target.value.toLowerCase().trim())}
                         className="w-full bg-slate-900 border-2 border-brand-gold/40 p-6 rounded-2xl text-white font-mono text-center text-2xl uppercase tracking-[0.3em] focus:ring-4 focus:ring-brand-gold/10 outline-none"
                         placeholder="WORD..."
                         autoFocus
@@ -142,7 +145,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                 </div>
             )}
 
-            <button onClick={onBack} className="w-full mt-10 text-[9px] font-black text-gray-700 hover:text-white uppercase tracking-[0.5em] transition-colors">
+            <button onClick={onBack} className="w-full mt-10 text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-[0.5em] transition-colors">
                 Cancel Deployment
             </button>
         </div>
