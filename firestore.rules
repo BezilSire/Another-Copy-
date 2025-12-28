@@ -62,19 +62,16 @@ service cloud.firestore {
       match /messages/{id} { allow read, write, list: if isMember(); }
     }
 
-    // --- MEETINGS (WebRTC Signaling) ---
+    // --- MEETINGS (Mesh Enhanced) ---
     match /meetings/{meetingId} {
-      // allow get for guests to validate the link before sign-in
       allow get: if true;
-      // list requires admin
       allow list: if isAdmin();
-      // create requires a verified member
       allow create: if isMember();
-      // update signals and participants requires the user to be signed in (anonymous or full)
       allow update: if isSignedIn();
-      // delete requires host or admin
       allow delete: if isAdmin() || (isSignedIn() && resource.data.hostId == request.auth.uid);
 
+      match /signals/{id} { allow read, write, list: if isSignedIn(); }
+      match /ice/{id} { allow read, write, list: if isSignedIn(); }
       match /callerCandidates/{id} { allow read, write: if isSignedIn(); }
       match /calleeCandidates/{id} { allow read, write: if isSignedIn(); }
     }

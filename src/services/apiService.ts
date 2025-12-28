@@ -46,7 +46,7 @@ import {
     Conversation, Message, Notification, Activity,
     PublicUserProfile, PayoutRequest, Transaction, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase,
     CitizenResource, Dispute, Meeting, GlobalEconomy, CommunityValuePool, Proposal, Venture, SustenanceCycle, SustenanceVoucher, Comment, Distribution, VentureEquityHolding,
-    RedemptionCycle, ParticipantStatus
+    RedemptionCycle, ParticipantStatus, RTCSignal, ICESignal
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -62,13 +62,14 @@ const resourcesCollection = collection(db, 'resources');
 const disputesCollection = collection(db, 'disputes');
 const globalsCollection = collection(db, 'globals');
 const pendingPurchasesCollection = collection(db, 'pending_ubt_purchases');
+const meetingsCollection = collection(db, 'meetings');
 
 export const api = {
     login: (email: string, password: string): Promise<FirebaseUser> => {
         return signInWithEmailAndPassword(auth, email, password)
             .then(userCredential => userCredential.user);
     },
-    loginAnonymously: (_displayName?: string): Promise<FirebaseUser> => {
+    loginAnonymously: (displayName: string): Promise<FirebaseUser> => {
         return signInAnonymously(auth)
             .then(userCredential => userCredential.user);
     },
@@ -188,37 +189,87 @@ export const api = {
         if (vaultDoc.exists()) return { id: vaultDoc.id, name: vaultDoc.data()?.name, ubtBalance: vaultDoc.data()?.balance, role: 'admin', circle: 'TREASURY' } as any;
         return null;
     },
-    listenForGlobalEconomy: (cb: (e: GlobalEconomy | null) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(doc(globalsCollection, 'economy'), s => cb(s.exists() ? s.data() as GlobalEconomy : null), err),
-    listenToVaults: (cb: (v: TreasuryVault[]) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(vaultsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), err),
-    listenForNotifications: (uid: string, cb: (n: Notification[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'notifications'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Notification))), err),
-    listenForUserTransactions: (uid: string, cb: (txs: Transaction[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'notifications'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as any))), err),
-    listenToUserVaults: (uid: string, cb: (v: any[]) => void): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'vaults'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), console.error),
-    listenForConversations: (uid: string, cb: (c: Conversation[]) => void, err?: any): Unsubscribe => onSnapshot(query(conversationsCollection, where('members', 'array-contains', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation))), err),
-    listenForMessages: (cid: string, u: User, cb: (m: Message[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'conversations', cid, 'messages'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Message))), err),
-    listenForActivity: (circle: string, cb: (a: Activity[]) => void, err?: any): Unsubscribe => onSnapshot(query(activityCollection, where('causerCircle', '==', circle), orderBy('timestamp', 'desc'), limit(10)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), err),
-    listenForAllUsers: (admin: User, cb: (u: User[]) => void, err?: any): Unsubscribe => onSnapshot(usersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), err),
-    listenForAllMembers: (admin: User, cb: (m: Member[]) => void, err?: any): Unsubscribe => onSnapshot(membersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
-    listenForAllAgents: (admin: User, cb: (a: Agent[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Agent))), err),
-    listenForPendingMembers: (admin: User, cb: (m: Member[]) => void, err?: any): Unsubscribe => onSnapshot(query(membersCollection, where('payment_status', '==', 'pending_verification')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
-    listenForReports: (admin: User, cb: (r: any[]) => void, err?: any): Unsubscribe => onSnapshot(collection(db, 'reports'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), err),
-    listenForPayoutRequests: (admin: User, cb: (r: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(payoutsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
-    listenForPendingPurchases: (cb: (p: PendingUbtPurchase[]) => void, err?: any): Unsubscribe => onSnapshot(query(pendingPurchasesCollection, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), err),
-    listenForUserVentures: (uid: string, cb: (v: any[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('ownerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), err),
-    listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(query(payoutsCollection, where('userId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
-    listenForReferredUsers: (uid: string, cb: (u: PublicUserProfile[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('referrerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile))), err),
-    listenForProposals: (cb: (p: Proposal[]) => void, err?: any): Unsubscribe => onSnapshot(query(proposalsCollection, orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Proposal))), err),
-    listenToResources: (circle: string, cb: (r: CitizenResource[]) => void): Unsubscribe => onSnapshot(circle === 'ANY' ? resourcesCollection : query(resourcesCollection, where('circle', '==', circle)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource)))),
-    listenToTribunals: (cb: (d: Dispute[]) => void): Unsubscribe => onSnapshot(query(disputesCollection, where('status', '==', 'TRIBUNAL')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Dispute)))),
 
-    listenForVentures: (admin: User, cb: (v: Venture[]) => void, err?: any): Unsubscribe => onSnapshot(collection(db, 'ventures'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err),
+    // --- MEETINGS PROTOCOL (MESH ENHANCED) ---
+    createMeeting: async (u: User, title: string, expiresAt: Date): Promise<string> => {
+        const id = Math.floor(100000 + Math.random() * 900000).toString();
+        await setDoc(doc(meetingsCollection, id), {
+            id,
+            hostId: u.id,
+            hostName: u.name,
+            title,
+            createdAt: serverTimestamp(),
+            expiresAt: Timestamp.fromDate(expiresAt),
+            participants: {
+                [u.id]: { 
+                    uid: u.id, 
+                    name: u.name, 
+                    isVideoOn: true, 
+                    isMicOn: true, 
+                    isSpeaking: false, 
+                    role: u.role,
+                    joinedAt: Date.now()
+                }
+            }
+        });
+        return id;
+    },
+    joinMeeting: async (id: string): Promise<Meeting | null> => {
+        const s = await getDoc(doc(meetingsCollection, id));
+        return s.exists() ? { id: s.id, ...s.data() } as Meeting : null;
+    },
+    updateMeetingSignal: (id: string, data: Partial<Meeting>) => updateDoc(doc(meetingsCollection, id), data),
+    updateParticipantStatus: (id: string, uid: string, status: ParticipantStatus | null) => updateDoc(doc(meetingsCollection, id), { [`participants.${uid}`]: status }),
+    listenForMeetingSignals: (id: string, cb: (m: Meeting) => void): Unsubscribe => onSnapshot(doc(meetingsCollection, id), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
     
-    listenForCVP: (admin: User, cb: (c: CommunityValuePool | null) => void, err?: any): Unsubscribe => onSnapshot(doc(globalsCollection, 'cvp'), s => cb(s.exists() ? { id: s.id, ...s.data() } as CommunityValuePool : null), err),
+    // Peer-to-Peer Mesh Signaling
+    addSignal: (meetingId: string, signal: RTCSignal) => addDoc(collection(db, 'meetings', meetingId, 'signals'), { ...signal, timestamp: Date.now() }),
+    addIceCandidate: (meetingId: string, candidate: ICESignal) => addDoc(collection(db, 'meetings', meetingId, 'ice'), { ...candidate, timestamp: Date.now() }),
+    
+    listenForSignals: (meetingId: string, toUid: string, cb: (s: RTCSignal) => void): Unsubscribe => {
+        return onSnapshot(query(collection(db, 'meetings', meetingId, 'signals'), where('to', '==', toUid)), s => {
+            s.docChanges().forEach(change => { if (change.type === 'added') cb(change.doc.data() as RTCSignal); });
+        });
+    },
+    listenForIce: (meetingId: string, toUid: string, cb: (c: ICESignal) => void): Unsubscribe => {
+        return onSnapshot(query(collection(db, 'meetings', meetingId, 'ice'), where('to', '==', toUid)), s => {
+            s.docChanges().forEach(change => { if (change.type === 'added') cb(change.doc.data() as ICESignal); });
+        });
+    },
 
-    listenForFundraisingVentures: (cb: (v: Venture[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('status', '==', 'fundraising')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err),
+    deleteMeeting: (id: string) => deleteDoc(doc(meetingsCollection, id)),
 
-    listenForPostsByAuthor: (authorId: string, cb: (posts: Post[]) => void, err?: any): Unsubscribe => onSnapshot(query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), err),
+    listenForGlobalEconomy: (cb: (e: GlobalEconomy | null) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(doc(globalsCollection, 'economy'), s => cb(s.exists() ? s.data() as GlobalEconomy : null), err),
+    listenToVaults: (cb: (v: TreasuryVault[]) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(vaultsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), (error) => { console.warn("Vault sync restricted:", error); if(err) err(error); }),
+    listenForNotifications: (uid: string, cb: (n: Notification[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'notifications'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Notification))), (error) => { console.warn("Notification sync restricted:", error); if(err) err(error); }),
+    listenForUserTransactions: (uid: string, cb: (txs: Transaction[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'transactions'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as any))), (error) => { console.warn("Transaction sync restricted:", error); if(err) err(error); }),
+    listenToUserVaults: (uid: string, cb: (v: any[]) => void): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'vaults'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), (error) => console.warn("User vault sync restricted.")),
+    listenForConversations: (uid: string, cb: (c: Conversation[]) => void, err?: any): Unsubscribe => onSnapshot(query(conversationsCollection, where('members', 'array-contains', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation))), (error) => { console.warn("Convo sync restricted:", error); if(err) err(error); }),
+    listenForMessages: (cid: string, u: User, cb: (m: Message[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'conversations', cid, 'messages'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Message))), (error) => { console.warn("Message sync restricted:", error); if(err) err(error); }),
+    listenForActivity: (circle: string, cb: (a: Activity[]) => void, err?: any): Unsubscribe => onSnapshot(query(activityCollection, where('causerCircle', '==', circle), orderBy('timestamp', 'desc'), limit(10)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), (error) => { console.warn("Activity sync restricted:", error); if(err) err(error); }),
+    listenForAllUsers: (admin: User, cb: (u: User[]) => void, err?: any): Unsubscribe => onSnapshot(usersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), (error) => { console.warn("Directory restricted:", error); if(err) err(error); }),
+    listenForAllMembers: (admin: User, cb: (m: Member[]) => void, err?: any): Unsubscribe => onSnapshot(membersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), (error) => { console.warn("Member list restricted:", error); if(err) err(error); }),
+    listenForAllAgents: (admin: User, cb: (a: Agent[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Agent))), (error) => { console.warn("Agent list restricted:", error); if(err) err(error); }),
+    listenForPendingMembers: (admin: User, cb: (m: Member[]) => void, err?: any): Unsubscribe => onSnapshot(query(membersCollection, where('payment_status', '==', 'pending_verification')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), (error) => { console.warn("Queue sync restricted:", error); if(err) err(error); }),
+    listenForReports: (admin: User, cb: (r: any[]) => void, err?: any): Unsubscribe => onSnapshot(collection(db, 'reports'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), (error) => { console.warn("Report sync restricted:", error); if(err) err(error); }),
+    listenForPayoutRequests: (admin: User, cb: (r: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(payoutsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), (error) => { console.warn("Payout sync restricted:", error); if(err) err(error); }),
+    listenForPendingPurchases: (cb: (p: PendingUbtPurchase[]) => void, err?: any): Unsubscribe => onSnapshot(query(pendingPurchasesCollection, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), (error) => { console.warn("Bridge sync restricted:", error); if(err) err(error); }),
+    listenForUserVentures: (uid: string, cb: (v: any[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('ownerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), (error) => { console.warn("Venture sync restricted:", error); if(err) err(error); }),
+    listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(query(payoutsCollection, where('userId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), (error) => { console.warn("Payout tracking restricted:", error); if(err) err(error); }),
+    listenForReferredUsers: (uid: string, cb: (u: PublicUserProfile[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('referrerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile))), (error) => { console.warn("Referral sync restricted:", error); if(err) err(error); }),
+    listenForProposals: (cb: (p: Proposal[]) => void, err?: any): Unsubscribe => onSnapshot(query(proposalsCollection, orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Proposal))), (error) => { console.warn("Governance sync restricted:", error); if(err) err(error); }),
+    listenToResources: (circle: string, cb: (r: CitizenResource[]) => void): Unsubscribe => onSnapshot(circle === 'ANY' ? resourcesCollection : query(resourcesCollection, where('circle', '==', circle)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource))), (error) => console.warn("Registry sync restricted.")),
+    listenToTribunals: (cb: (d: Dispute[]) => void): Unsubscribe => onSnapshot(query(disputesCollection, where('status', '==', 'TRIBUNAL')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Dispute))), (error) => console.warn("Justice sync restricted.")),
 
-    listenForComments: (parentId: string, cb: (comments: Comment[]) => void, coll: 'posts' | 'proposals', err?: any): Unsubscribe => onSnapshot(query(collection(db, coll, parentId, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), err),
+    listenForVentures: (admin: User, cb: (v: Venture[]) => void, err?: any): Unsubscribe => onSnapshot(collection(db, 'ventures'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), (error) => { console.warn("Venture list restricted:", error); if(err) err(error); }),
+    
+    listenForCVP: (admin: User, cb: (c: CommunityValuePool | null) => void, err?: any): Unsubscribe => onSnapshot(doc(globalsCollection, 'cvp'), s => cb(s.exists() ? { id: s.id, ...s.data() } as CommunityValuePool : null), (error) => { console.warn("Treasury pool restricted:", error); if(err) err(error); }),
+
+    listenForFundraisingVentures: (cb: (v: Venture[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('status', '==', 'fundraising')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), (error) => { console.warn("Fundraising sync restricted:", error); if(err) err(error); }),
+
+    listenForPostsByAuthor: (authorId: string, cb: (posts: Post[]) => void, err?: any): Unsubscribe => onSnapshot(query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), (error) => { console.warn("Post stream restricted:", error); if(err) err(error); }),
+
+    listenForComments: (parentId: string, cb: (comments: Comment[]) => void, coll: 'posts' | 'proposals', err?: any): Unsubscribe => onSnapshot(query(collection(db, coll, parentId, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), (error) => { console.warn("Comment sync restricted:", error); if(err) err(error); }),
 
     initializeTreasury: async (admin: Admin) => {
         const batch = writeBatch(db);
@@ -238,40 +289,6 @@ export const api = {
     },
     toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
     registerResource: (data: Partial<CitizenResource>) => addDoc(resourcesCollection, { ...data, createdAt: serverTimestamp() }),
-
-    createMeeting: async (u: User, title: string, expiresAt: Date): Promise<string> => {
-        const id = Math.floor(100000 + Math.random() * 900000).toString();
-        await setDoc(doc(db, 'meetings', id), {
-            id,
-            hostId: u.id,
-            hostName: u.name,
-            title,
-            createdAt: serverTimestamp(),
-            expiresAt: Timestamp.fromDate(expiresAt),
-        });
-        return id;
-    },
-    
-    joinMeeting: async (id: string): Promise<Meeting | null> => {
-        const s = await getDoc(doc(db, 'meetings', id));
-        return s.exists() ? { id: s.id, ...s.data() } as Meeting : null;
-    },
-    
-    updateMeetingSignal: (id: string, data: Partial<Meeting>) => updateDoc(doc(db, 'meetings', id), data),
-    // Added updateParticipantStatus method to fix missing property error in VideoMeeting.tsx
-    updateParticipantStatus: (id: string, uid: string, status: ParticipantStatus) => updateDoc(doc(db, 'meetings', id), { [`participants.${uid}`]: status }),
-    
-    listenForMeetingSignals: (id: string, cb: (m: Meeting) => void): Unsubscribe => onSnapshot(doc(db, 'meetings', id), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
-    
-    addIceCandidate: (id: string, type: 'caller' | 'callee', candidate: any) => addDoc(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), candidate),
-    
-    listenForIceCandidates: (id: string, type: 'caller' | 'callee', cb: (c: any) => void): Unsubscribe => onSnapshot(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), s => {
-        s.docChanges().forEach(change => {
-            if (change.type === 'added') cb(change.doc.data());
-        });
-    }),
-    
-    deleteMeeting: (id: string) => deleteDoc(doc(db, 'meetings', id)),
 
     createPost: async (u: User, content: string, type: Post['types'], award: number, skills: string[] = []) => addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: skills, commentCount: 0, repostCount: 0, ccapAwarded: award }),
     deletePost: (id: string) => deleteDoc(doc(postsCollection, id)),

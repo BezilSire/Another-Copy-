@@ -15,9 +15,9 @@ interface State {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-// Fix: Explicitly importing Component to ensure base class members like setState and props are correctly recognized by TypeScript
+// Fix: Use explicit Component import to ensure inheritance is properly tracked by the compiler
 export class ErrorBoundary extends Component<Props, State> {
-  public override state: State = {
+  public state: State = {
     hasError: false,
     error: null,
     errorInfo: null
@@ -27,9 +27,9 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error, errorInfo: null };
   }
 
-  public override componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+  // Fix: Extending Component ensures setState is available
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error);
-    // Fix: setState is correctly inherited from Component when explicitly imported
     this.setState({ error, errorInfo });
   }
 
@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component<Props, State> {
     window.location.reload();
   };
 
-  public override render() {
+  public render() {
     const { hasError, error } = this.state;
 
     if (hasError) {
@@ -68,7 +68,7 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Fix: props is correctly inherited from Component when explicitly imported
+    // Fix: Extending Component ensures props is available
     return this.props.children;
   }
 }

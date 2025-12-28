@@ -1,3 +1,4 @@
+
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -16,6 +17,7 @@ export interface ParticipantStatus {
     isMicOn: boolean;
     isSpeaking: boolean;
     role: string;
+    joinedAt: number;
 }
 
 export interface Meeting {
@@ -25,10 +27,29 @@ export interface Meeting {
     title: string;
     createdAt: Timestamp;
     expiresAt: Timestamp;
-    offer?: any;
-    answer?: any;
     participants: { [uid: string]: ParticipantStatus };
     kickedParticipantId?: string;
+    // Fix: Added offer and answer properties for WebRTC signaling
+    offer?: any;
+    answer?: any;
+}
+
+// Signaling structures for Mesh
+export interface RTCSignal {
+    type: 'offer' | 'answer';
+    sdp: string;
+    from: string;
+    to: string;
+    timestamp: number;
+}
+
+export interface ICESignal {
+    candidate: string;
+    sdpMLineIndex: number;
+    sdpMid: string;
+    from: string;
+    to: string;
+    timestamp: number;
 }
 
 export interface PayoutRequest {

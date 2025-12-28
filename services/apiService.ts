@@ -46,7 +46,7 @@ import {
     Conversation, Message, Notification, Activity,
     PublicUserProfile, PayoutRequest, Transaction, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase,
     CitizenResource, Dispute, Meeting, GlobalEconomy, CommunityValuePool, Proposal, Venture, SustenanceCycle, SustenanceVoucher, Comment, Distribution, VentureEquityHolding,
-    RedemptionCycle, ParticipantStatus
+    RedemptionCycle, ParticipantStatus, RTCSignal, ICESignal
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -190,7 +190,7 @@ export const api = {
         return null;
     },
 
-    // --- MEETINGS PROTOCOL ---
+    // --- MEETINGS PROTOCOL (MESH ENHANCED) ---
     createMeeting: async (u: User, title: string, expiresAt: Date): Promise<string> => {
         const id = Math.floor(100000 + Math.random() * 900000).toString();
         await setDoc(doc(meetingsCollection, id), {
@@ -201,7 +201,15 @@ export const api = {
             createdAt: serverTimestamp(),
             expiresAt: Timestamp.fromDate(expiresAt),
             participants: {
-                [u.id]: { uid: u.id, name: u.name, isVideoOn: true, isMicOn: true, isSpeaking: false, role: u.role }
+                [u.id]: { 
+                    uid: u.id, 
+                    name: u.name, 
+                    isVideoOn: true, 
+                    isMicOn: true, 
+                    isSpeaking: false, 
+                    role: u.role,
+                    joinedAt: Date.now()
+                }
             }
         });
         return id;
@@ -211,12 +219,24 @@ export const api = {
         return s.exists() ? { id: s.id, ...s.data() } as Meeting : null;
     },
     updateMeetingSignal: (id: string, data: Partial<Meeting>) => updateDoc(doc(meetingsCollection, id), data),
-    updateParticipantStatus: (id: string, uid: string, status: ParticipantStatus) => updateDoc(doc(meetingsCollection, id), { [`participants.${uid}`]: status }),
+    updateParticipantStatus: (id: string, uid: string, status: ParticipantStatus | null) => updateDoc(doc(meetingsCollection, id), { [`participants.${uid}`]: status }),
     listenForMeetingSignals: (id: string, cb: (m: Meeting) => void): Unsubscribe => onSnapshot(doc(meetingsCollection, id), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
-    addIceCandidate: (id: string, type: 'caller' | 'callee', candidate: any) => addDoc(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), candidate),
-    listenForIceCandidates: (id: string, type: 'caller' | 'callee', cb: (c: any) => void): Unsubscribe => onSnapshot(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), s => {
-        s.docChanges().forEach(change => { if (change.type === 'added') cb(change.doc.data()); });
-    }),
+    
+    // Peer-to-Peer Mesh Signaling
+    addSignal: (meetingId: string, signal: RTCSignal) => addDoc(collection(db, 'meetings', meetingId, 'signals'), { ...signal, timestamp: Date.now() }),
+    addIceCandidate: (meetingId: string, candidate: ICESignal) => addDoc(collection(db, 'meetings', meetingId, 'ice'), { ...candidate, timestamp: Date.now() }),
+    
+    listenForSignals: (meetingId: string, toUid: string, cb: (s: RTCSignal) => void): Unsubscribe => {
+        return onSnapshot(query(collection(db, 'meetings', meetingId, 'signals'), where('to', '==', toUid)), s => {
+            s.docChanges().forEach(change => { if (change.type === 'added') cb(change.doc.data() as RTCSignal); });
+        });
+    },
+    listenForIce: (meetingId: string, toUid: string, cb: (c: ICESignal) => void): Unsubscribe => {
+        return onSnapshot(query(collection(db, 'meetings', meetingId, 'ice'), where('to', '==', toUid)), s => {
+            s.docChanges().forEach(change => { if (change.type === 'added') cb(change.doc.data() as ICESignal); });
+        });
+    },
+
     deleteMeeting: (id: string) => deleteDoc(doc(meetingsCollection, id)),
 
     listenForGlobalEconomy: (cb: (e: GlobalEconomy | null) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(doc(globalsCollection, 'economy'), s => cb(s.exists() ? s.data() as GlobalEconomy : null), err),
@@ -225,7 +245,7 @@ export const api = {
     listenForUserTransactions: (uid: string, cb: (txs: Transaction[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'transactions'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as any))), err),
     listenToUserVaults: (uid: string, cb: (v: any[]) => void): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'vaults'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), console.error),
     listenForConversations: (uid: string, cb: (c: Conversation[]) => void, err?: any): Unsubscribe => onSnapshot(query(conversationsCollection, where('members', 'array-contains', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation))), err),
-    listenForMessages: (cid: string, u: User, cb: (m: Message[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'conversations', cid, 'messages'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Message))), err),
+    listenForMessages: (cid: string, u: User, cb: (m: Message[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, conversationsCollection.path, cid, 'messages'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Message))), err),
     listenForActivity: (circle: string, cb: (a: Activity[]) => void, err?: any): Unsubscribe => onSnapshot(query(activityCollection, where('causerCircle', '==', circle), orderBy('timestamp', 'desc'), limit(10)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), err),
     listenForAllUsers: (admin: User, cb: (u: User[]) => void, err?: any): Unsubscribe => onSnapshot(usersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), err),
     listenForAllMembers: (admin: User, cb: (m: Member[]) => void, err?: any): Unsubscribe => onSnapshot(membersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
