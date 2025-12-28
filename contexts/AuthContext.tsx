@@ -1,7 +1,7 @@
 
-import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback } from 'react';
+import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, useRef } from 'react';
 import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, sendEmailVerification, signInAnonymously } from 'firebase/auth';
-import { doc, onSnapshot, Timestamp, setDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit } from 'firebase/firestore';
+import { doc, onSnapshot, setDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
 import { useToast } from './ToastContext';
 import { api } from '../services/apiService';
 import { cryptoService, VaultData } from '../services/cryptoService';
@@ -9,21 +9,23 @@ import { auth, db } from '../services/firebase';
 import { User, Agent, NewPublicMemberData } from '../types';
 import { generateReferralCode, generateAgentCode } from '../utils';
 
+type LoginCredentials = { email: string; password: string };
+type AgentSignupCredentials = Pick<Agent, 'name' | 'email' | 'circle'> & { password: string };
+
 interface AuthContextType {
   currentUser: User | null;
   firebaseUser: FirebaseUser | null;
   isLoadingAuth: boolean;
   isProcessingAuth: boolean;
   isSovereignLocked: boolean;
-  login: (credentials: { email: string; password: string }) => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<void>;
   loginAnonymously: (displayName: string) => Promise<void>;
   logout: () => Promise<void>;
-  updateUser: (updatedUser: Partial<User>) => Promise<void>;
-  unlockSovereignSession: (data: VaultData, pin: string) => Promise<void>;
-  // FIX: Added missing exported methods to interface
-  agentSignup: (credentials: Pick<Agent, 'name' | 'email' | 'circle'> & { password: string }) => Promise<void>;
+  agentSignup: (credentials: AgentSignupCredentials) => Promise<void>;
   publicMemberSignup: (data: NewPublicMemberData, password: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
+  updateUser: (updatedUser: Partial<User> & { isCompletingProfile?: boolean }) => Promise<void>;
+  unlockSovereignSession: (data: VaultData, pin: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -33,6 +35,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isProcessingAuth, setIsProcessingAuth] = useState(false);
+  
   const [isSovereignLocked, setIsSovereignLocked] = useState(
     cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked')
   );
@@ -40,98 +43,120 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { addToast } = useToast();
 
   useEffect(() => {
-    let unsubUserDoc: (() => void) | undefined;
+    let userDocListener: (() => void) | undefined;
 
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       setFirebaseUser(user);
-      if (unsubUserDoc) unsubUserDoc();
+
+      if (userDocListener) {
+        userDocListener();
+        userDocListener = undefined;
+      }
 
       if (user) {
         if (user.isAnonymous) {
+            const guestName = sessionStorage.getItem('ugc_guest_name') || 'Guest Citizen';
             setCurrentUser({
                 id: user.uid,
-                name: sessionStorage.getItem('ugc_guest_name') || 'Guest Citizen',
+                name: guestName,
                 role: 'member',
                 status: 'active',
                 circle: 'GLOBAL',
                 isProfileComplete: true,
+                hasCompletedInduction: true,
                 createdAt: Timestamp.now(),
                 lastSeen: Timestamp.now()
             } as any);
             setIsLoadingAuth(false);
+            setIsProcessingAuth(false);
             return;
         }
 
-        unsubUserDoc = onSnapshot(doc(db, 'users', user.uid), (doc) => {
-          if (doc.exists()) {
-            setCurrentUser({ id: doc.id, ...doc.data() } as User);
+        const userDocRef = doc(db, 'users', user.uid);
+        userDocListener = onSnapshot(userDocRef, (userDoc) => {
+          if (userDoc.exists()) {
+            const userData = { id: userDoc.id, ...userDoc.data() } as User;
+            setCurrentUser(userData);
           } else {
             setCurrentUser(null);
           }
+          
           setIsLoadingAuth(false);
-        }, () => {
+          setIsProcessingAuth(false);
+        }, (error) => {
+          console.error("Ledger Sync Error:", error);
           setIsLoadingAuth(false);
+          setIsProcessingAuth(false);
         });
         
         api.setupPresence(user.uid);
       } else {
         setCurrentUser(null);
         setIsLoadingAuth(false);
+        setIsProcessingAuth(false);
       }
     });
 
     return () => {
       unsubscribeAuth();
-      if (unsubUserDoc) unsubUserDoc();
+      if (userDocListener) userDocListener();
     };
   }, []);
 
-  const unlockSovereignSession = useCallback(async (data: VaultData, pin: string) => {
-      setIsProcessingAuth(true);
-      try {
-          sessionStorage.setItem('ugc_node_unlocked', 'true');
-          sessionStorage.setItem('ugc_temp_pin', pin);
-          setIsSovereignLocked(false);
-          addToast("Node Synchronized.", "success");
-      } finally {
-          setIsProcessingAuth(false);
-      }
-  }, [addToast]);
-
-  const login = useCallback(async (credentials: { email: string; password: string }) => {
+  const login = useCallback(async (credentials: LoginCredentials) => {
     setIsProcessingAuth(true);
     try {
       await api.login(credentials.email, credentials.password);
     } catch (error: any) {
+      setIsProcessingAuth(false); 
       addToast(error.message || 'Handshake failed', 'error');
       throw error;
-    } finally {
-      setIsProcessingAuth(false);
     }
   }, [addToast]);
 
   const loginAnonymously = useCallback(async (displayName: string) => {
     setIsProcessingAuth(true);
     try {
+        // Essential for the early return in onAuthStateChanged to pick up the name
         sessionStorage.setItem('ugc_guest_name', displayName);
-        await api.loginAnonymously(displayName);
+        await signInAnonymously(auth);
     } catch (error: any) {
-        addToast("Guest Bridge Failed.", "error");
-        throw error;
-    } finally {
         setIsProcessingAuth(false);
+        // Provide more helpful info if it's a configuration error
+        if (error.code === 'auth/admin-restricted-operation' || error.code === 'auth/operation-not-allowed') {
+            addToast("Guest Bridge Blocked: Anonymous sign-in must be enabled in Firebase Console.", "error");
+        } else {
+            addToast("Guest Bridge Failed. Check connection.", "error");
+        }
+        throw error;
     }
+  }, [addToast]);
+
+  const unlockSovereignSession = useCallback(async (data: VaultData, pin: string) => {
+      setIsProcessingAuth(true);
+      try {
+          sessionStorage.setItem('ugc_temp_pin', pin);
+          sessionStorage.setItem('ugc_node_unlocked', 'true');
+          setIsSovereignLocked(false);
+          setIsProcessingAuth(false);
+      } catch (err) {
+          setIsProcessingAuth(false);
+          addToast("Node Identity Restricted.", "info");
+      }
   }, [addToast]);
 
   const logout = useCallback(async () => {
     if (currentUser) api.goOffline(currentUser.id);
     sessionStorage.removeItem('ugc_node_unlocked');
+    sessionStorage.removeItem('ugc_temp_pin');
+    sessionStorage.removeItem('ugc_guest_name');
+    sessionStorage.removeItem('ugc_active_meeting_id');
     cryptoService.clearSession();
     await api.logout();
     addToast('Node Disconnected.', 'info');
   }, [currentUser, addToast]);
 
-  const agentSignup = useCallback(async (credentials: Pick<Agent, 'name' | 'email' | 'circle'> & { password: string }) => {
+  const agentSignup = useCallback(async (credentials: AgentSignupCredentials) => {
     setIsProcessingAuth(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
@@ -235,26 +260,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [addToast]);
 
-  const updateUser = useCallback(async (updatedData: Partial<User>) => {
+  const updateUser = useCallback(async (updatedData: Partial<User> & { isCompletingProfile?: boolean } = {}) => {
     if (!currentUser) return;
     try {
-        await api.updateUser(currentUser.id, updatedData);
-        addToast('Identity State Synced.', 'success');
+        const { isCompletingProfile, ...userData } = updatedData;
+        await api.updateUser(currentUser.id, userData);
+        if (!isCompletingProfile) addToast('State Synced.', 'success');
     } catch (error: any) {
-        addToast('Sync failed.', 'error');
+        addToast('Update failed.', 'error');
         throw error;
     }
   }, [currentUser, addToast]);
 
-  return (
-    <AuthContext.Provider value={{ 
-        currentUser, firebaseUser, isLoadingAuth, isProcessingAuth, isSovereignLocked, 
-        login, loginAnonymously, logout, updateUser, unlockSovereignSession,
-        agentSignup, publicMemberSignup, sendPasswordReset 
-    }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  const value = {
+    currentUser,
+    firebaseUser,
+    isLoadingAuth,
+    isProcessingAuth,
+    isSovereignLocked,
+    login,
+    loginAnonymously,
+    logout,
+    agentSignup,
+    publicMemberSignup,
+    sendPasswordReset,
+    updateUser,
+    unlockSovereignSession,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
 
 export const useAuth = (): AuthContextType => {

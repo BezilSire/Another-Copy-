@@ -35,7 +35,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isProcessingAuth, setIsProcessingAuth] = useState(false);
-  const keySyncAttempted = useRef<string | null>(null);
   
   const [isSovereignLocked, setIsSovereignLocked] = useState(
     cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked')
@@ -56,11 +55,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       if (user) {
         if (user.isAnonymous) {
+            const guestName = sessionStorage.getItem('ugc_guest_name') || 'Guest Citizen';
             setCurrentUser({
                 id: user.uid,
-                name: sessionStorage.getItem('ugc_guest_name') || 'Guest Citizen',
-                role: 'member' as any,
-                status: 'active' as any,
+                name: guestName,
+                role: 'member',
+                status: 'active',
                 circle: 'GLOBAL',
                 isProfileComplete: true,
                 hasCompletedInduction: true,
@@ -121,7 +121,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await signInAnonymously(auth);
     } catch (error: any) {
         setIsProcessingAuth(false);
-        addToast("Guest Bridge Failed.", "error");
+        if (error.code === 'auth/admin-restricted-operation' || error.code === 'auth/operation-not-allowed') {
+            addToast("Guest Bridge Blocked: Anonymous sign-in must be enabled in Firebase Console.", "error");
+        } else {
+            addToast("Guest Bridge Failed. Check connection.", "error");
+        }
         throw error;
     }
   }, [addToast]);
@@ -131,18 +135,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
           sessionStorage.setItem('ugc_temp_pin', pin);
           sessionStorage.setItem('ugc_node_unlocked', 'true');
-          
-          if (data.email && data.password && !auth.currentUser) {
-              await api.login(data.email, data.password);
-          }
-          
           setIsSovereignLocked(false);
           setIsProcessingAuth(false);
-          setIsLoadingAuth(false);
       } catch (err) {
-          setIsSovereignLocked(false); 
           setIsProcessingAuth(false);
-          setIsLoadingAuth(false);
           addToast("Node Identity Restricted.", "info");
       }
   }, [addToast]);
@@ -152,7 +148,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     sessionStorage.removeItem('ugc_node_unlocked');
     sessionStorage.removeItem('ugc_temp_pin');
     sessionStorage.removeItem('ugc_guest_name');
-    keySyncAttempted.current = null;
+    sessionStorage.removeItem('ugc_active_meeting_id');
     cryptoService.clearSession();
     await api.logout();
     addToast('Node Disconnected.', 'info');
@@ -165,7 +161,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { user } = userCredential;
       const pubKey = cryptoService.getPublicKey() || "";
 
-      // FIX: Added name_lowercase to Omit<Agent, "id"> literal
       const newAgent: Omit<Agent, 'id'> = {
         name: credentials.name,
         email: credentials.email,
