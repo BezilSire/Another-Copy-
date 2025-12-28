@@ -84,7 +84,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setIsLoadingAuth(false);
           setIsProcessingAuth(false);
         }, (error) => {
-          console.error("Ledger Sync Error:", error);
+          console.warn("Node synchronization restricted:", error.message);
           setIsLoadingAuth(false);
           setIsProcessingAuth(false);
         });
@@ -95,6 +95,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setIsLoadingAuth(false);
         setIsProcessingAuth(false);
       }
+    }, (error) => {
+      console.error("Auth status sync failed:", error);
+      setIsLoadingAuth(false);
     });
 
     return () => {

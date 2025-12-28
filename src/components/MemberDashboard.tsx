@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { MemberUser, Conversation, User, FilterType, MemberView } from '../types';
 import { MemberBottomNav } from './MemberBottomNav';
@@ -59,6 +60,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
   const [selectedChat, setSelectedChat] = useState<Conversation | null>(null);
 
   const hasVault = cryptoService.hasVault();
+  const isAnonymous = firebaseUser?.isAnonymous;
 
   useEffect(() => {
     if (forcedView) {
@@ -85,7 +87,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
     if (isUpgrading) return <div className="flex justify-center py-10 animate-fade-in"><GenesisNodeFlow onComplete={handleUpgradeComplete} onBack={() => setIsUpgrading(false)} /></div>;
     
     // Safeguard for Guest/Anonymous Nodes
-    if (firebaseUser?.isAnonymous && view !== 'meeting' && view !== 'knowledge') {
+    if (isAnonymous && view !== 'meeting' && view !== 'knowledge') {
         return (
             <div className="flex flex-col items-center justify-center py-32 text-center space-y-6">
                 <div className="p-5 bg-red-500/10 rounded-full border border-red-500/20 text-red-500"><LockIcon className="h-10 w-10" /></div>
@@ -116,20 +118,32 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
     }
   };
 
+  const showSidebars = !isAnonymous || (view === 'meeting' || view === 'knowledge');
+
   return (
     <div className="min-h-screen bg-transparent pb-20 md:pb-0">
       <div className="max-w-7xl mx-auto px-0 sm:px-4 lg:px-8 pt-6">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            <div className="hidden md:block md:col-span-3"><div className="sticky top-24"><CommunityHubSidebar activeView={view} onChangeView={setView} user={user} currentFilter={typeFilter} onFilterChange={setTypeFilter} /></div></div>
-            <div className="col-span-1 md:col-span-9 lg:col-span-6"><div className="min-h-[80vh] main-layout-container">{renderMainContent()}</div></div>
-            <div className="hidden lg:block lg:col-span-3"><div className="sticky top-24"><RightSidebar user={user} /></div></div>
+            <div className={`hidden md:block md:col-span-3 ${!showSidebars ? 'invisible' : ''}`}>
+              <div className="sticky top-24">
+                <CommunityHubSidebar activeView={view} onChangeView={setView} user={user} currentFilter={typeFilter} onFilterChange={setTypeFilter} />
+              </div>
+            </div>
+            <div className={`col-span-1 ${showSidebars ? 'md:col-span-9 lg:col-span-6' : 'md:col-span-12'}`}>
+              <div className="min-h-[80vh] main-layout-container">{renderMainContent()}</div>
+            </div>
+            <div className={`hidden lg:block lg:col-span-3 ${!showSidebars ? 'invisible' : ''}`}>
+              <div className="sticky top-24">
+                <RightSidebar user={user} />
+              </div>
+            </div>
         </div>
       </div>
       <div className="md:hidden"><MemberBottomNav activeView={view as any} setActiveView={setView as any} unreadNotificationCount={unreadCount} /></div>
-      {!firebaseUser?.isAnonymous && <FloatingActionMenu onNewPostClick={() => setIsNewPostModalOpen(true)} onDistressClick={() => setIsDistressModalOpen(true)} user={user} />}
+      {!isAnonymous && <FloatingActionMenu onNewPostClick={() => setIsNewPostModalOpen(true)} onDistressClick={() => setIsDistressModalOpen(true)} user={user} />}
       {isNewChatModalOpen && <MemberSearchModal isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} currentUser={user} onSelectUser={setSelectedChat} />}
       {isNewPostModalOpen && <NewPostModal isOpen={isNewPostModalOpen} onClose={() => setIsNewPostModalOpen(false)} user={user} onPostCreated={handlePostCreated} />}
-       {isDistressModalOpen && <DistressCallDialog isOpen={isDistressModalOpen} onClose={() => setIsDistressModalOpen(false)} onConfirm={async (c) => { setIsDistressLoading(true); try { await api.sendDistressCall(user, c); addToast('Emergency protocol initiated.', 'success'); setIsDistressModalOpen(false); } catch (e:any) { addToast(e.message, 'error'); } finally { setIsDistressLoading(false); } }} isLoading={isDistressLoading} />}
+       {isDistressModalOpen && <DistressCallDialog isOpen={isDistressModalOpen} onClose={() => setIsDistressModalOpen(false)} onConfirm={async (c) => { setIsDistressLoading(true); try { await api.sendDistressPost(user, c); addToast('Emergency protocol initiated.', 'success'); setIsDistressModalOpen(false); } catch (e:any) { addToast(e.message, 'error'); } finally { setIsDistressLoading(false); } }} isLoading={isDistressLoading} />}
       <VerificationRedirectModal isOpen={isVerificationModalOpen} onClose={() => setIsVerificationModalOpen(false)} />
     </div>
   );

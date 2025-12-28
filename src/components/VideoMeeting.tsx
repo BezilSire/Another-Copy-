@@ -36,11 +36,12 @@ const ParticipantTile: React.FC<{
 }> = ({ participant, stream, isLocal, isHost, onRevoke }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
 
+    // Fix: Re-attach srcObject whenever the video element is mounted/re-mounted (isVideoOn changes)
     useEffect(() => {
-        if (videoRef.current && stream) {
+        if (videoRef.current && stream && participant.isVideoOn) {
             videoRef.current.srcObject = stream;
         }
-    }, [stream]);
+    }, [stream, participant.isVideoOn]);
 
     return (
         <div className={`relative aspect-video bg-slate-900 rounded-[2rem] overflow-hidden border-2 transition-all duration-500 ${participant.isSpeaking ? 'border-emerald-500 shadow-glow-matrix' : 'border-white/5'}`}>
@@ -85,13 +86,12 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
     const [isVideoOn, setIsVideoOn] = useState(true);
     const [participants, setParticipants] = useState<{ [uid: string]: ParticipantStatus }>({});
     const [remoteStreams, setRemoteStreams] = useState<{ [uid: string]: MediaStream }>({});
+    const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [timeLeft, setTimeLeft] = useState('00:00:00');
     const [meetingTitle, setMeetingTitle] = useState('Assembly');
 
     const pcs = useRef<{ [uid: string]: RTCPeerConnection }>({});
-    const localStreamRef = useRef<MediaStream | null>(null);
     const initializedRef = useRef(false);
-    // Fix: Track join time locally for stable mesh decision logic
     const joinedAtRef = useRef(Date.now());
     const { addToast } = useToast();
 
@@ -118,14 +118,14 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
         return () => clearInterval(timer);
     }, [meetingId]);
 
-    const createPeerConnection = (targetUid: string) => {
+    const createPeerConnection = (targetUid: string, stream: MediaStream) => {
         if (pcs.current[targetUid]) return pcs.current[targetUid];
 
         const pc = new RTCPeerConnection(servers);
         pcs.current[targetUid] = pc;
 
-        localStreamRef.current?.getTracks().forEach(track => {
-            pc.addTrack(track, localStreamRef.current!);
+        stream.getTracks().forEach(track => {
+            pc.addTrack(track, stream);
         });
 
         pc.ontrack = (event) => {
@@ -154,7 +154,8 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
 
         const init = async () => {
             try {
-                localStreamRef.current = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+                setLocalStream(stream);
                 
                 // 1. Announce Presence
                 await api.updateParticipantStatus(meetingId, user.id, {
@@ -191,9 +192,8 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
 
                     // Auto-handshake with older nodes (Mesh)
                     (Object.values(m.participants || {}) as ParticipantStatus[]).forEach(async (p) => {
-                        // Fix: Added null check for p and its properties
                         if (p && p.uid && p.uid !== user.id && p.joinedAt < (m.participants[user.id]?.joinedAt || 0) && !pcs.current[p.uid]) {
-                            const pc = createPeerConnection(p.uid);
+                            const pc = createPeerConnection(p.uid, stream);
                             const offer = await pc.createOffer();
                             await pc.setLocalDescription(offer);
                             api.addSignal(meetingId, { type: 'offer', sdp: offer.sdp!, from: user.id, to: p.uid, timestamp: Date.now() });
@@ -203,7 +203,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
 
                 // 3. Listen for Incoming Handshakes
                 api.listenForSignals(meetingId, user.id, async (signal) => {
-                    const pc = createPeerConnection(signal.from);
+                    const pc = createPeerConnection(signal.from, stream);
                     if (signal.type === 'offer') {
                         await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signal.sdp }));
                         const answer = await pc.createAnswer();
@@ -234,7 +234,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
         return () => {
             api.updateParticipantStatus(meetingId, user.id, null);
             (Object.values(pcs.current) as RTCPeerConnection[]).forEach(pc => pc.close());
-            localStreamRef.current?.getTracks().forEach(t => t.stop());
+            localStream?.getTracks().forEach(t => t.stop());
         };
     }, [meetingId]);
 
@@ -244,20 +244,26 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
     };
 
     const toggleMic = () => {
-        if (localStreamRef.current) {
-            const track = localStreamRef.current.getAudioTracks()[0];
+        if (localStream) {
+            const track = localStream.getAudioTracks()[0];
             track.enabled = !track.enabled;
             setIsMicOn(track.enabled);
-            api.updateParticipantStatus(meetingId, user.id, { ...participants[user.id], isMicOn: track.enabled, joinedAt: joinedAtRef.current });
+            api.updateParticipantStatus(meetingId, user.id, { 
+                ...(participants[user.id] || { uid: user.id, name: user.name, role: user.role, joinedAt: joinedAtRef.current, isVideoOn: true }), 
+                isMicOn: track.enabled 
+            });
         }
     };
 
     const toggleVideo = () => {
-        if (localStreamRef.current) {
-            const track = localStreamRef.current.getVideoTracks()[0];
+        if (localStream) {
+            const track = localStream.getVideoTracks()[0];
             track.enabled = !track.enabled;
             setIsVideoOn(track.enabled);
-            api.updateParticipantStatus(meetingId, user.id, { ...participants[user.id], isVideoOn: track.enabled, joinedAt: joinedAtRef.current });
+            api.updateParticipantStatus(meetingId, user.id, { 
+                ...(participants[user.id] || { uid: user.id, name: user.name, role: user.role, joinedAt: joinedAtRef.current, isMicOn: true }), 
+                isVideoOn: track.enabled 
+            });
         }
     };
 
@@ -266,7 +272,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
     };
 
     const assemblyList = (Object.values(participants) as ParticipantStatus[])
-        .filter(p => p !== null && p.uid) // Fix: Filter out nulls and incomplete nodes
+        .filter(p => p !== null && p.uid)
         .sort((a, b) => a.joinedAt - b.joinedAt);
 
     return (
@@ -289,14 +295,23 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
 
             <div className="flex-1 overflow-y-auto no-scrollbar p-6 sm:p-12">
                 <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-max">
-                    {/* Render self first */}
-                    {participants[user.id] && (
+                    {/* Render self first, immediately if stream exists */}
+                    {localStream && (
                         <ParticipantTile 
-                            participant={participants[user.id]} 
-                            stream={localStreamRef.current!} 
+                            participant={{
+                                uid: user.id,
+                                name: user.name,
+                                joinedAt: joinedAtRef.current,
+                                isMicOn,
+                                isVideoOn,
+                                isSpeaking: false,
+                                role: user.role
+                            }} 
+                            stream={localStream} 
                             isLocal 
                         />
                     )}
+
                     {/* Render others */}
                     {assemblyList.filter(p => p.uid !== user.id).map(p => (
                         <ParticipantTile 
@@ -308,10 +323,10 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                         />
                     ))}
                     
-                    {assemblyList.length === 1 && (
+                    {assemblyList.length === 0 && !localStream && (
                         <div className="col-span-full py-32 text-center animate-pulse">
                             <LoaderIcon className="h-12 w-12 text-brand-gold mx-auto mb-6 opacity-30 animate-spin" />
-                            <p className="label-caps !text-gray-600 !tracking-[0.6em]">Scanning for Assembly Peers...</p>
+                            <p className="label-caps !text-gray-600 !tracking-[0.6em]">Initializing Node...</p>
                         </div>
                     )}
                 </div>
