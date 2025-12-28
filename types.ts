@@ -7,12 +7,15 @@ export type ProtocolMode = 'MAINNET' | 'TESTNET';
 export type AssetType = 'SOL' | 'USDT' | 'USDC';
 
 export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger' | 'wallet';
-export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more';
+export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more' | 'meeting';
 
 export interface ParticipantStatus {
+    uid: string;
+    name: string;
     isVideoOn: boolean;
     isMicOn: boolean;
     isSpeaking: boolean;
+    role: string;
 }
 
 export interface Meeting {
@@ -24,9 +27,33 @@ export interface Meeting {
     expiresAt: Timestamp;
     offer?: any;
     answer?: any;
-    callerStatus?: ParticipantStatus;
-    calleeStatus?: ParticipantStatus;
+    participants: { [uid: string]: ParticipantStatus };
     kickedParticipantId?: string;
+}
+
+export interface PayoutRequest {
+    id: string;
+    userId: string;
+    userName: string;
+    type: 'referral' | 'ccap_redemption' | 'veq_redemption' | 'onchain_withdrawal';
+    amount: number;
+    ecocashName?: string;
+    ecocashNumber?: string;
+    status: 'pending' | 'completed' | 'rejected';
+    requestedAt: Timestamp;
+    completedAt?: Timestamp;
+    processedBy?: {
+        adminId: string;
+        adminName: string;
+    };
+    meta?: {
+        ccapRedeemed?: number;
+        rate?: number;
+        ventureId?: string;
+        ventureName?: string;
+        solanaAddress?: string;
+        ubtRedeemed?: number;
+    };
 }
 
 export interface User {
@@ -183,31 +210,6 @@ export interface Report {
     postId?: string;
     postContent?: string;
     postAuthorId?: string;
-}
-
-export interface PayoutRequest {
-    id: string;
-    userId: string;
-    userName: string;
-    amount: number;
-    ecocashName: string;
-    ecocashNumber: string;
-    status: 'pending' | 'completed' | 'rejected';
-    requestedAt: Timestamp;
-    completedAt?: Timestamp;
-    type: 'referral' | 'ccap_redemption' | 'veq_redemption' | 'onchain_withdrawal';
-    meta?: {
-        ventureName?: string;
-        solanaAddress?: string;
-        ccapRedeemed?: number;
-        rate?: number;
-        ubtRedeemed?: number;
-        ventureId?: string;
-    };
-    processedBy?: {
-        adminId: string;
-        adminName: string;
-    };
 }
 
 export interface Venture {

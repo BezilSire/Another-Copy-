@@ -10,17 +10,13 @@ service cloud.firestore {
       return isMember() && 
         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'; 
     }
-    function isOwner(userId) { return isMember() && request.auth.uid == userId; }
+    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
 
     // --- IDENTITY & WALLETS ---
     match /users/{userId} {
-      allow read, list: if isMember();
+      allow read, list: if isSignedIn(); 
       allow create: if isMember() && request.auth.uid == userId;
-      allow update: if isOwner(userId) || isAdmin() || (
-        isMember() && 
-        request.resource.data.diff(resource.data).affectedKeys()
-          .hasOnly(['ubtBalance', 'lastSeen', 'vouchCount', 'credibility_score', 'publicKey', 'fcmToken', 'following', 'followers'])
-      );
+      allow update: if (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status'])) || isAdmin();
 
       match /notifications/{id} { allow read, write: if isOwner(userId) || isAdmin(); }
       match /transactions/{id} { allow read, list: if isOwner(userId) || isAdmin(); allow create: if isMember(); }
@@ -38,7 +34,7 @@ service cloud.firestore {
       allow update, delete: if isAdmin();
     }
     match /globals/{docId} {
-      allow read: if isMember();
+      allow read: if isSignedIn();
       allow write: if isAdmin();
     }
 
@@ -66,11 +62,18 @@ service cloud.firestore {
       match /messages/{id} { allow read, write, list: if isMember(); }
     }
 
+    // --- MEETINGS (WebRTC Signaling) ---
+    match /meetings/{meetingId} {
+      allow read, write: if isSignedIn();
+      match /callerCandidates/{id} { allow read, write: if isSignedIn(); }
+      match /calleeCandidates/{id} { allow read, write: if isSignedIn(); }
+    }
+
     // --- ECOSYSTEM MODULES ---
     match /members/{id} { 
       allow read, list: if isMember(); 
       allow create: if isMember(); 
-      allow update: if isAdmin() || (isMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'phone', 'address', 'bio', 'circle', 'skills', 'interests', 'passions', 'gender', 'age', 'isLookingForPartners', 'lookingFor', 'businessIdea', 'awards', 'skills_lowercase', 'national_id']));
+      allow update: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);
       allow delete: if isAdmin(); 
     }
     

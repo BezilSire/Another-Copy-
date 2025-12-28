@@ -3,6 +3,7 @@ import { User } from '../types';
 import { LogoIcon } from './icons/LogoIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { MessageSquareIcon } from './icons/MessageSquareIcon';
+import { VideoIcon } from './icons/VideoIcon';
 import { useOnlineStatus } from '../hooks/useOnlineStatus';
 import { WifiOffIcon } from './icons/WifiOffIcon';
 
@@ -11,11 +12,12 @@ interface HeaderProps {
   onLogout: () => void;
   onViewProfile: (userId: string) => void;
   onChatClick?: () => void;
+  onMeetClick?: () => void;
   onRadarClick?: () => void;
   onScanClick?: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, onChatClick }) => {
+export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, onChatClick, onMeetClick }) => {
   const isOnline = useOnlineStatus();
 
   return (
@@ -38,11 +40,21 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, o
                 {onChatClick && (
                     <button 
                         onClick={onChatClick} 
-                        className="flex items-center gap-3 px-6 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all group"
+                        className="flex items-center gap-3 px-4 sm:px-6 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all group border-r border-white/5"
                         title="Comms Hub"
                     >
                         <MessageSquareIcon className="h-5 w-5 group-hover:scale-110 transition-transform" />
                         <span className="text-[10px] font-black uppercase tracking-[0.2em] hidden sm:block">Comms</span>
+                    </button>
+                )}
+                {onMeetClick && (
+                    <button 
+                        onClick={onMeetClick} 
+                        className="flex items-center gap-3 px-4 sm:px-6 py-2.5 rounded-xl text-gray-400 hover:text-brand-gold hover:bg-brand-gold/5 transition-all group"
+                        title="Meeting Hub"
+                    >
+                        <VideoIcon className="h-5 w-5 group-hover:scale-110 transition-transform" />
+                        <span className="text-[10px] font-black uppercase tracking-[0.2em] hidden sm:block">Meet</span>
                     </button>
                 )}
              </div>

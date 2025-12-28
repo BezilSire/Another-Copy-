@@ -1,6 +1,6 @@
 import React from 'react';
 
-export const MicOffIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+export const MicOffIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width="24"
@@ -13,11 +13,10 @@ export const MicOffIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     strokeLinejoin="round"
     {...props}
   >
-    <line x1="2" y1="2" x2="22" y2="22" />
-    <path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2" />
-    <path d="M5 10v2a7 7 0 0 0 12 5" />
-    <path d="M15 9.34V5a3 3 0 0 0-5.68-1.33" />
+    <line x1="1" y1="1" x2="23" y2="23" />
     <path d="M9 9v3a3 3 0 0 0 5.12 2.12" />
+    <path d="M15 9.34V5a3 3 0 0 0-5.94-.6" />
+    <path d="M17 16.95A7 7 0 0 1 5 12v-2" />
     <line x1="12" y1="19" x2="12" y2="22" />
   </svg>
 );

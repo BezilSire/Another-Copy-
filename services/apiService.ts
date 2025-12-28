@@ -45,8 +45,8 @@ import {
     User, Agent, Member, NewMember, MemberUser, Post,
     Conversation, Message, Notification, Activity,
     PublicUserProfile, PayoutRequest, Transaction, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase,
-    CitizenResource, Dispute, Meeting, GlobalEconomy, CommunityValuePool, Proposal, Venture, SustenanceVoucher, Comment, Distribution, VentureEquityHolding,
-    RedemptionCycle
+    CitizenResource, Dispute, Meeting, GlobalEconomy, CommunityValuePool, Proposal, Venture, SustenanceCycle, SustenanceVoucher, Comment, Distribution, VentureEquityHolding,
+    RedemptionCycle, ParticipantStatus
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -62,13 +62,14 @@ const resourcesCollection = collection(db, 'resources');
 const disputesCollection = collection(db, 'disputes');
 const globalsCollection = collection(db, 'globals');
 const pendingPurchasesCollection = collection(db, 'pending_ubt_purchases');
+const meetingsCollection = collection(db, 'meetings');
 
 export const api = {
     login: (email: string, password: string): Promise<FirebaseUser> => {
         return signInWithEmailAndPassword(auth, email, password)
             .then(userCredential => userCredential.user);
     },
-    loginAnonymously: (_displayName?: string): Promise<FirebaseUser> => {
+    loginAnonymously: (displayName: string): Promise<FirebaseUser> => {
         return signInAnonymously(auth)
             .then(userCredential => userCredential.user);
     },
@@ -188,10 +189,40 @@ export const api = {
         if (vaultDoc.exists()) return { id: vaultDoc.id, name: vaultDoc.data()?.name, ubtBalance: vaultDoc.data()?.balance, role: 'admin', circle: 'TREASURY' } as any;
         return null;
     },
+
+    // --- MEETINGS PROTOCOL ---
+    createMeeting: async (u: User, title: string, expiresAt: Date): Promise<string> => {
+        const id = Math.floor(100000 + Math.random() * 900000).toString();
+        await setDoc(doc(meetingsCollection, id), {
+            id,
+            hostId: u.id,
+            hostName: u.name,
+            title,
+            createdAt: serverTimestamp(),
+            expiresAt: Timestamp.fromDate(expiresAt),
+            participants: {
+                [u.id]: { uid: u.id, name: u.name, isVideoOn: true, isMicOn: true, isSpeaking: false, role: u.role }
+            }
+        });
+        return id;
+    },
+    joinMeeting: async (id: string): Promise<Meeting | null> => {
+        const s = await getDoc(doc(meetingsCollection, id));
+        return s.exists() ? { id: s.id, ...s.data() } as Meeting : null;
+    },
+    updateMeetingSignal: (id: string, data: Partial<Meeting>) => updateDoc(doc(meetingsCollection, id), data),
+    updateParticipantStatus: (id: string, uid: string, status: ParticipantStatus) => updateDoc(doc(meetingsCollection, id), { [`participants.${uid}`]: status }),
+    listenForMeetingSignals: (id: string, cb: (m: Meeting) => void): Unsubscribe => onSnapshot(doc(meetingsCollection, id), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
+    addIceCandidate: (id: string, type: 'caller' | 'callee', candidate: any) => addDoc(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), candidate),
+    listenForIceCandidates: (id: string, type: 'caller' | 'callee', cb: (c: any) => void): Unsubscribe => onSnapshot(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), s => {
+        s.docChanges().forEach(change => { if (change.type === 'added') cb(change.doc.data()); });
+    }),
+    deleteMeeting: (id: string) => deleteDoc(doc(meetingsCollection, id)),
+
     listenForGlobalEconomy: (cb: (e: GlobalEconomy | null) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(doc(globalsCollection, 'economy'), s => cb(s.exists() ? s.data() as GlobalEconomy : null), err),
     listenToVaults: (cb: (v: TreasuryVault[]) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(vaultsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), err),
     listenForNotifications: (uid: string, cb: (n: Notification[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'notifications'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Notification))), err),
-    listenForUserTransactions: (uid: string, cb: (txs: Transaction[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'notifications'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as any))), err),
+    listenForUserTransactions: (uid: string, cb: (txs: Transaction[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'transactions'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as any))), err),
     listenToUserVaults: (uid: string, cb: (v: any[]) => void): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'vaults'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), console.error),
     listenForConversations: (uid: string, cb: (c: Conversation[]) => void, err?: any): Unsubscribe => onSnapshot(query(conversationsCollection, where('members', 'array-contains', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation))), err),
     listenForMessages: (cid: string, u: User, cb: (m: Message[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'conversations', cid, 'messages'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Message))), err),
@@ -238,38 +269,6 @@ export const api = {
     },
     toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
     registerResource: (data: Partial<CitizenResource>) => addDoc(resourcesCollection, { ...data, createdAt: serverTimestamp() }),
-
-    createMeeting: async (u: User, title: string, expiresAt: Date): Promise<string> => {
-        const id = Math.floor(100000 + Math.random() * 900000).toString();
-        await setDoc(doc(db, 'meetings', id), {
-            id,
-            hostId: u.id,
-            hostName: u.name,
-            title,
-            createdAt: serverTimestamp(),
-            expiresAt: Timestamp.fromDate(expiresAt),
-        });
-        return id;
-    },
-    
-    joinMeeting: async (id: string): Promise<Meeting | null> => {
-        const s = await getDoc(doc(db, 'meetings', id));
-        return s.exists() ? { id: s.id, ...s.data() } as Meeting : null;
-    },
-    
-    updateMeetingSignal: (id: string, data: Partial<Meeting>) => updateDoc(doc(db, 'meetings', id), data),
-    
-    listenForMeetingSignals: (id: string, cb: (m: Meeting) => void): Unsubscribe => onSnapshot(doc(db, 'meetings', id), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
-    
-    addIceCandidate: (id: string, type: 'caller' | 'callee', candidate: any) => addDoc(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), candidate),
-    
-    listenForIceCandidates: (id: string, type: 'caller' | 'callee', cb: (c: any) => void): Unsubscribe => onSnapshot(collection(db, 'meetings', id, type === 'caller' ? 'callerCandidates' : 'calleeCandidates'), s => {
-        s.docChanges().forEach(change => {
-            if (change.type === 'added') cb(change.doc.data());
-        });
-    }),
-    
-    deleteMeeting: (id: string) => deleteDoc(doc(db, 'meetings', id)),
 
     createPost: async (u: User, content: string, type: Post['types'], award: number, skills: string[] = []) => addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: skills, commentCount: 0, repostCount: 0, ccapAwarded: award }),
     deletePost: (id: string) => deleteDoc(doc(postsCollection, id)),
@@ -533,9 +532,9 @@ export const api = {
         return batch.commit();
     },
 
-    getSustenanceFund: async (): Promise<any | null> => {
+    getSustenanceFund: async (): Promise<SustenanceCycle | null> => {
         const snap = await getDoc(doc(globalsCollection, 'sustenance'));
-        return snap.exists() ? { id: snap.id, ...snap.data() } : null;
+        return snap.exists() ? { id: snap.id, ...snap.data() } as SustenanceCycle : null;
     },
 
     getAllSustenanceVouchers: async (): Promise<SustenanceVoucher[]> => {

@@ -15,17 +15,13 @@ interface State {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-// Fix: Explicitly extend React.Component to ensure properties are correctly recognized by TypeScript
-export class ErrorBoundary extends React.Component<Props, State> {
-  public constructor(props: Props) {
-    super(props);
-    // Fix: Initializing state inherited from React.Component
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null
-    };
-  }
+// Fix: Explicitly extending Component from react to ensure setState and props are correctly recognized by TypeScript
+export class ErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false,
+    error: null,
+    errorInfo: null
+  };
 
   public static getDerivedStateFromError(error: Error): State {
     return { hasError: true, error, errorInfo: null };
@@ -33,7 +29,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error);
-    // Fix: Using setState method inherited from React.Component
+    // Fix: setState is a member of the inherited Component class
     this.setState({ error, errorInfo });
   }
 
@@ -42,7 +38,6 @@ export class ErrorBoundary extends React.Component<Props, State> {
   };
 
   public render() {
-    // Fix: Accessing state inherited from React.Component
     const { hasError, error } = this.state;
 
     if (hasError) {
@@ -73,7 +68,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    // Fix: Accessing props inherited from React.Component
+    // Fix: Accessing children via this.props which is provided by Component
     return this.props.children;
   }
 }

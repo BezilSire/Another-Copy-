@@ -46,7 +46,7 @@ import {
     Conversation, Message, Notification, Activity,
     PublicUserProfile, PayoutRequest, Transaction, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase,
     CitizenResource, Dispute, Meeting, GlobalEconomy, CommunityValuePool, Proposal, Venture, SustenanceCycle, SustenanceVoucher, Comment, Distribution, VentureEquityHolding,
-    RedemptionCycle
+    RedemptionCycle, ParticipantStatus
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -258,6 +258,8 @@ export const api = {
     },
     
     updateMeetingSignal: (id: string, data: Partial<Meeting>) => updateDoc(doc(db, 'meetings', id), data),
+    // Added updateParticipantStatus method to fix missing property error in VideoMeeting.tsx
+    updateParticipantStatus: (id: string, uid: string, status: ParticipantStatus) => updateDoc(doc(db, 'meetings', id), { [`participants.${uid}`]: status }),
     
     listenForMeetingSignals: (id: string, cb: (m: Meeting) => void): Unsubscribe => onSnapshot(doc(db, 'meetings', id), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
     
