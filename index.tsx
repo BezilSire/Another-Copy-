@@ -11,26 +11,6 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/service-worker.js')
-      .then(registration => {
-        console.log('SW registered: ', registration);
-        registration.onupdatefound = () => {
-            const installingWorker = registration.installing;
-            if (installingWorker) {
-                installingWorker.onstatechange = () => {
-                    if (installingWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                        console.log('New content available.');
-                    }
-                };
-            }
-        };
-      })
-      .catch(err => console.log('SW failed: ', err));
-  });
-}
-
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>

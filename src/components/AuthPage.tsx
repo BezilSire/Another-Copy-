@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
@@ -11,6 +10,7 @@ import { PublicRegistrationPage } from './PublicRegistrationPage';
 import { cryptoService } from '../services/cryptoService';
 import { useToast } from '../contexts/ToastContext';
 import { LogoIcon } from './icons/LogoIcon';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
 type AuthView = 'selector' | 'login' | 'agentSignup' | 'publicSignup' | 'forgotPassword' | 'genesis' | 'recovery';
 
@@ -23,7 +23,6 @@ export const AuthPage: React.FC = () => {
   const handleRecoveryComplete = async (m: string, p: string, data: any) => {
     try {
         await cryptoService.saveVault({ mnemonic: m }, p);
-        // Explicitly unlock the session in AuthContext to transition state
         await unlockSovereignSession(data, p);
         addToast("Identity Re-Anchored.", "success");
         setView('login');
@@ -61,13 +60,17 @@ export const AuthPage: React.FC = () => {
                             Register New Node
                         </button>
                         
-                        <div className="text-center pt-6">
+                        <div className="mt-8 pt-8 border-t border-white/5 flex flex-col gap-4">
                             <button 
                                 onClick={() => setView('recovery')} 
-                                className="text-[9px] font-black uppercase text-gray-600 hover:text-brand-gold transition-colors tracking-[0.3em]"
+                                className="w-full flex items-center justify-center gap-3 py-5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-2xl text-[10px] font-black text-red-500 uppercase tracking-[0.3em] transition-all shadow-[0_0_20px_rgba(239,68,68,0.2)]"
                             >
-                                Lost Node Access? Recovery
+                                <AlertTriangleIcon className="h-4 w-4" />
+                                Lazarus Protocol Recovery
                             </button>
+                            <p className="text-[8px] text-gray-600 text-center uppercase font-bold tracking-widest px-4">
+                                Use this if you lost your 12-word phrase or forgotten your PIN.
+                            </p>
                         </div>
                     </div>
 

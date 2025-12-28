@@ -24,7 +24,8 @@ export const BridgeVerificationAdmin: React.FC<BridgeVerificationAdminProps> = (
         if (!window.confirm(`Settle ${methodLabel}? Release ${purchase.amountUbt} UBT to node ${purchase.userName}?`)) return;
         setProcessingId(purchase.id);
         try {
-            await api.approveUbtPurchase(adminUser, purchase);
+            // FIX: Added 'FLOAT' as default sourceVaultId to satisfy 3-argument signature
+            await api.approveUbtPurchase(adminUser, purchase, 'FLOAT');
             addToast("Ledger Settled. Assets Distributed.", "success");
         } catch (e) {
             addToast("Protocol failure.", "error");
@@ -108,7 +109,7 @@ export const BridgeVerificationAdmin: React.FC<BridgeVerificationAdminProps> = (
                             <button 
                                 onClick={() => handleApprove(purchase)}
                                 disabled={!!processingId}
-                                className="w-full py-5 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-[0.3em] transition-all active:scale-95 shadow-glow-gold flex items-center justify-center gap-3"
+                                className="w-full py-5 bg-brand-gold text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-[0.3em] transition-all active:scale-95 shadow-glow-gold flex items-center justify-center gap-3"
                             >
                                 {processingId === purchase.id ? <LoaderIcon className="h-5 w-5 animate-spin"/> : <>Settle Handshake</>}
                             </button>

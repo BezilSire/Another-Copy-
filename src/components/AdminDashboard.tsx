@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Admin, Agent, Member, Broadcast, Report, User, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PendingUbtPurchase } from '../types';
 import { api } from '../services/apiService';
+import { cryptoService } from '../services/cryptoService';
 import { LayoutDashboardIcon } from './icons/LayoutDashboardIcon';
 import { DollarSignIcon } from './icons/DollarSignIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
@@ -18,6 +19,9 @@ import { AdminRegistrarTerminal } from './AdminRegistrarTerminal';
 import { AdminJusticeTerminal } from './AdminJusticeTerminal';
 import { GlobeIcon } from './icons/GlobeIcon';
 import { ScaleIcon } from './icons/ScaleIcon';
+import { SovereignUpgradeBanner } from './SovereignUpgradeBanner';
+import { GenesisNodeFlow } from './GenesisNodeFlow';
+import { useToast } from '../contexts/ToastContext';
 
 type AdminView = 'dashboard' | 'feed' | 'profile' | 'wallet' | 'oracle' | 'treasury' | 'dispatch' | 'registrar' | 'justice';
 
@@ -40,6 +44,10 @@ export const AdminDashboard: React.FC<{
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [pendingPurchases, setPendingPurchases] = useState<PendingUbtPurchase[]>([]);
   const [typeFilter, setTypeFilter] = useState<PostFilterType>('all');
+  const [isUpgrading, setIsUpgrading] = useState(false);
+  const { addToast } = useToast();
+
+  const hasVault = cryptoService.hasVault();
 
   useEffect(() => {
     const unsubUsers = api.listenForAllUsers(user, setAllUsers, console.error);
@@ -58,6 +66,21 @@ export const AdminDashboard: React.FC<{
         unsubPayouts(); unsubVentures(); unsubCvp(); unsubOracle();
     };
   }, [user]);
+
+  const handleUpgradeComplete = async (mnemonic: string, pin: string) => {
+    try {
+        await cryptoService.saveVault({ mnemonic }, pin);
+        const pubKey = cryptoService.getPublicKey();
+        if (pubKey) {
+            await onUpdateUser({ publicKey: pubKey });
+        }
+        setIsUpgrading(false);
+        addToast("Authority Anchored. Identity Restored.", "success");
+        window.location.reload();
+    } catch (err) {
+        addToast("Anchoring failed.", "error");
+    }
+  };
 
   const TabButton: React.FC<{label: string, count?: number, isActive: boolean, onClick: () => void, icon: React.ReactNode}> = ({ label, count, isActive, onClick, icon }) => (
     <button onClick={onClick} className={`${isActive ? 'border-brand-gold text-brand-gold gold-glow-text' : 'border-transparent text-gray-500 hover:text-gray-300'} group inline-flex items-center whitespace-nowrap py-4 px-1 border-b-2 font-black text-[10px] uppercase tracking-widest transition-all`}>
@@ -96,6 +119,14 @@ export const AdminDashboard: React.FC<{
     }
   };
 
+  if (isUpgrading) {
+      return (
+          <div className="flex-1 flex items-center justify-center p-6 bg-black min-h-screen">
+              <GenesisNodeFlow onComplete={handleUpgradeComplete} onBack={() => setIsUpgrading(false)} />
+          </div>
+      );
+  }
+
   return (
     <div className="space-y-12 animate-fade-in max-w-[100vw] px-4 sm:px-10 lg:px-20 pb-20 font-sans">
       <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-10 border-b border-white/5 pb-2">
@@ -119,6 +150,12 @@ export const AdminDashboard: React.FC<{
               </nav>
           </div>
       </div>
+
+      {!hasVault && (
+          <div className="mt-8">
+              <SovereignUpgradeBanner onUpgrade={() => setIsUpgrading(true)} />
+          </div>
+      )}
 
       <div className="mt-10 min-h-[60vh]">
           {renderActiveView()}

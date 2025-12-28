@@ -1,4 +1,3 @@
-
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
@@ -16,16 +15,16 @@ interface State {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-// Fix: Explicitly extend Component and use local interfaces to ensure setState and props are correctly typed
-export class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false,
-    error: null,
-    errorInfo: null
-  };
-
-  constructor(props: Props) {
+// Fix: Explicitly extend React.Component to ensure properties are correctly recognized by TypeScript
+export class ErrorBoundary extends React.Component<Props, State> {
+  public constructor(props: Props) {
     super(props);
+    // Fix: Initializing state inherited from React.Component
+    this.state = {
+      hasError: false,
+      error: null,
+      errorInfo: null
+    };
   }
 
   public static getDerivedStateFromError(error: Error): State {
@@ -34,7 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error);
-    // Fix: setState is inherited from Component
+    // Fix: Using setState method inherited from React.Component
     this.setState({ error, errorInfo });
   }
 
@@ -43,7 +42,10 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   public render() {
-    if (this.state.hasError) {
+    // Fix: Accessing state inherited from React.Component
+    const { hasError, error } = this.state;
+
+    if (hasError) {
       return (
         <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-center font-sans">
           <div className="module-frame glass-module p-10 sm:p-16 rounded-[4rem] border-red-500/20 shadow-premium max-w-lg w-full relative overflow-hidden animate-fade-in">
@@ -56,7 +58,7 @@ export class ErrorBoundary extends Component<Props, State> {
             
             <div className="bg-black/60 p-6 rounded-3xl border border-white/5 shadow-inner mb-10 text-left overflow-hidden">
                 <p className="data-mono text-[11px] text-red-400/80 break-words leading-relaxed">
-                    {this.state.error?.name}: {this.state.error?.message}
+                    {error?.name}: {error?.message}
                 </p>
             </div>
 
@@ -71,7 +73,7 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Fix: props is inherited from Component
+    // Fix: Accessing props inherited from React.Component
     return this.props.children;
   }
 }

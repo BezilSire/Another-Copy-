@@ -1,7 +1,5 @@
-
 import * as tweetnacl from 'tweetnacl';
 import * as bip39 from 'bip39';
-import { Buffer } from 'buffer';
 
 const nacl = (tweetnacl as any).default || tweetnacl;
 
@@ -47,7 +45,11 @@ export const cryptoService = {
     },
 
     validateMnemonic: (mnemonic: string): boolean => {
-        return bip39.validateMnemonic(mnemonic.trim().toLowerCase());
+        try {
+            return bip39.validateMnemonic(mnemonic.trim().toLowerCase());
+        } catch (e) {
+            return false;
+        }
     },
 
     mnemonicToKeyPair: (mnemonic: string) => {
@@ -81,7 +83,6 @@ export const cryptoService = {
         try {
             const dataStr = await cryptoService._decryptWithPin(encrypted, pin);
             const data = JSON.parse(dataStr) as VaultData;
-            if (!bip39.validateMnemonic(data.mnemonic)) return null;
             
             const keys = cryptoService.mnemonicToKeyPair(data.mnemonic);
             localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, keys.publicKey);
@@ -94,45 +95,50 @@ export const cryptoService = {
 
     _encryptWithPin: async (text: string, pin: string): Promise<string> => {
         const enc = new TextEncoder();
-        const pinBuffer = enc.encode(pin).buffer as ArrayBuffer;
-        const pwHash = await crypto.subtle.importKey('raw', pinBuffer, { name: 'PBKDF2' }, false, ['deriveKey']);
+        const pinBytes = enc.encode(pin);
+        const pwKey = await crypto.subtle.importKey('raw', pinBytes, { name: 'PBKDF2' }, false, ['deriveKey']);
         const salt = window.crypto.getRandomValues(new Uint8Array(16));
+        
         const key = await crypto.subtle.deriveKey(
-            { name: 'PBKDF2', salt: salt.buffer as ArrayBuffer, iterations: 1000, hash: 'SHA-256' },
-            pwHash,
+            { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+            pwKey,
             { name: 'AES-GCM', length: 256 },
             false,
             ['encrypt']
         );
-        const iv = window.crypto.getRandomValues(new Uint8Array(12));
-        const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv.buffer as ArrayBuffer }, key, enc.encode(text).buffer as ArrayBuffer);
         
-        const vaultObj = {
+        const iv = window.crypto.getRandomValues(new Uint8Array(12));
+        const ciphertext = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv },
+            key,
+            enc.encode(text)
+        );
+        
+        return JSON.stringify({
             iv: encodeBase64(iv),
             salt: encodeBase64(salt),
             data: encodeBase64(new Uint8Array(ciphertext))
-        };
-        return JSON.stringify(vaultObj);
+        });
     },
 
     _decryptWithPin: async (vaultJson: string, pin: string): Promise<string> => {
         const vault = JSON.parse(vaultJson);
         const enc = new TextEncoder();
-        const pinBuffer = enc.encode(pin).buffer as ArrayBuffer;
-        const pwHash = await crypto.subtle.importKey('raw', pinBuffer, { name: 'PBKDF2' }, false, ['deriveKey']);
+        const pinBytes = enc.encode(pin);
+        const pwKey = await crypto.subtle.importKey('raw', pinBytes, { name: 'PBKDF2' }, false, ['deriveKey']);
         
         const key = await crypto.subtle.deriveKey(
-            { name: 'PBKDF2', salt: decodeBase64(vault.salt).buffer as ArrayBuffer, iterations: 1000, hash: 'SHA-256' },
-            pwHash,
+            { name: 'PBKDF2', salt: decodeBase64(vault.salt), iterations: 100000, hash: 'SHA-256' },
+            pwKey,
             { name: 'AES-GCM', length: 256 },
             false,
             ['decrypt']
         );
         
         const decrypted = await crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv: decodeBase64(vault.iv).buffer as ArrayBuffer },
+            { name: 'AES-GCM', iv: decodeBase64(vault.iv) },
             key,
-            decodeBase64(vault.data).buffer as ArrayBuffer
+            decodeBase64(vault.data)
         );
         return new TextDecoder().decode(decrypted);
     },
@@ -149,11 +155,10 @@ export const cryptoService = {
 
     verifySignature: (payload: string, signatureBase64: string, publicKeyBase64WithPrefix: string): boolean => {
         try {
-            const publicKeyBase64 = publicKeyBase64WithPrefix.startsWith('UBT-') 
+            const publicKeyBase = publicKeyBase64WithPrefix.startsWith('UBT-') 
                 ? publicKeyBase64WithPrefix.substring(4) 
                 : publicKeyBase64WithPrefix;
-                
-            const publicKey = decodeBase64(publicKeyBase64);
+            const publicKey = decodeBase64(publicKeyBase);
             const signature = decodeBase64(signatureBase64);
             return nacl.sign.detached.verify(encodeUTF8(payload), signature, publicKey);
         } catch (e) {

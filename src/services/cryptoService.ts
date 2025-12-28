@@ -1,8 +1,6 @@
-
 import * as tweetnacl from 'tweetnacl';
 import * as bip39 from 'bip39';
 
-// FIX: Initializing nacl with a check for default export to handle different environment types
 const nacl = (tweetnacl as any).default || tweetnacl;
 
 const SIGN_SECRET_KEY_STORAGE = 'gcn_sign_secret_key';
@@ -41,14 +39,17 @@ const decodeBase64 = (s: string): Uint8Array => {
     }
 };
 
-// FIX: Added mnemonic-based key generation and secure vault storage methods
 export const cryptoService = {
     generateMnemonic: (): string => {
         return bip39.generateMnemonic();
     },
 
     validateMnemonic: (mnemonic: string): boolean => {
-        return bip39.validateMnemonic(mnemonic.trim().toLowerCase());
+        try {
+            return bip39.validateMnemonic(mnemonic.trim().toLowerCase());
+        } catch (e) {
+            return false;
+        }
     },
 
     mnemonicToKeyPair: (mnemonic: string) => {
@@ -56,7 +57,6 @@ export const cryptoService = {
         const secretKey = seed.slice(0, 32);
         const keyPair = nacl.sign.keyPair.fromSeed(secretKey);
         
-        // Protocol standard: Addresses start with UBT- for UI distinction
         return {
             publicKey: `UBT-${encodeBase64(keyPair.publicKey)}`,
             secretKey: encodeBase64(keyPair.secretKey)
@@ -74,18 +74,6 @@ export const cryptoService = {
         const keys = cryptoService.mnemonicToKeyPair(data.mnemonic);
         localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, keys.publicKey);
         localStorage.setItem(SIGN_SECRET_KEY_STORAGE, keys.secretKey);
-    },
-
-    updateVaultCredentials: async (email: string, password: string, pin: string) => {
-        const encrypted = localStorage.getItem(ENCRYPTED_VAULT_STORAGE);
-        if (!encrypted) return;
-        try {
-            const currentStr = await cryptoService._decryptWithPin(encrypted, pin);
-            const currentData = JSON.parse(currentStr) as VaultData;
-            await cryptoService.saveVault({ ...currentData, email, password }, pin);
-        } catch (e) {
-            console.error("Vault credential update failed");
-        }
     },
 
     unlockVault: async (pin: string): Promise<VaultData | null> => {
@@ -108,17 +96,24 @@ export const cryptoService = {
 
     _encryptWithPin: async (text: string, pin: string): Promise<string> => {
         const enc = new TextEncoder();
-        const pwHash = await crypto.subtle.importKey('raw', enc.encode(pin), { name: 'PBKDF2' }, false, ['deriveKey']);
+        const pinBytes = enc.encode(pin);
+        const pwKey = await crypto.subtle.importKey('raw', pinBytes, { name: 'PBKDF2' }, false, ['deriveKey']);
         const salt = window.crypto.getRandomValues(new Uint8Array(16));
+        
         const key = await crypto.subtle.deriveKey(
-            { name: 'PBKDF2', salt, iterations: 1000, hash: 'SHA-256' },
-            pwHash,
+            { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+            pwKey,
             { name: 'AES-GCM', length: 256 },
             false,
             ['encrypt']
         );
+        
         const iv = window.crypto.getRandomValues(new Uint8Array(12));
-        const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(text));
+        const ciphertext = await crypto.subtle.encrypt(
+            { name: 'AES-GCM', iv },
+            key,
+            enc.encode(text)
+        );
         
         const vaultObj = {
             iv: encodeBase64(iv),
@@ -131,11 +126,12 @@ export const cryptoService = {
     _decryptWithPin: async (vaultJson: string, pin: string): Promise<string> => {
         const vault = JSON.parse(vaultJson);
         const enc = new TextEncoder();
-        const pwHash = await crypto.subtle.importKey('raw', enc.encode(pin), { name: 'PBKDF2' }, false, ['deriveKey']);
+        const pinBytes = enc.encode(pin);
+        const pwKey = await crypto.subtle.importKey('raw', pinBytes, { name: 'PBKDF2' }, false, ['deriveKey']);
         
         const key = await crypto.subtle.deriveKey(
-            { name: 'PBKDF2', salt: decodeBase64(vault.salt), iterations: 1000, hash: 'SHA-256' },
-            pwHash,
+            { name: 'PBKDF2', salt: decodeBase64(vault.salt), iterations: 100000, hash: 'SHA-256' },
+            pwKey,
             { name: 'AES-GCM', length: 256 },
             false,
             ['decrypt']

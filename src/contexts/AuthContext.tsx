@@ -19,7 +19,6 @@ interface AuthContextType {
   isProcessingAuth: boolean;
   isSovereignLocked: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
-  // FIX: Added loginAnonymously to AuthContextType interface to support guest sessions
   loginAnonymously: (displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   agentSignup: (credentials: AgentSignupCredentials) => Promise<void>;
@@ -56,7 +55,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (user) {
-        // FIX: Added anonymous handling to session listener to allow Guest Meetings to proceed after signInAnonymously
         if (user.isAnonymous) {
             setCurrentUser({
                 id: user.uid,
@@ -116,7 +114,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [addToast]);
 
-  // FIX: Implemented loginAnonymously for guest meeting participants
   const loginAnonymously = useCallback(async (displayName: string) => {
     setIsProcessingAuth(true);
     try {
@@ -154,7 +151,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     if (currentUser) api.goOffline(currentUser.id);
     sessionStorage.removeItem('ugc_node_unlocked');
     sessionStorage.removeItem('ugc_temp_pin');
-    // FIX: Clear guest name from session on logout
     sessionStorage.removeItem('ugc_guest_name');
     keySyncAttempted.current = null;
     cryptoService.clearSession();
@@ -169,6 +165,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { user } = userCredential;
       const pubKey = cryptoService.getPublicKey() || "";
 
+      // FIX: Added name_lowercase to Omit<Agent, "id"> literal
       const newAgent: Omit<Agent, 'id'> = {
         name: credentials.name,
         email: credentials.email,
@@ -285,7 +282,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     isProcessingAuth,
     isSovereignLocked,
     login,
-    // FIX: Included loginAnonymously in context value
     loginAnonymously,
     logout,
     agentSignup,

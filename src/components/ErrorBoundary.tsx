@@ -1,4 +1,3 @@
-
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
@@ -14,18 +13,18 @@ interface State {
 }
 
 /**
- * ErrorBoundary component to catch and handle UI-level crashes.
+ * Sovereign Error Boundary - Protocol Breach Containment
  */
-// Fix: Explicitly extend Component from react and use provided generic types to ensure props and setState are indexed correctly
-export class ErrorBoundary extends Component<Props, State> {
-  public state: State = {
-    hasError: false,
-    error: null,
-    errorInfo: null
-  };
-
-  constructor(props: Props) {
+// Fix: Explicitly extending React.Component to ensure proper inheritance of state, props, and setState
+export class ErrorBoundary extends React.Component<Props, State> {
+  public constructor(props: Props) {
     super(props);
+    // Fix: State initialization recognized through React.Component extension
+    this.state = {
+      hasError: false,
+      error: null,
+      errorInfo: null
+    };
   }
 
   public static getDerivedStateFromError(error: Error): State {
@@ -33,8 +32,8 @@ export class ErrorBoundary extends Component<Props, State> {
   }
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Uncaught error:', error);
-    // Fix: setState is inherited from Component and captured errorInfo is persisted to state
+    console.error('Handshake Failure Exception:', error);
+    // Fix: Explicitly using setState inherited from React.Component
     this.setState({ error, errorInfo });
   }
 
@@ -43,7 +42,10 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   public render() {
-    if (this.state.hasError) {
+    // Fix: Correctly accessing state from inherited React.Component
+    const { hasError, error } = this.state;
+
+    if (hasError) {
       return (
         <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-center font-sans">
           <div className="module-frame glass-module p-10 sm:p-16 rounded-[4rem] border-red-500/20 shadow-premium max-w-lg w-full relative overflow-hidden animate-fade-in">
@@ -55,8 +57,8 @@ export class ErrorBoundary extends Component<Props, State> {
             <p className="label-caps !text-[10px] !text-red-500/80 mb-8 !tracking-[0.4em]">Critical System Exception Detected</p>
             
             <div className="bg-black/60 p-6 rounded-3xl border border-white/5 shadow-inner mb-10 text-left overflow-hidden">
-                <p className="data-mono text-[11px] text-red-400/80 break-words">
-                    {this.state.error?.name}: {this.state.error?.message}
+                <p className="data-mono text-[11px] text-red-400/80 break-words leading-relaxed">
+                    {error?.name}: {error?.message}
                 </p>
             </div>
 
@@ -71,7 +73,7 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Fix: props is inherited from Component when correctly extended
+    // Fix: Correctly accessing props from inherited React.Component
     return this.props.children;
   }
 }

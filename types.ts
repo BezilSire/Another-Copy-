@@ -9,19 +9,12 @@ export type AssetType = 'SOL' | 'USDT' | 'USDC';
 export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger' | 'wallet';
 export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more';
 
-export interface LoginCredentials {
-  email: string;
-  password?: string;
-}
-
-// Added ParticipantStatus interface for video meetings
 export interface ParticipantStatus {
     isVideoOn: boolean;
     isMicOn: boolean;
     isSpeaking: boolean;
 }
 
-// Added Meeting interface to resolve build errors in Meeting components
 export interface Meeting {
     id: string;
     hostId: string;
@@ -39,6 +32,7 @@ export interface Meeting {
 export interface User {
   id: string;
   name: string;
+  name_lowercase?: string;
   email: string;
   role: UserRole;
   status: UserStatus;
@@ -56,6 +50,7 @@ export interface User {
   bio?: string;
   profession?: string;
   skills?: string[];
+  skills_lowercase?: string[];
   interests?: string[];
   passions?: string[];
   awards?: string;
@@ -64,83 +59,26 @@ export interface User {
   isLookingForPartners?: boolean;
   lookingFor?: string[];
   businessIdea?: string;
-  pitchDeckTitle?: string;
-  pitchDeckSlides?: { title: string; content: string }[];
   id_card_number?: string;
   knowledgePoints?: number;
   hasReadKnowledgeBase?: boolean;
   scap?: number; 
   ccap?: number; 
   referralEarnings?: number;
-  ventureEquity?: VentureEquityHolding[];
-  lastDailyCheckin?: Timestamp;
-  sustenanceVouchers?: SustenanceVoucher[];
-  stakedCcap?: number;
-  currentCycleCcap?: number;
-  lastCycleChoice?: 'redeemed' | 'staked' | 'invested';
-  name_lowercase?: string;
-  skills_lowercase?: string[];
   ubtBalance?: number; 
   initialUbtStake?: number;
   fcmToken?: string;
   publicKey?: string;
   vouchCount?: number;
   credibility_score?: number;
-  socialLinks?: { title: string; url: string }[];
   following?: string[];
   followers?: string[];
-}
-
-export interface UserVault {
-    id: string;
-    userId: string;
-    name: string;
-    balance: number;
-    type: 'HOT' | 'LOCKED' | 'BUSINESS' | 'LIQUID';
-    lockedUntil?: Timestamp;
-    createdAt: Timestamp;
-}
-
-export interface TreasuryVault {
-    id: string;
-    name: string;
-    description: string;
-    balance: number;
-    publicKey: string;
-    type: 'GENESIS' | 'SUSTENANCE' | 'DISTRESS' | 'VENTURE' | 'FLOAT';
-    isLocked: boolean;
-}
-
-export interface CitizenResource {
-    id: string;
-    name: string;
-    type: 'ENERGY' | 'WATER' | 'FOOD' | 'LAND' | 'EQUIPMENT';
-    circle: string;
-    location: string;
-    status: 'OPTIMAL' | 'WARNING' | 'MAINTENANCE' | 'DEPLETED';
-    capacity: string;
-    managedBy: string;
-    createdAt: Timestamp;
-    signature: string;
-    nonce: string;
-    signerKey: string;
-}
-
-export interface Dispute {
-    id: string;
-    claimantId: string;
-    claimantName: string;
-    respondentId: string;
-    respondentName: string;
-    reason: string;
-    evidence: string;
-    status: 'TRIBUNAL' | 'RESOLVED' | 'DISMISSED';
-    juryIds: string[];
-    votesForClaimant: number;
-    votesForRespondent: number;
-    timestamp: Timestamp;
-    resolvedAt?: Timestamp;
-    signedVotes: { [userId: string]: string };
+  lastDailyCheckin?: Timestamp;
+  socialLinks?: { title: string; url: string }[];
+  pitchDeckTitle?: string;
+  pitchDeckSlides?: { title: string; content: string }[];
+  ventureEquity?: VentureEquityHolding[];
+  sustenanceVouchers?: SustenanceVoucher[];
 }
 
 export interface UbtTransaction {
@@ -170,10 +108,7 @@ export interface Transaction {
     actorName: string;
     relatedUserId?: string;
     relatedUserName?: string;
-    balanceBefore?: number;
-    balanceAfter?: number;
     txHash?: string;
-    protocol_mode?: ProtocolMode;
 }
 
 export interface Agent extends User {
@@ -188,6 +123,8 @@ export interface MemberUser extends User {
   credibility_score: number;
   distress_calls_available: number;
   last_distress_call?: Timestamp | null;
+  currentCycleCcap?: number;
+  lastCycleChoice?: string;
 }
 
 export interface Admin extends User {
@@ -209,22 +146,11 @@ export interface Member {
   membership_card_id: string;
   uid?: string;
   status?: UserStatus;
-  distress_calls_available?: number;
+  is_duplicate_email?: boolean;
   address?: string;
   national_id?: string;
-  bio?: string;
-  profession?: string;
   skills?: string[];
-  awards?: string;
   interests?: string[];
-  passions?: string[];
-  gender?: string;
-  age?: string;
-  isLookingForPartners?: boolean;
-  lookingFor?: string[];
-  businessIdea?: string;
-  skills_lowercase?: string[];
-  is_duplicate_email?: boolean;
 }
 
 export interface NewMember {
@@ -236,52 +162,12 @@ export interface NewMember {
   payment_status: 'pending' | 'complete' | 'installment';
 }
 
-export interface NewPublicMemberData {
-    full_name: string;
-    email: string;
-    referralCode?: string;
-}
-
 export interface Broadcast {
-  id: string;
-  authorId: string;
-  authorName: string;
-  message: string;
-  date: string;
-}
-
-export interface Post {
-  id: string;
-  authorId: string;
-  authorName: string;
-  authorCircle: string;
-  authorRole: UserRole;
-  authorInterests?: string[];
-  content: string;
-  date: string;
-  upvotes: string[];
-  types: 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress';
-  commentCount?: number;
-  repostCount?: number;
-  isPinned?: boolean;
-  requiredSkills?: string[];
-  repostedFrom?: {
-    authorId: string;
-    authorName: string;
-    authorCircle: string;
-    content: string;
-    date: string;
-  }
-}
-
-export interface Comment {
     id: string;
-    parentId: string;
     authorId: string;
     authorName: string;
-    content: string;
-    upvotes: string[];
-    timestamp: Timestamp;
+    message: string;
+    date: string;
 }
 
 export interface Report {
@@ -290,13 +176,168 @@ export interface Report {
     reporterName: string;
     reportedUserId: string;
     reportedUserName: string;
+    reason: string;
+    details: string;
+    date: string;
+    status: 'new' | 'resolved';
     postId?: string;
     postContent?: string;
     postAuthorId?: string;
-    reason: string;
-    details?: string;
-    date: string;
-    status: 'new' | 'resolved';
+}
+
+export interface PayoutRequest {
+    id: string;
+    userId: string;
+    userName: string;
+    amount: number;
+    ecocashName: string;
+    ecocashNumber: string;
+    status: 'pending' | 'completed' | 'rejected';
+    requestedAt: Timestamp;
+    completedAt?: Timestamp;
+    type: 'referral' | 'ccap_redemption' | 'veq_redemption' | 'onchain_withdrawal';
+    meta?: {
+        ventureName?: string;
+        solanaAddress?: string;
+        ccapRedeemed?: number;
+        rate?: number;
+        ubtRedeemed?: number;
+        ventureId?: string;
+    };
+    processedBy?: {
+        adminId: string;
+        adminName: string;
+    };
+}
+
+export interface Venture {
+    id: string;
+    name: string;
+    ticker: string;
+    description: string;
+    ownerId: string;
+    ownerName: string;
+    fundingGoalUsd: number;
+    fundingGoalCcap: number;
+    fundingRaisedCcap: number;
+    createdAt: Timestamp;
+    status: 'fundraising' | 'fully_funded' | 'operational' | 'completed' | 'on_hold' | 'pending_approval';
+    backers: string[];
+    totalSharesIssued: number;
+    totalProfitsDistributed: number;
+    pitchDeck: {
+        title: string;
+        slides: { title: string; content: string }[];
+    };
+    impactAnalysis: {
+        score: number;
+        reasoning: string;
+    };
+}
+
+export interface CommunityValuePool {
+    id: string;
+    total_usd_value: number;
+    total_circulating_ccap: number;
+    ccap_to_usd_rate: number;
+    last_updated: Timestamp;
+}
+
+export interface NewPublicMemberData {
+    full_name: string;
+    email: string;
+    referralCode?: string;
+}
+
+export interface Comment {
+    id: string;
+    parentId: string;
+    authorId: string;
+    authorName: string;
+    content: string;
+    timestamp: Timestamp;
+    upvotes: string[];
+}
+
+export interface VentureEquityHolding {
+    ventureId: string;
+    ventureName: string;
+    ventureTicker: string;
+    shares: number;
+}
+
+export interface SustenanceCycle {
+    id: string;
+    slf_balance: number;
+    hamper_cost: number;
+    last_drop?: Timestamp;
+}
+
+export interface SustenanceVoucher {
+    id: string;
+    userId: string;
+    userName: string;
+    value: number;
+    status: 'active' | 'redeemed' | 'expired';
+    issuedAt: Timestamp;
+    expiresAt: Timestamp;
+    redeemedBy?: string;
+}
+
+export interface RedemptionCycle {
+    id: string;
+    status: 'window_open' | 'window_closed';
+    windowEndDate: Timestamp;
+    endDate: Timestamp;
+    ccap_to_usd_rate: number;
+    cvp_usd_total: number;
+    total_ccap_earned: number;
+}
+
+export interface UserVault {
+    id: string;
+    name: string;
+    balance: number;
+    type: 'FLOAT' | 'LOCKED';
+    createdAt: Timestamp;
+    lockedUntil?: Timestamp;
+}
+
+export interface Distribution {
+    id: string;
+    ventureId: string;
+    totalAmount: number;
+    date: Timestamp;
+    notes: string;
+}
+
+export interface Proposal {
+    id: string;
+    title: string;
+    description: string;
+    status: 'active' | 'passed' | 'failed' | 'closed';
+    createdAt: Timestamp;
+    voteCountFor: number;
+    voteCountAgainst: number;
+    votesFor: string[];
+    votesAgainst: string[];
+}
+
+export interface Post {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorCircle: string;
+  authorRole: UserRole;
+  content: string;
+  date: string;
+  upvotes: string[];
+  types: 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress';
+  commentCount: number;
+  repostCount: number;
+  isPinned?: boolean;
+  requiredSkills?: string[];
+  repostedFrom?: any;
 }
 
 export interface Conversation {
@@ -353,131 +394,46 @@ export interface PublicUserProfile extends Partial<User> {
     role: UserRole;
     circle: string;
     status: UserStatus;
-    bio?: string;
-    profession?: string;
-    skills?: string[];
-    interests?: string[];
-    businessIdea?: string;
-    isLookingForPartners?: boolean;
-    lookingFor?: string[];
-    credibility_score?: number;
-    scap?: number;
-    ccap?: number;
-    createdAt?: Timestamp;
-    publicKey?: string;
-    ubtBalance?: number;
-    vouchCount?: number;
 }
 
-export interface Proposal {
-    id: string;
-    title: string;
-    description: string;
-    authorId: string;
-    authorName: string;
-    createdAt: Timestamp;
-    status: 'active' | 'passed' | 'failed' | 'closed';
-    votesFor: string[];
-    votesAgainst: string[];
-    voteCountFor: number;
-    voteCountAgainst: number;
-    commentCount?: number;
-}
-
-export interface RedemptionCycle {
-    id: string;
-    startDate: Timestamp;
-    endDate: Timestamp;
-    windowEndDate: Timestamp;
-    status: 'active' | 'window_open' | 'closed';
-    ccap_to_usd_rate: number;
-    total_ccap_earned: number;
-    cvp_usd_total: number;
-}
-
-export interface PayoutRequest {
-    id: string;
-    userId: string;
-    userName: string;
-    type: 'referral' | 'commission' | 'ccap_redemption' | 'veq_redemption' | 'ubt_redemption' | 'onchain_withdrawal';
-    amount: number;
-    status: 'pending' | 'completed' | 'rejected';
-    requestedAt: Timestamp;
-    ecocashName: string;
-    ecocashNumber: string;
-    meta?: {
-        solanaAddress?: string;
-        ventureId?: string;
-        ventureName?: string;
-        ubtAmount?: number;
-        ubtToUsdRate?: number;
-        ccapAmount?: number;
-        ccapToUsdRate?: number;
-    };
-    processedBy?: {
-        adminId: string;
-        adminName: string;
-    };
-    completedAt?: Timestamp;
-}
-
-export interface SustenanceCycle {
-    slf_balance: number;
-    hamper_cost: number;
-    last_run: Timestamp;
-    next_run: Timestamp;
-}
-
-export interface SustenanceVoucher {
-    id: string;
-    userId: string;
-    userName: string;
-    value: number;
-    status: 'active' | 'redeemed' | 'expired';
-    issuedAt: Timestamp;
-    expiresAt: Timestamp;
-    redeemedAt?: Timestamp;
-    redeemedBy?: string;
-}
-
-export interface Venture {
+export interface TreasuryVault {
     id: string;
     name: string;
     description: string;
-    ownerId: string;
-    ownerName: string;
-    fundingGoalUsd: number;
-    fundingGoalCcap: number;
-    fundingRaisedCcap: number;
-    backers: string[];
-    status: 'fundraising' | 'operational' | 'fully_funded' | 'completed' | 'on_hold' | 'pending_approval';
+    balance: number;
+    publicKey: string;
+    type: string;
+    isLocked: boolean;
+}
+
+export interface CitizenResource {
+    id: string;
+    name: string;
+    type: string;
+    circle: string;
+    location: string;
+    status: string;
+    capacity: string;
+    managedBy: string;
     createdAt: Timestamp;
-    pitchDeck: { title: string; slides: { title: string; content: string }[] };
-    impactAnalysis: { score: number; reasoning: string };
-    ticker: string;
-    totalSharesIssued: number;
-    totalProfitsDistributed: number;
+    signature: string;
+    nonce: string;
+    signerKey: string;
 }
 
-export interface CommunityValuePool {
+export interface Dispute {
     id: string;
-    total_usd_value: number;
-    total_circulating_ccap: number;
-    ccap_to_usd_rate: number;
-}
-
-export interface VentureEquityHolding {
-    ventureId: string;
-    ventureName: string;
-    ventureTicker: string;
-    shares: number;
-}
-
-export interface Distribution {
-    id: string;
-    date: Timestamp;
-    totalAmount: number;
-    notes: string;
+    claimantId: string;
+    claimantName: string;
+    respondentId: string;
+    respondentName: string;
+    reason: string;
+    evidence: string;
+    status: string;
+    juryIds: string[];
+    votesForClaimant: number;
+    votesForRespondent: number;
+    timestamp: Timestamp;
 }
 
 export interface GlobalEconomy {
@@ -487,29 +443,8 @@ export interface GlobalEconomy {
     total_ubt_supply: number;
     last_oracle_sync: Timestamp;
     ubtRedemptionWindowOpen?: boolean;
-    ubtRedemptionWindowStartedAt?: Timestamp;
     ubtRedemptionWindowClosesAt?: Timestamp;
-    ubt_in_cvp?: number;
-    system_sol_address?: string;
-    system_usdt_address?: string;
-    system_usdc_address?: string;
-}
-
-export interface P2POffer {
-    id: string;
-    sellerId: string;
-    sellerName: string;
-    type: 'BUY' | 'SELL';
-    amount: number;
-    pricePerUnit: number;
-    totalPrice: number;
-    paymentMethod: string;
-    status: 'OPEN' | 'LOCKED' | 'COMPLETED' | 'CANCELLED';
-    buyerId?: string;
-    buyerName?: string;
-    createdAt: Timestamp;
-    lockedAt?: Timestamp;
-    escrowTxId?: string;
+    ubtRedemptionWindowStartedAt?: Timestamp;
 }
 
 export interface PendingUbtPurchase {
@@ -524,5 +459,4 @@ export interface PendingUbtPurchase {
     payment_method: 'FIAT' | 'CRYPTO';
     status: 'PENDING' | 'AWAITING_CONFIRMATION' | 'VERIFIED' | 'REJECTED';
     createdAt: Timestamp;
-    verifiedAt?: Timestamp;
 }
