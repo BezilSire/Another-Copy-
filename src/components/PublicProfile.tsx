@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { User, PublicUserProfile, FilterType, UbtTransaction } from '../types';
 import { api } from '../services/apiService';
@@ -65,7 +64,7 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
     const handleVouch = async () => {
         if (!publicProfile || isVouching) return;
         if (!cryptoService.hasVault()) {
-            addToast("IDENTITY_BREACH: Local vault required to sign vouches.", "error");
+            addToast("IDENTITY_LOCK: Local vault required to sign vouches.", "error");
             return;
         }
 
@@ -166,7 +165,7 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
                                     {isVouching ? <LoaderIcon className="h-4 w-4 animate-spin"/> : <><ShieldCheckIcon className="h-4 w-4" /> Sign Vouch Anchor</>}
                                 </button>
                                 <button onClick={() => onStartChat(publicProfile.id)} className="w-full py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-2xl text-[9px] font-black uppercase tracking-widest transition-all">Direct Comm Channel</button>
-                                <button onClick={() => setIsReportModalOpen(true)} className="w-full py-2 text-[8px] font-black text-gray-700 hover:text-red-500 uppercase tracking-[0.3em] transition-colors">Flag Anomoly</button>
+                                <button onClick={() => setIsReportModalOpen(true)} className="w-full py-2 text-[8px] font-black text-gray-700 hover:text-red-500 uppercase tracking-[0.3em] transition-colors">Flag Anomaly</button>
                             </>
                         )}
                     </div>

@@ -1,5 +1,4 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { cryptoService } from '../services/cryptoService';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
@@ -19,36 +18,44 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
     const [verifyInput, setVerifyInput] = useState('');
     const [isGenerating, setIsGenerating] = useState(false);
 
+    const generateMnemonic = useCallback(() => {
+        setIsGenerating(true);
+        try {
+            // BIP39 generation is typically synchronous and instant
+            const newMnemonic = cryptoService.generateMnemonic();
+            setMnemonic(newMnemonic);
+        } catch (error) {
+            console.error("Entropy generation failed:", error);
+        } finally {
+            setIsGenerating(false);
+        }
+    }, []);
+
     useEffect(() => {
         if (step === 1 && !mnemonic) {
-            setIsGenerating(true);
-            const timer = setTimeout(() => {
-                setMnemonic(cryptoService.generateMnemonic());
-                setIsGenerating(false);
-            }, 800);
-            return () => clearTimeout(timer);
+            generateMnemonic();
         }
-    }, [step, mnemonic]);
+    }, [step, mnemonic, generateMnemonic]);
 
-    const words = mnemonic.split(' ');
+    const words = mnemonic ? mnemonic.split(' ') : [];
 
     const handleNextStep = () => {
         if (step === 1) {
+            if (!mnemonic) return;
             setVerifyWordIndex(Math.floor(Math.random() * 12));
             setStep(2);
         } else if (step === 2) {
             if (verifyInput.trim().toLowerCase() === words[verifyWordIndex]) {
                 setStep(3);
             } else {
-                alert("INTEGRITY ERROR: Verification word mismatch. Re-verify your phrase.");
-                setStep(1);
+                alert("INTEGRITY ERROR: Verification word mismatch. Please check your phrase and try again.");
                 setVerifyInput('');
             }
         } else if (step === 3) {
             if (pin.length === 6 && pin === confirmPin) {
                 onComplete(mnemonic, pin);
             } else {
-                alert("PIN MISMATCH: Secure sequences must be identical.");
+                alert("PIN MISMATCH: Secure sequences must be exactly 6 digits and identical.");
             }
         }
     };
@@ -77,9 +84,9 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                         </p>
                     </div>
                     
-                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 min-h-[160px]">
                         {isGenerating ? (
-                            <div className="col-span-full py-16 flex flex-col items-center justify-center gap-4">
+                            <div className="col-span-full flex flex-col items-center justify-center gap-4">
                                 <LoaderIcon className="h-10 w-10 animate-spin text-brand-gold opacity-50"/>
                                 <span className="label-caps !text-[8px] opacity-40">Calculating_Entropy...</span>
                             </div>
@@ -91,7 +98,11 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                         ))}
                     </div>
 
-                    <button onClick={handleNextStep} disabled={isGenerating} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[11px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-3">
+                    <button 
+                        onClick={handleNextStep} 
+                        disabled={isGenerating || !mnemonic} 
+                        className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[11px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-3 disabled:opacity-20"
+                    >
                         I Have Anchored My Phrase <ArrowRightIcon className="h-4 w-4"/>
                     </button>
                 </div>
@@ -104,9 +115,10 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                         type="text" 
                         value={verifyInput}
                         onChange={e => setVerifyInput(e.target.value.toLowerCase().trim())}
-                        className="w-full bg-slate-900 border-2 border-brand-gold/40 p-6 rounded-2xl text-white font-mono text-center text-2xl uppercase tracking-[0.3em] focus:ring-4 focus:ring-brand-gold/10 outline-none"
+                        className="w-full bg-slate-900 border-2 border-brand-gold/40 p-6 rounded-2xl text-white font-mono text-center text-2xl uppercase tracking-[0.3em] focus:ring-4 focus:ring-brand-gold/10 outline-none transition-all"
                         placeholder="WORD..."
                         autoFocus
+                        onKeyDown={(e) => e.key === 'Enter' && handleNextStep()}
                     />
                     <button onClick={handleNextStep} disabled={!verifyInput} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.3em] text-[11px] shadow-glow-gold active:scale-95 transition-all">
                         Finalize Handshake
@@ -125,7 +137,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                             maxLength={6}
                             value={pin}
                             onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
-                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-4xl font-black tracking-[0.5em] focus:border-brand-gold outline-none"
+                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-4xl font-black tracking-[0.5em] focus:border-brand-gold outline-none transition-all"
                             placeholder="••••••"
                         />
                         <input 
@@ -134,8 +146,9 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                             maxLength={6}
                             value={confirmPin}
                             onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
-                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-4xl font-black tracking-[0.5em] focus:border-brand-gold outline-none"
+                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-4xl font-black tracking-[0.5em] focus:border-brand-gold outline-none transition-all"
                             placeholder="CONFIRM"
+                            onKeyDown={(e) => e.key === 'Enter' && pin.length === 6 && handleNextStep()}
                         />
                     </div>
 

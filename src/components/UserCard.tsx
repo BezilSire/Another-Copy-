@@ -1,8 +1,11 @@
-
-import React from 'react';
-import { User, PublicUserProfile } from '../types';
+import React, { useState } from 'react';
+import { User, PublicUserProfile, UbtTransaction } from '../types';
 import { UserCircleIcon } from './icons/UserCircleIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
+import { cryptoService } from '../services/cryptoService';
+import { api } from '../services/apiService';
+import { useToast } from '../contexts/ToastContext';
+import { LoaderIcon } from './icons/LoaderIcon';
 
 interface UserCardProps {
   user: PublicUserProfile;
@@ -19,6 +22,51 @@ const StatusBadge: React.FC<{ status: User['status'] }> = ({ status }) => {
 };
 
 export const UserCard: React.FC<UserCardProps> = ({ user, currentUser, onClick, isOnline }) => {
+  const [isVouching, setIsVouching] = useState(false);
+  const { addToast } = useToast();
+  const isOwnProfile = currentUser.id === user.id;
+
+  const handleQuickVouch = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (isVouching || isOwnProfile) return;
+
+    if (!cryptoService.hasVault()) {
+        addToast("IDENTITY_LOCK: Local vault required to sign vouches.", "error");
+        return;
+    }
+
+    setIsVouching(true);
+    try {
+        const timestamp = Date.now();
+        const nonce = cryptoService.generateNonce();
+        const payload = `VOUCH:${currentUser.id}:${user.id}:${timestamp}:${nonce}`;
+        const signature = cryptoService.signTransaction(payload);
+        const txId = `vouch-quick-${Date.now().toString(36)}`;
+
+        const transaction: UbtTransaction = {
+            id: txId,
+            senderId: currentUser.id,
+            receiverId: user.id,
+            amount: 0,
+            timestamp: timestamp,
+            nonce: nonce,
+            signature: signature,
+            hash: payload,
+            senderPublicKey: currentUser.publicKey || "",
+            parentHash: 'SOCIAL_CHAIN',
+            type: 'VOUCH_ANCHOR',
+            protocol_mode: 'MAINNET'
+        };
+
+        await api.vouchForCitizen(transaction);
+        addToast(`Trust Anchor Signed for ${user.name}.`, "success");
+    } catch (err: any) {
+        addToast(err.message || "Vouch failed.", "error");
+    } finally {
+        setIsVouching(false);
+    }
+  };
+
   return (
     <div
       onClick={onClick}
@@ -30,7 +78,7 @@ export const UserCard: React.FC<UserCardProps> = ({ user, currentUser, onClick, 
 
       <div className="flex items-start gap-4 relative z-10">
         <div className="relative flex-shrink-0">
-            <div className="w-14 h-14 rounded-xl bg-slate-900 flex items-center justify-center border border-white/5 group-hover:border-brand-gold/40 transition-all">
+            <div className="w-14 h-14 rounded-xl bg-slate-900 border border-white/5 group-hover:border-brand-gold/40 transition-all">
                 <UserCircleIcon className="h-10 w-10 text-gray-600 group-hover:text-brand-gold/60 transition-colors" />
             </div>
             {isOnline && (
@@ -51,13 +99,20 @@ export const UserCard: React.FC<UserCardProps> = ({ user, currentUser, onClick, 
         </div>
       </div>
 
-      <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between">
+      <div className="mt-6 pt-4 border-t border-white/5 flex items-center justify-between relative z-10">
           <div className="text-[9px] font-black text-gray-500 uppercase tracking-widest">
                 Reputation: <span className="text-white">{user.credibility_score || 100}</span>
           </div>
-          <div className="text-[9px] font-black text-gray-500 uppercase tracking-widest">
-                Vouches: <span className="text-brand-gold">{user.vouchCount || 0}</span>
-          </div>
+          {!isOwnProfile && (
+              <button 
+                onClick={handleQuickVouch}
+                disabled={isVouching}
+                className="px-3 py-1.5 bg-brand-gold/10 hover:bg-brand-gold text-brand-gold hover:text-slate-950 border border-brand-gold/20 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all active:scale-90 flex items-center gap-2"
+              >
+                {isVouching ? <LoaderIcon className="h-3 w-3 animate-spin"/> : <ShieldCheckIcon className="h-3 w-3" />}
+                Vouch
+              </button>
+          )}
       </div>
     </div>
   );

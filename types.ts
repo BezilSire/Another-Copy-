@@ -29,12 +29,10 @@ export interface Meeting {
     expiresAt: Timestamp;
     participants: { [uid: string]: ParticipantStatus };
     kickedParticipantId?: string;
-    // Fix: Added offer and answer properties for WebRTC signaling
     offer?: any;
     answer?: any;
 }
 
-// Signaling structures for Mesh
 export interface RTCSignal {
     type: 'offer' | 'answer';
     sdp: string;
@@ -104,6 +102,7 @@ export interface User {
   awards?: string;
   gender?: string;
   age?: string;
+  dob?: string;
   isLookingForPartners?: boolean;
   lookingFor?: string[];
   businessIdea?: string;
