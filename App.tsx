@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -21,8 +22,6 @@ import { PinVaultLogin } from './components/PinVaultLogin';
 import { RecoveryProtocol } from './components/RecoveryProtocol';
 import { cryptoService, VaultData } from './services/cryptoService';
 import { RadarModal } from './components/RadarModal';
-import { usePushNotifications } from './hooks/usePushNotifications';
-import { NotificationPermissionBanner } from './components/NotificationPermissionBanner';
 import { MeetingHub } from './components/MeetingHub';
 import { GuestMeetingPage } from './components/GuestMeetingPage';
 import { VideoMeeting } from './components/VideoMeeting';
@@ -55,8 +54,6 @@ const App: React.FC = () => {
   const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
   const [forceView, setForceView] = useState<string | null>(null);
 
-  const { permission, requestPermission } = usePushNotifications(currentUser);
-
   useEffect(() => {
       const params = new URLSearchParams(window.location.search);
       const joinId = params.get('join');
@@ -64,11 +61,11 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (currentUser) {
+    if (currentUser && !firebaseUser?.isAnonymous) {
         const unsubNotifs = api.listenForNotifications(currentUser.id, (notifications) => setUnreadNotificationCount(notifications.filter(n => !n.read).length));
         return () => unsubNotifs();
     }
-  }, [currentUser]);
+  }, [currentUser, firebaseUser]);
 
   const confirmLogout = async () => { await logout(); setIsLogoutConfirmOpen(false); window.location.reload(); };
   const handleOpenChat = () => setChatTarget('main');
@@ -78,17 +75,26 @@ const App: React.FC = () => {
   
   const renderMainContent = () => {
     if (isBooting) return null;
+    
+    // Strict perimeter for anonymous nodes
+    if (firebaseUser?.isAnonymous) {
+        if (activeMeetingId && currentUser) return <VideoMeeting user={currentUser} meetingId={activeMeetingId} isHost={false} onEnd={confirmLogout} />;
+        return <GuestMeetingPage meetingId={activeMeetingId || ''} />;
+    }
+
     if (activeMeetingId && !firebaseUser && !isLoadingAuth) return <GuestMeetingPage meetingId={activeMeetingId} />;
+    
     if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
         if (isRecovering) return <div className="flex-1 flex flex-col justify-center items-center px-4 min-h-screen bg-black"><RecoveryProtocol onBack={() => setIsRecovering(false)} onComplete={handleSecurityRecoveryComplete} /></div>;
         return <div className="flex-1 flex flex-col justify-center items-center px-4 min-h-screen bg-black"><PinVaultLogin onUnlock={unlockSovereignSession} onReset={() => setIsRecovering(true)} /></div>;
     }
+
     if (currentUser) {
         if (activeMeetingId) return <VideoMeeting user={currentUser} meetingId={activeMeetingId} isHost={false} onEnd={() => { setActiveMeetingId(null); window.history.pushState({}, '', window.location.pathname); }} />;
         if (chatTarget) return <ChatsPage user={currentUser} initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null} onClose={() => setChatTarget(null)} onViewProfile={handleViewProfile} onNewMessageClick={() => {}} onNewGroupClick={() => {}} />;
         if (viewingProfileId) return <div className="main-container py-10"><PublicProfile userId={viewingProfileId} currentUser={currentUser} onBack={() => setViewingProfileId(null)} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(currentUser, target); setViewingProfileId(null); setChatTarget(convo); } }} onViewProfile={(id) => setViewingProfileId(id)} isAdminView={currentUser.role === 'admin'} /></div>;
         const isLegacyOrSpecial = currentUser.role === 'admin' || currentUser.role === 'agent' || currentUser.status === 'active';
-        if (!isLegacyOrSpecial && !firebaseUser?.isAnonymous) {
+        if (!isLegacyOrSpecial) {
             if (firebaseUser && !firebaseUser.emailVerified && (currentUser.isProfileComplete || currentUser.status === 'pending')) return <VerifyEmailPage user={currentUser} onLogout={() => setIsLogoutConfirmOpen(true)} />;
             if (currentUser.status === 'pending' && currentUser.role === 'member') return <UbtVerificationPage user={currentUser} onLogout={() => setIsLogoutConfirmOpen(true)} />;
             if (!currentUser.isProfileComplete) return <div className="main-container py-12"><CompleteProfilePage user={currentUser} onProfileComplete={async (data) => { await updateUser(data); }} /></div>;
@@ -109,7 +115,6 @@ const App: React.FC = () => {
           <div className="flex-1 flex flex-col animate-fade-in">
             {!isSovereignLocked && currentUser && !firebaseUser?.isAnonymous && <Header user={currentUser} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={handleViewProfile} onChatClick={() => handleOpenChat()} onMeetClick={handleOpenMeet} onRadarClick={() => setIsRadarOpen(true)} />}
             <main className="flex-1">{renderMainContent()}</main>
-            <NotificationPermissionBanner permission={permission} onRequestPermission={requestPermission} />
             <ToastContainer />
             <ConfirmationDialog isOpen={isLogoutConfirmOpen} onClose={() => setIsLogoutConfirmOpen(false)} onConfirm={confirmLogout} title="Disconnect Node" message="Are you sure you want to end the secure protocol handshake?" confirmButtonText="Terminate" />
             {isRadarOpen && currentUser && <RadarModal isOpen={isRadarOpen} onClose={() => setIsRadarOpen(false)} currentUser={currentUser} onViewProfile={handleViewProfile} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(currentUser, target); setChatTarget(convo); } }} />}

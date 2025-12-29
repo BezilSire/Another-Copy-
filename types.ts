@@ -16,6 +16,8 @@ export interface ParticipantStatus {
     isVideoOn: boolean;
     isMicOn: boolean;
     isSpeaking: boolean;
+    isRequestingStage: boolean;
+    isOnStage: boolean;
     role: string;
     joinedAt: number;
 }
@@ -29,8 +31,6 @@ export interface Meeting {
     expiresAt: Timestamp;
     participants: { [uid: string]: ParticipantStatus };
     kickedParticipantId?: string;
-    offer?: any;
-    answer?: any;
 }
 
 export interface RTCSignal {

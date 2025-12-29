@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, Meeting, ParticipantStatus, RTCSignal, ICESignal } from '../types';
 import { api } from '../services/apiService';
@@ -12,6 +13,8 @@ import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { LogoIcon } from './icons/LogoIcon';
 import { UserMinusIcon } from './icons/UserMinusIcon';
 import { ClockIcon } from './icons/ClockIcon';
+import { ArrowUpRightIcon } from './icons/ArrowUpRightIcon';
+import { HandIcon } from './icons/HandIcon';
 
 const servers = {
     iceServers: [
@@ -32,23 +35,21 @@ const ParticipantTile: React.FC<{
     stream?: MediaStream; 
     isLocal?: boolean;
     isHost?: boolean;
+    onPromote?: () => void;
+    onDemote?: () => void;
     onRevoke?: () => void;
-}> = ({ participant, stream, isLocal, isHost, onRevoke }) => {
+    size?: 'large' | 'small';
+}> = ({ participant, stream, isLocal, isHost, onPromote, onDemote, onRevoke, size = 'large' }) => {
     
-    /**
-     * Callback Ref for stable video attachment.
-     * This is more reliable than useEffect + useRef when nodes are conditionally rendered.
-     */
     const videoRef = useCallback((node: HTMLVideoElement | null) => {
         if (node && stream && participant.isVideoOn) {
             node.srcObject = stream;
-            // Explicitly play to handle some browser edge cases during track re-enabling
             node.play().catch(e => console.debug("Autoplay interrupted:", e));
         }
     }, [stream, participant.isVideoOn]);
 
     return (
-        <div className={`relative aspect-video bg-slate-900 rounded-[2rem] overflow-hidden border-2 transition-all duration-500 ${participant.isSpeaking ? 'border-emerald-500 shadow-glow-matrix' : 'border-white/5'}`}>
+        <div className={`relative bg-slate-900 rounded-[2rem] overflow-hidden border-2 transition-all duration-500 ${size === 'large' ? 'aspect-video' : 'aspect-square'} ${participant.isSpeaking ? 'border-emerald-500 shadow-glow-matrix scale-[1.02]' : 'border-white/5'}`}>
             {participant.isVideoOn ? (
                 <video 
                     ref={videoRef} 
@@ -59,27 +60,35 @@ const ParticipantTile: React.FC<{
                 />
             ) : (
                 <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-950">
-                    <div className="w-20 h-20 bg-brand-gold/5 rounded-full flex items-center justify-center border border-brand-gold/10">
-                        <LogoIcon className="h-10 w-10 text-brand-gold opacity-20" />
+                    <div className="w-16 h-16 bg-brand-gold/5 rounded-full flex items-center justify-center border border-brand-gold/10">
+                        <LogoIcon className="h-8 w-8 text-brand-gold opacity-20" />
                     </div>
-                    <p className="label-caps !text-[8px] text-gray-600 mt-4 tracking-widest uppercase">Privacy_Active</p>
                 </div>
             )}
             
-            <div className="absolute bottom-6 left-6 flex items-center gap-3 px-4 py-2 bg-black/60 backdrop-blur-md rounded-xl border border-white/10">
-                <div className={`w-1.5 h-1.5 rounded-full ${participant.isMicOn ? 'bg-emerald-500 shadow-glow-matrix' : 'bg-red-500'}`}></div>
-                <p className="text-[10px] font-black text-white uppercase tracking-widest">
-                    {participant.name} {isLocal && '(YOU)'}
-                </p>
+            <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-xl border border-white/10 overflow-hidden">
+                    <div className={`w-1 h-1 rounded-full flex-shrink-0 ${participant.isMicOn ? 'bg-emerald-500 shadow-glow-matrix' : 'bg-red-500'}`}></div>
+                    <p className="text-[8px] font-black text-white uppercase tracking-widest truncate">
+                        {participant.name}
+                    </p>
+                </div>
+                {participant.isRequestingStage && !participant.isOnStage && (
+                     <div className="bg-yellow-500 p-1.5 rounded-lg shadow-lg animate-bounce">
+                        <HandIcon className="h-3 w-3 text-black" />
+                    </div>
+                )}
             </div>
 
             {isHost && !isLocal && (
-                <button 
-                    onClick={onRevoke}
-                    className="absolute top-6 right-6 p-2 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-xl border border-red-500/30 transition-all"
-                >
-                    <UserMinusIcon className="h-4 w-4" />
-                </button>
+                <div className="absolute top-4 right-4 flex flex-col gap-2">
+                    <button onClick={onRevoke} className="p-2 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-xl border border-red-500/30 transition-all" title="Remove Node"><UserMinusIcon className="h-3 w-3" /></button>
+                    {participant.isOnStage ? (
+                         <button onClick={onDemote} className="p-2 bg-blue-600/20 hover:bg-blue-600 text-blue-500 hover:text-white rounded-xl border border-blue-500/30 transition-all" title="Move to Assembly">↓</button>
+                    ) : (
+                         <button onClick={onPromote} className="p-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-500 hover:text-white rounded-xl border border-emerald-500/30 transition-all" title="Invite to Stage">↑</button>
+                    )}
+                </div>
             )}
         </div>
     );
@@ -88,11 +97,12 @@ const ParticipantTile: React.FC<{
 export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isHost, onEnd }) => {
     const [isMicOn, setIsMicOn] = useState(true);
     const [isVideoOn, setIsVideoOn] = useState(true);
+    const [isHandRaised, setIsHandRaised] = useState(false);
     const [participants, setParticipants] = useState<{ [uid: string]: ParticipantStatus }>({});
     const [remoteStreams, setRemoteStreams] = useState<{ [uid: string]: MediaStream }>({});
     const [localStream, setLocalStream] = useState<MediaStream | null>(null);
     const [timeLeft, setTimeLeft] = useState('00:00:00');
-    const [meetingTitle, setMeetingTitle] = useState('Assembly');
+    const [meetingTitle, setMeetingTitle] = useState('Sovereign Assembly');
 
     const pcs = useRef<{ [uid: string]: RTCPeerConnection }>({});
     const initializedRef = useRef(false);
@@ -107,13 +117,12 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                 setMeetingTitle(m.title);
                 timer = window.setInterval(() => {
                     const diff = m.expiresAt.toDate().getTime() - Date.now();
-                    if (diff <= 0) {
-                        handleManualEnd();
-                    } else {
+                    if (diff <= 0) handleManualEnd();
+                    else {
                         const h = Math.floor(diff / 3600000);
-                        const m = Math.floor((diff % 3600000) / 60000);
+                        const min = Math.floor((diff % 3600000) / 60000);
                         const s = Math.floor((diff % 60000) / 1000);
-                        setTimeLeft(`${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
+                        setTimeLeft(`${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}:${String(s).padStart(2, '0')}`);
                     }
                 }, 1000);
             }
@@ -124,79 +133,42 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
 
     const createPeerConnection = (targetUid: string, stream: MediaStream) => {
         if (pcs.current[targetUid]) return pcs.current[targetUid];
-
         const pc = new RTCPeerConnection(servers);
         pcs.current[targetUid] = pc;
-
-        stream.getTracks().forEach(track => {
-            pc.addTrack(track, stream);
-        });
-
-        pc.ontrack = (event) => {
-            setRemoteStreams(prev => ({ ...prev, [targetUid]: event.streams[0] }));
-        };
-
+        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        pc.ontrack = (event) => setRemoteStreams(prev => ({ ...prev, [targetUid]: event.streams[0] }));
         pc.onicecandidate = (event) => {
-            if (event.candidate) {
-                api.addIceCandidate(meetingId, {
-                    candidate: JSON.stringify(event.candidate),
-                    sdpMLineIndex: event.candidate.sdpMLineIndex || 0,
-                    sdpMid: event.candidate.sdpMid || '',
-                    from: user.id,
-                    to: targetUid,
-                    timestamp: Date.now()
-                });
-            }
+            if (event.candidate) api.addIceCandidate(meetingId, { candidate: JSON.stringify(event.candidate), sdpMLineIndex: event.candidate.sdpMLineIndex || 0, sdpMid: event.candidate.sdpMid || '', from: user.id, to: targetUid, timestamp: Date.now() });
         };
-
         return pc;
     };
 
     useEffect(() => {
         if (initializedRef.current) return;
         initializedRef.current = true;
-
         const init = async () => {
             try {
                 const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
                 setLocalStream(stream);
-                
                 // 1. Announce Presence
+                // FIX: Added missing properties 'isRequestingStage' and 'isOnStage' to satisfy ParticipantStatus interface
                 await api.updateParticipantStatus(meetingId, user.id, {
-                    uid: user.id,
-                    name: user.name,
+                    uid: user.id, 
+                    name: user.name, 
                     joinedAt: joinedAtRef.current,
-                    isMicOn: true,
-                    isVideoOn: true,
+                    isMicOn: true, 
+                    isVideoOn: true, 
                     isSpeaking: false,
+                    isRequestingStage: false, 
+                    isOnStage: isHost, 
                     role: user.role
                 });
-
-                // 2. Listen for other nodes
                 api.listenForMeetingSignals(meetingId, async (m) => {
-                    if (m.kickedParticipantId === user.id) {
-                        addToast("PROTOCOL_BREACH: Assembly entry revoked.", "error");
-                        handleManualEnd();
-                        return;
-                    }
+                    if (m.kickedParticipantId === user.id) { onEnd(); return; }
                     setParticipants(m.participants || {});
-                    
-                    // Cleanup dead peers
-                    Object.keys(pcs.current).forEach(uid => {
-                        if (!m.participants?.[uid]) {
-                            pcs.current[uid].close();
-                            delete pcs.current[uid];
-                            setRemoteStreams(prev => {
-                                const next = { ...prev };
-                                delete next[uid];
-                                return next;
-                            });
-                        }
-                    });
-
-                    // Auto-handshake with older nodes (Mesh)
+                    Object.keys(pcs.current).forEach(uid => { if (!m.participants?.[uid]) { pcs.current[uid].close(); delete pcs.current[uid]; setRemoteStreams(prev => { const n = { ...prev }; delete n[uid]; return n; }); } });
                     (Object.values(m.participants || {}) as ParticipantStatus[]).forEach(async (p) => {
-                        if (p && p.uid && p.uid !== user.id && p.joinedAt < (m.participants[user.id]?.joinedAt || 0) && !pcs.current[p.uid]) {
+                        if (p && p.uid !== user.id && p.joinedAt < (m.participants[user.id]?.joinedAt || 0) && !pcs.current[p.uid]) {
                             const pc = createPeerConnection(p.uid, stream);
                             const offer = await pc.createOffer();
                             await pc.setLocalDescription(offer);
@@ -204,161 +176,5 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                         }
                     });
                 });
-
-                // 3. Listen for Incoming Handshakes
                 api.listenForSignals(meetingId, user.id, async (signal) => {
-                    const pc = createPeerConnection(signal.from, stream);
-                    if (signal.type === 'offer') {
-                        await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signal.sdp }));
-                        const answer = await pc.createAnswer();
-                        await pc.setLocalDescription(answer);
-                        api.addSignal(meetingId, { type: 'answer', sdp: answer.sdp!, from: user.id, to: signal.from, timestamp: Date.now() });
-                    } else if (signal.type === 'answer') {
-                        await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: signal.sdp }));
-                    }
-                });
-
-                // 4. Listen for ICE
-                api.listenForIce(meetingId, user.id, async (ice) => {
-                    const pc = pcs.current[ice.from];
-                    if (pc) {
-                        try {
-                            await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(ice.candidate)));
-                        } catch (e) {}
-                    }
-                });
-
-            } catch (e) {
-                addToast("Media Access Denied. Check permissions.", "error");
-                onEnd();
-            }
-        };
-
-        init();
-        return () => {
-            api.updateParticipantStatus(meetingId, user.id, null);
-            (Object.values(pcs.current) as RTCPeerConnection[]).forEach(pc => pc.close());
-            localStream?.getTracks().forEach(t => t.stop());
-        };
-    }, [meetingId]);
-
-    const handleManualEnd = async () => {
-        await api.updateParticipantStatus(meetingId, user.id, null);
-        onEnd();
-    };
-
-    const toggleMic = () => {
-        if (localStream) {
-            const track = localStream.getAudioTracks()[0];
-            track.enabled = !track.enabled;
-            setIsMicOn(track.enabled);
-            api.updateParticipantStatus(meetingId, user.id, { 
-                ...(participants[user.id] || { uid: user.id, name: user.name, role: user.role, joinedAt: joinedAtRef.current, isVideoOn: true }), 
-                isMicOn: track.enabled 
-            });
-        }
-    };
-
-    const toggleVideo = () => {
-        if (localStream) {
-            const track = localStream.getVideoTracks()[0];
-            track.enabled = !track.enabled;
-            setIsVideoOn(track.enabled);
-            api.updateParticipantStatus(meetingId, user.id, { 
-                ...(participants[user.id] || { uid: user.id, name: user.name, role: user.role, joinedAt: joinedAtRef.current, isMicOn: true }), 
-                isVideoOn: track.enabled 
-            });
-        }
-    };
-
-    const handleKick = (uid: string) => {
-        if (isHost) api.updateMeetingSignal(meetingId, { kickedParticipantId: uid });
-    };
-
-    const assemblyList = (Object.values(participants) as ParticipantStatus[])
-        .filter(p => p !== null && p.uid)
-        .sort((a, b) => a.joinedAt - b.joinedAt);
-
-    return (
-        <div className="fixed inset-0 z-[100] bg-black flex flex-col font-sans animate-fade-in overflow-hidden">
-            <div className="p-6 border-b border-white/5 bg-slate-900/50 backdrop-blur-xl flex justify-between items-center z-50">
-                <div className="flex items-center gap-4">
-                    <div className="p-2 bg-brand-gold/10 rounded-xl border border-brand-gold/20 shadow-glow-gold">
-                        <ShieldCheckIcon className="h-6 w-6 text-brand-gold" />
-                    </div>
-                    <div>
-                        <h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">{meetingTitle}</h2>
-                        <p className="text-[8px] text-emerald-500 uppercase tracking-widest mt-0.5">{assemblyList.length} Active Nodes</p>
-                    </div>
-                </div>
-                <div className="px-5 py-2.5 bg-white/5 rounded-full border border-white/10 flex items-center gap-3">
-                    <ClockIcon className="h-3 w-3 text-brand-gold" />
-                    <span className="text-[11px] font-black text-white font-mono tracking-widest">{timeLeft}</span>
-                </div>
-            </div>
-
-            <div className="flex-1 overflow-y-auto no-scrollbar p-6 sm:p-12">
-                <div className="max-w-7xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6 auto-rows-max">
-                    {/* Render self first, immediately if stream exists */}
-                    {localStream && (
-                        <ParticipantTile 
-                            participant={{
-                                uid: user.id,
-                                name: user.name,
-                                joinedAt: joinedAtRef.current,
-                                isMicOn,
-                                isVideoOn,
-                                isSpeaking: false,
-                                role: user.role
-                            }} 
-                            stream={localStream} 
-                            isLocal 
-                        />
-                    )}
-
-                    {/* Render others */}
-                    {assemblyList.filter(p => p.uid !== user.id).map(p => (
-                        <ParticipantTile 
-                            key={p.uid} 
-                            participant={p} 
-                            stream={remoteStreams[p.uid]} 
-                            isHost={isHost}
-                            onRevoke={() => handleKick(p.uid)}
-                        />
-                    ))}
-                    
-                    {assemblyList.length === 0 && !localStream && (
-                        <div className="col-span-full py-32 text-center animate-pulse">
-                            <LoaderIcon className="h-12 w-12 text-brand-gold mx-auto mb-6 opacity-30 animate-spin" />
-                            <p className="label-caps !text-gray-600 !tracking-[0.6em]">Initializing Node...</p>
-                        </div>
-                    )}
-                </div>
-            </div>
-
-            <div className="p-10 bg-slate-900/95 backdrop-blur-3xl border-t border-white/5 flex justify-center items-center gap-6 sm:gap-10 z-50">
-                <ControlBtn onClick={toggleMic} active={isMicOn} activeIcon={<MicIcon/>} inactiveIcon={<MicOffIcon/>} color="blue" />
-                <button 
-                    onClick={handleManualEnd}
-                    className="w-16 h-16 sm:w-20 sm:h-20 bg-red-600 hover:bg-red-500 text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.4)] active:scale-90 transition-all border-4 border-red-900/30"
-                >
-                    <PhoneOffIcon className="h-8 w-8" />
-                </button>
-                <ControlBtn onClick={toggleVideo} active={isVideoOn} activeIcon={<VideoIcon/>} inactiveIcon={<VideoOffIcon/>} color="gold" />
-            </div>
-        </div>
-    );
-};
-
-const ControlBtn: React.FC<{ onClick: () => void, active: boolean, activeIcon: React.ReactNode, inactiveIcon: React.ReactNode, color: 'blue' | 'gold' }> = ({ onClick, active, activeIcon, inactiveIcon, color }) => (
-    <button 
-        onClick={onClick}
-        className={`w-14 h-14 sm:w-16 sm:h-16 rounded-3xl flex items-center justify-center transition-all border-2 active:scale-90 shadow-xl
-            ${active 
-                ? 'bg-slate-800 border-white/10 text-white hover:bg-slate-700 shadow-inner' 
-                : color === 'blue' ? 'bg-blue-600/20 border-blue-500 text-blue-400 shadow-blue-900/30' : 'bg-brand-gold/20 border-brand-gold text-brand-gold shadow-glow-gold/30'}
-        `}
-    >
-        {active ? activeIcon : inactiveIcon}
-    </button>
-);
+                    const pc = createPeerConnection(
