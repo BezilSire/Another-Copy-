@@ -64,17 +64,9 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
         bio: currentUser.bio || '',
         profession: currentUser.profession || '',
         skills: (currentUser.skills || []).join(', '),
-        awards: currentUser.awards || '',
         interests: (currentUser.interests || []).join(', '),
-        passions: (currentUser.passions || []).join(', '),
-        gender: currentUser.gender || '',
-        age: currentUser.age || '',
-        isLookingForPartners: currentUser.isLookingForPartners || false,
-        lookingFor: currentUser.lookingFor || [] as string[],
-        businessIdea: currentUser.businessIdea || '',
         id_card_number: currentUser.id_card_number || '',
-        circle: currentUser.circle || '',
-        socialLinks: currentUser.socialLinks || [] as { title: string; url: string }[]
+        circle: currentUser.circle || ''
     });
     
     useEffect(() => {
@@ -82,13 +74,9 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
             name: currentUser.name || '', phone: currentUser.phone || '', address: currentUser.address || '',
             bio: currentUser.bio || '', profession: currentUser.profession || '', 
             skills: (currentUser.skills || []).join(', '),
-            awards: currentUser.awards || '', interests: (currentUser.interests || []).join(', '), passions: (currentUser.passions || []).join(', '),
-            gender: currentUser.gender || '', age: currentUser.age || '',
-            isLookingForPartners: currentUser.isLookingForPartners || false, lookingFor: currentUser.lookingFor || [],
-            businessIdea: currentUser.businessIdea || '',
+            interests: (currentUser.interests || []).join(', '),
             id_card_number: currentUser.id_card_number || '',
-            circle: currentUser.circle || '',
-            socialLinks: currentUser.socialLinks || []
+            circle: currentUser.circle || ''
         });
     }, [currentUser]);
     
@@ -100,23 +88,30 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
     const referralLink = `${window.location.origin}?ref=${currentUser.referralCode}`;
 
     const handleSave = async () => {
-        if (!currentUser.member_id) return;
         setIsSaving(true);
         try {
             const skillsAsArray = (editData.skills || '').split(',').map(s => s.trim()).filter(Boolean);
             const interestsAsArray = (editData.interests || '').split(',').map(s => s.trim()).filter(Boolean);
+            
             const userUpdateData = { 
                 ...editData, 
                 skills: skillsAsArray, 
                 skills_lowercase: skillsAsArray.map(s => s.toLowerCase()),
                 interests: interestsAsArray
             };
-            const memberUpdateData = { ...editData, skills: skillsAsArray, interests: interestsAsArray, national_id: editData.id_card_number };
-            await api.updateMemberAndUserProfile(currentUser.id, currentUser.member_id, userUpdateData as any, memberUpdateData as any);
-            addToast('Identity Sync Successful.', 'success');
+            
+            // Sync both user doc and member doc if member_id exists
+            if (currentUser.member_id) {
+                const memberUpdateData = { ...editData, skills: skillsAsArray, interests: interestsAsArray, national_id: editData.id_card_number };
+                await api.updateMemberAndUserProfile(currentUser.id, currentUser.member_id, userUpdateData as any, memberUpdateData as any);
+            } else {
+                await onUpdateUser(userUpdateData as any);
+            }
+            
+            addToast('Identity Refinement Successful.', 'success');
             setIsEditing(false);
         } catch (error: any) {
-            addToast('Sync failed.', "error");
+            addToast('Sync failure.', "error");
         } finally {
             setIsSaving(false);
         }
@@ -145,7 +140,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
                 <div>
                     <h2 className="text-3xl sm:text-5xl font-black text-white uppercase tracking-tighter gold-text leading-none">{currentUser.name}</h2>
                     <p className="text-xl font-black text-emerald-400 tracking-tight uppercase mt-1">{currentUser.profession || "Sovereign Node"}</p>
-                    <p className="label-caps !text-[8px] !text-gray-600 mt-2 tracking-[0.4em]">{currentUser.circle} Circle</p>
+                    <p className="label-caps !text-[8px] !text-gray-600 mt-2 tracking-[0.4em]">{currentUser.circle || "GLOBAL"} Circle</p>
                 </div>
             </div>
             {!isEditing && (
@@ -175,14 +170,32 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
 
        <div className="mt-10">
             {activeTab === 'profile' ? (isEditing ? (
-                <div className="module-frame glass-module p-10 rounded-[2.5rem] border-white/5 space-y-6">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div><label className="label-caps !text-[9px] mb-2">Node Narrative (Bio)</label><textarea name="bio" value={editData.bio} onChange={(e) => setEditData({...editData, bio: e.target.value})} rows={4} className="w-full bg-black border border-white/10 rounded-xl p-4 text-white text-sm" /></div>
-                        <div><label className="label-caps !text-[9px] mb-2">Capability Profile (Skills)</label><input type="text" name="skills" value={editData.skills} onChange={(e) => setEditData({...editData, skills: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl p-4 text-white text-sm" placeholder="Comma separated..." /></div>
+                <div className="module-frame glass-module p-10 rounded-[2.5rem] border-white/5 space-y-8">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-2">
+                            <label className="label-caps !text-[9px]">Node Name</label>
+                            <input value={editData.name} onChange={(e) => setEditData({...editData, name: e.target.value})} className="w-full bg-black border border-white/10 p-4 rounded-xl text-white font-bold" />
+                        </div>
+                         <div className="space-y-2">
+                            <label className="label-caps !text-[9px]">Designation (Profession)</label>
+                            <input value={editData.profession} onChange={(e) => setEditData({...editData, profession: e.target.value})} className="w-full bg-black border border-white/10 p-4 rounded-xl text-white font-bold" />
+                        </div>
+                        <div className="space-y-2 col-span-full">
+                            <label className="label-caps !text-[9px]">Narrative (Bio)</label>
+                            <textarea value={editData.bio} onChange={(e) => setEditData({...editData, bio: e.target.value})} rows={4} className="w-full bg-black border border-white/10 rounded-xl p-4 text-white text-sm" />
+                        </div>
+                         <div className="space-y-2">
+                            <label className="label-caps !text-[9px]">Capability Profile (Skills)</label>
+                            <input value={editData.skills} onChange={(e) => setEditData({...editData, skills: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl p-4 text-white text-sm" placeholder="Marketing, Agriculture, Code..." />
+                        </div>
+                         <div className="space-y-2">
+                            <label className="label-caps !text-[9px]">Circle (Location)</label>
+                            <input value={editData.circle} onChange={(e) => setEditData({...editData, circle: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl p-4 text-white text-sm" placeholder="Bulawayo, Harare..." />
+                        </div>
                     </div>
-                    <div className="flex justify-end gap-4">
+                    <div className="flex justify-end gap-4 border-t border-white/5 pt-8">
                         <button onClick={() => setIsEditing(false)} className="px-6 py-2 text-gray-500 font-black uppercase text-[10px]">Cancel</button>
-                        <button onClick={handleSave} disabled={isSaving} className="px-10 py-4 bg-brand-gold text-slate-950 font-black rounded-xl uppercase tracking-widest text-[10px]">{isSaving ? 'Syncing...' : 'Sync Identity'}</button>
+                        <button onClick={handleSave} disabled={isSaving} className="px-10 py-4 bg-brand-gold text-slate-950 font-black rounded-xl uppercase tracking-widest text-[10px] shadow-glow-gold active:scale-95">{isSaving ? 'Syncing...' : 'Sync Identity'}</button>
                     </div>
                 </div>
             ) : (

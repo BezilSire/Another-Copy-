@@ -1,3 +1,4 @@
+
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -46,7 +47,7 @@ import {
     Conversation, Message, Notification, Activity,
     PublicUserProfile, PayoutRequest, Transaction, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase,
     CitizenResource, Dispute, Meeting, GlobalEconomy, CommunityValuePool, Proposal, Venture, SustenanceCycle, SustenanceVoucher, Comment, Distribution, VentureEquityHolding,
-    RedemptionCycle, ParticipantStatus, RTCSignal, ICESignal
+    RedemptionCycle, ParticipantStatus, RTCSignal, ICESignal, Candidate
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -63,6 +64,7 @@ const disputesCollection = collection(db, 'disputes');
 const globalsCollection = collection(db, 'globals');
 const pendingPurchasesCollection = collection(db, 'pending_ubt_purchases');
 const meetingsCollection = collection(db, 'meetings');
+const candidatesCollection = collection(db, 'candidates');
 
 export const api = {
     login: (email: string, password: string): Promise<FirebaseUser> => {
@@ -139,6 +141,43 @@ export const api = {
             t.set(doc(ledgerCollection, transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         }); 
     },
+
+    // --- GOVERNANCE PROTOCOLS ---
+    applyForExecutive: async (candidateData: Omit<Candidate, 'id' | 'voteCount' | 'votes' | 'createdAt' | 'status'>) => {
+        return addDoc(candidatesCollection, {
+            ...candidateData,
+            voteCount: 0,
+            votes: [],
+            status: 'applying',
+            createdAt: serverTimestamp()
+        });
+    },
+
+    deleteCandidate: (candidateId: string) => deleteDoc(doc(candidatesCollection, candidateId)),
+
+    voteForCandidate: (candidateId: string, voterId: string) => runTransaction(db, async t => {
+        const ref = doc(candidatesCollection, candidateId);
+        const snap = await t.get(ref);
+        if (!snap.exists()) throw new Error("Candidate node lost.");
+        const data = snap.data() as Candidate;
+        if (data.votes.includes(voterId)) throw new Error("DUPLICATE_SIGNATURE: Voter has already cast ballot for this node.");
+        
+        const newVoteCount = (data.voteCount || 0) + 1;
+        const newStatus = newVoteCount >= 20 ? 'mandated' : 'applying';
+        
+        t.update(ref, { 
+            votes: arrayUnion(voterId), 
+            voteCount: increment(1),
+            status: newStatus
+        });
+    }),
+
+    listenForCandidates: (cb: (c: Candidate[]) => void): Unsubscribe => {
+        return onSnapshot(query(candidatesCollection, orderBy('voteCount', 'desc')), s => {
+            cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Candidate)));
+        });
+    },
+
     syncInternalVaults: (admin: Admin, from: TreasuryVault, to: TreasuryVault, amt: number, reason: string) => runTransaction(db, async t => {
         const fromRef = doc(vaultsCollection, from.id);
         const toRef = doc(vaultsCollection, to.id);

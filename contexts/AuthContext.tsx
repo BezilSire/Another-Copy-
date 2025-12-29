@@ -1,6 +1,6 @@
 
 import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, useRef } from 'react';
-import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, sendEmailVerification, signInAnonymously } from 'firebase/auth';
+import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInAnonymously } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
 import { useToast } from './ToastContext';
 import { api } from '../services/apiService';
@@ -84,7 +84,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setIsLoadingAuth(false);
           setIsProcessingAuth(false);
         }, (error) => {
-          console.error("Ledger Sync Error:", error);
+          console.warn("Node synchronization restricted:", error.message);
           setIsLoadingAuth(false);
           setIsProcessingAuth(false);
         });
@@ -95,6 +95,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setIsLoadingAuth(false);
         setIsProcessingAuth(false);
       }
+    }, (error) => {
+      console.error("Auth status sync failed:", error);
+      setIsLoadingAuth(false);
     });
 
     return () => {
@@ -117,17 +120,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const loginAnonymously = useCallback(async (displayName: string) => {
     setIsProcessingAuth(true);
     try {
-        // Essential for the early return in onAuthStateChanged to pick up the name
         sessionStorage.setItem('ugc_guest_name', displayName);
         await signInAnonymously(auth);
     } catch (error: any) {
         setIsProcessingAuth(false);
-        // Provide more helpful info if it's a configuration error
-        if (error.code === 'auth/admin-restricted-operation' || error.code === 'auth/operation-not-allowed') {
-            addToast("Guest Bridge Blocked: Anonymous sign-in must be enabled in Firebase Console.", "error");
-        } else {
-            addToast("Guest Bridge Failed. Check connection.", "error");
-        }
+        addToast("Guest Bridge Failed. Check connection.", "error");
         throw error;
     }
   }, [addToast]);
@@ -168,7 +165,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         email: credentials.email,
         name_lowercase: credentials.name.toLowerCase(),
         role: 'agent',
-        status: 'pending',
+        status: 'active', // Immediately active
         circle: credentials.circle,
         agent_code: generateAgentCode(),
         referralCode: generateReferralCode(),
@@ -182,7 +179,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       };
 
       await setDoc(doc(db, 'users', user.uid), newAgent);
-      await sendEmailVerification(user);
+      addToast("Agent Node Deployed Successfully.", "success");
     } catch (error: any) {
       setIsProcessingAuth(false);
       addToast(error.message, 'error');
@@ -212,9 +209,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             agent_id: 'GENESIS_PROTOCOL',
             agent_name: 'Self-Registered',
             date_registered: serverTimestamp(),
-            payment_status: 'pending_verification',
+            payment_status: 'complete', // Immediately complete
             registration_amount: 10,
-            welcome_message: `Welcome, ${memberData.full_name}. Node operational.`,
+            welcome_message: `Welcome, ${memberData.full_name}. Citizen Node operational.`,
             membership_card_id: `UGC-M-${generateReferralCode()}`,
             phone: '', circle: '',
         });
@@ -225,7 +222,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             email: memberData.email,
             name_lowercase: memberData.full_name.toLowerCase(),
             role: 'member',
-            status: 'pending',
+            status: 'active', // Immediately active
             isProfileComplete: false,
             member_id: memberRef.id,
             credibility_score: 100,
@@ -233,7 +230,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             referralCode: generateReferralCode(),
             referredBy: memberData.referralCode || '',
             referrerId: referrerId,
-            hasCompletedInduction: false,
+            hasCompletedInduction: true,
             phone: '', address: '', circle: '', id_card_number: '',
             ubtBalance: 0, initialUbtStake: 0,
             publicKey: pubKey,
@@ -242,7 +239,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         });
 
         await batch.commit();
-        await sendEmailVerification(user);
+        addToast("Citizen Node Anchored Successfully.", "success");
     } catch (error: any) {
         setIsProcessingAuth(false);
         addToast(error.message, 'error');

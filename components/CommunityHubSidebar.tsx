@@ -10,6 +10,7 @@ import { SparkleIcon } from './icons/SparkleIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { VideoIcon } from './icons/VideoIcon';
+import { ScaleIcon } from './icons/ScaleIcon';
 
 interface CommunityHubSidebarProps {
   activeView: MemberView;
@@ -43,6 +44,7 @@ export const CommunityHubSidebar: React.FC<CommunityHubSidebarProps> = ({ active
     <div className="space-y-8 animate-fade-in">
         <div className="bg-slate-900/50 backdrop-blur-xl rounded-[2.5rem] p-3 space-y-1 border border-white/5 shadow-2xl">
             <SidebarItem label="Oracle Feed" icon={<HomeIcon className="h-5 w-5"/>} isActive={activeView === 'home'} onClick={() => onChangeView('home')} />
+            <SidebarItem label="Governance" icon={<ScaleIcon className="h-5 w-5"/>} isActive={activeView === 'governance'} onClick={() => onChangeView('governance')} premium />
             <SidebarItem label="Meeting Hub" icon={<VideoIcon className="h-5 w-5"/>} isActive={activeView === 'meeting'} onClick={() => onChangeView('meeting')} />
             <SidebarItem label="Sovereign State" icon={<ShieldCheckIcon className="h-5 w-5"/>} isActive={activeView === 'state'} onClick={() => onChangeView('state')} premium />
             <SidebarItem label="Public Ledger" icon={<GlobeIcon className="h-5 w-5"/>} isActive={activeView === 'ledger'} onClick={() => onChangeView('ledger')} />

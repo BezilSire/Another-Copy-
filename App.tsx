@@ -11,10 +11,8 @@ import { api } from './services/apiService';
 import { useAuth } from './contexts/AuthContext';
 import { CompleteProfilePage } from './components/CompleteProfilePage';
 import { ConfirmationDialog } from './components/ConfirmationDialog';
-import { VerifyEmailPage } from './components/VerifyEmailPage';
 import { ChatsPage } from './components/ChatsPage';
 import { PublicProfile } from './components/PublicProfile';
-import { UbtVerificationPage } from './components/UbtVerificationPage';
 import { LogoIcon } from './components/icons/LogoIcon';
 import { LoaderIcon } from './components/icons/LoaderIcon';
 import { AlertTriangleIcon } from './components/icons/AlertTriangleIcon';
@@ -70,13 +68,13 @@ const App: React.FC = () => {
   const confirmLogout = async () => { await logout(); setIsLogoutConfirmOpen(false); window.location.reload(); };
   const handleOpenChat = () => setChatTarget('main');
   const handleOpenMeet = () => setForceView('meeting');
+  const handleOpenVote = () => setForceView('governance');
   const handleViewProfile = (userId: string | null) => { setChatTarget(null); setViewingProfileId(userId); };
   const handleSecurityRecoveryComplete = (mnemonic: string, pin: string, data: VaultData) => { cryptoService.saveVault({ mnemonic }, pin).then(() => { unlockSovereignSession(data, pin).then(() => setIsRecovering(false)); }); };
   
   const renderMainContent = () => {
     if (isBooting) return null;
     
-    // Strict perimeter for anonymous nodes
     if (firebaseUser?.isAnonymous) {
         if (activeMeetingId && currentUser) return <VideoMeeting user={currentUser} meetingId={activeMeetingId} isHost={false} onEnd={confirmLogout} />;
         return <GuestMeetingPage meetingId={activeMeetingId || ''} />;
@@ -93,19 +91,17 @@ const App: React.FC = () => {
         if (activeMeetingId) return <VideoMeeting user={currentUser} meetingId={activeMeetingId} isHost={false} onEnd={() => { setActiveMeetingId(null); window.history.pushState({}, '', window.location.pathname); }} />;
         if (chatTarget) return <ChatsPage user={currentUser} initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null} onClose={() => setChatTarget(null)} onViewProfile={handleViewProfile} onNewMessageClick={() => {}} onNewGroupClick={() => {}} />;
         if (viewingProfileId) return <div className="main-container py-10"><PublicProfile userId={viewingProfileId} currentUser={currentUser} onBack={() => setViewingProfileId(null)} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(currentUser, target); setViewingProfileId(null); setChatTarget(convo); } }} onViewProfile={(id) => setViewingProfileId(id)} isAdminView={currentUser.role === 'admin'} /></div>;
-        const isLegacyOrSpecial = currentUser.role === 'admin' || currentUser.role === 'agent' || currentUser.status === 'active';
-        if (!isLegacyOrSpecial) {
-            if (firebaseUser && !firebaseUser.emailVerified && (currentUser.isProfileComplete || currentUser.status === 'pending')) return <VerifyEmailPage user={currentUser} onLogout={() => setIsLogoutConfirmOpen(true)} />;
-            if (currentUser.status === 'pending' && currentUser.role === 'member') return <UbtVerificationPage user={currentUser} onLogout={() => setIsLogoutConfirmOpen(true)} />;
-            if (!currentUser.isProfileComplete) return <div className="main-container py-12"><CompleteProfilePage user={currentUser} onProfileComplete={async (data) => { await updateUser(data); }} /></div>;
-        }
+        
+        if (!currentUser.isProfileComplete) return <div className="main-container py-12"><CompleteProfilePage user={currentUser} onProfileComplete={async (data) => { await updateUser(data); }} /></div>;
+        
         if (currentUser.role === 'admin') return <AdminDashboard user={currentUser as Admin} onUpdateUser={updateUser} unreadCount={unreadNotificationCount} onOpenChat={handleOpenChat} onViewProfile={handleViewProfile} />;
         if (currentUser.role === 'agent') return <AgentDashboard user={currentUser as Agent} broadcasts={[]} onUpdateUser={updateUser} activeView="dashboard" setActiveView={() => {}} onViewProfile={handleViewProfile} />;
         return <MemberDashboard user={currentUser as MemberUser} onUpdateUser={updateUser} unreadCount={unreadNotificationCount} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={handleViewProfile} forcedView={forceView} clearForcedView={() => setForceView(null)} />;
     }
+    
     if (isLoadingAuth || isProcessingAuth) return <div className="flex flex-col items-center justify-center min-h-screen bg-black p-10 text-center animate-fade-in"><div className="relative mb-8"><LoaderIcon className="h-14 w-14 animate-spin text-brand-gold opacity-40" /><div className="absolute inset-0 flex items-center justify-center"><div className="w-2.5 h-2.5 bg-brand-gold rounded-full animate-ping"></div></div></div><div className="text-[10px] uppercase font-black tracking-[0.5em] text-white/30 font-mono">Synchronizing_Node_State</div></div>;
     if (!firebaseUser) return <AuthPage />;
-    return <div className="flex flex-col items-center justify-center min-h-screen bg-black p-6 text-center animate-fade-in"><AlertTriangleIcon className="h-12 w-12 text-brand-gold mb-6 opacity-40" /><h2 className="text-xl font-black text-white uppercase tracking-tighter mb-4">Identity Not Indexed</h2><p className="text-sm text-gray-400 max-w-xs mx-auto uppercase tracking-widest leading-loose">Session verified but citizen record missing. Re-sign to establishing node anchor.</p><div className="flex flex-col gap-4 mt-10 w-full max-w-xs"><button onClick={() => window.location.reload()} className="w-full py-5 bg-brand-gold text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-glow-gold">Retry Handshake</button><button onClick={confirmLogout} className="w-full py-4 bg-white/5 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest border border-white/10 hover:bg-white/10 transition-all">Sign Out</button></div></div>;
+    return <div className="flex flex-col items-center justify-center min-h-screen bg-black p-6 text-center animate-fade-in"><AlertTriangleIcon className="h-12 w-12 text-brand-gold mb-6 opacity-40" /><h2 className="text-xl font-black text-white uppercase tracking-tighter mb-4">Identity Not Indexed</h2><p className="text-sm text-gray-400 max-w-xs mx-auto uppercase tracking-widest leading-loose">Session verified but citizen record missing.</p><div className="flex flex-col gap-4 mt-10 w-full max-w-xs"><button onClick={() => window.location.reload()} className="w-full py-5 bg-brand-gold text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-glow-gold">Retry Handshake</button><button onClick={confirmLogout} className="w-full py-4 bg-white/5 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest border border-white/10 hover:bg-white/10 transition-all">Sign Out</button></div></div>;
   };
 
   return (
@@ -113,11 +109,21 @@ const App: React.FC = () => {
       {isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
       {!isBooting && (
           <div className="flex-1 flex flex-col animate-fade-in">
-            {!isSovereignLocked && currentUser && !firebaseUser?.isAnonymous && <Header user={currentUser} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={handleViewProfile} onChatClick={() => handleOpenChat()} onMeetClick={handleOpenMeet} onRadarClick={() => setIsRadarOpen(true)} />}
+            {!isSovereignLocked && currentUser && !firebaseUser?.isAnonymous && (
+                <Header 
+                    user={currentUser} 
+                    onLogout={() => setIsLogoutConfirmOpen(true)} 
+                    onViewProfile={handleViewProfile} 
+                    onChatClick={() => handleOpenChat()} 
+                    onMeetClick={handleOpenMeet} 
+                    onVoteClick={handleOpenVote}
+                    onRadarClick={() => setIsRadarOpen(true)} 
+                />
+            )}
             <main className="flex-1">{renderMainContent()}</main>
             <ToastContainer />
             <ConfirmationDialog isOpen={isLogoutConfirmOpen} onClose={() => setIsLogoutConfirmOpen(false)} onConfirm={confirmLogout} title="Disconnect Node" message="Are you sure you want to end the secure protocol handshake?" confirmButtonText="Terminate" />
-            {isRadarOpen && currentUser && <RadarModal isOpen={isRadarOpen} onClose={() => setIsRadarOpen(false)} currentUser={currentUser} onViewProfile={handleViewProfile} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(currentUser, target); setChatTarget(convo); } }} />}
+            {isRadarOpen && currentUser && <RadarModal isOpen={isRadarOpen} onClose={() => setIsRadarOpen(false)} currentUser={currentUser} onViewProfile={handleViewProfile} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(currentUser, target); setViewingProfileId(null); setChatTarget(convo); } }} />}
           </div>
       )}
     </div>

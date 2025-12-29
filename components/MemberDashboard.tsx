@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { MemberUser, Conversation, User, FilterType, MemberView } from '../types';
 import { MemberBottomNav } from './MemberBottomNav';
@@ -14,8 +15,6 @@ import { MorePage } from './MorePage';
 import { SustenancePage } from './SustenancePage';
 import { NotificationsPage } from './NotificationsPage';
 import { PostTypeFilter } from './PostTypeFilter';
-import { VerificationHub } from './VerificationHub';
-import { VerificationRedirectModal } from './VerificationRedirectModal';
 import { WalletPage } from './WalletPage';
 import { ChatsPage } from './ChatsPage';
 import { MemberSearchModal } from './MemberSearchModal';
@@ -30,6 +29,9 @@ import { StateRegistry } from './StateRegistry';
 import { IdentityVault } from './IdentityVault';
 import { ProtocolReconciliation } from './ProtocolReconciliation';
 import { MeetingHub } from './MeetingHub';
+import { GovernancePage } from './GovernancePage';
+import { useAuth } from '../contexts/AuthContext';
+import { LockIcon } from './icons/LockIcon';
 
 interface MemberDashboardProps {
   user: MemberUser;
@@ -42,6 +44,7 @@ interface MemberDashboardProps {
 }
 
 export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdateUser, unreadCount, onLogout, onViewProfile, forcedView, clearForcedView }) => {
+  const { firebaseUser } = useAuth();
   const [view, setView] = useState<MemberView>('home');
   const [isNewPostModalOpen, setIsNewPostModalOpen] = useState(false);
   const [isDistressModalOpen, setIsDistressModalOpen] = useState(false);
@@ -49,12 +52,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
   const [isUpgrading, setIsUpgrading] = useState(false);
   const { addToast } = useToast();
   const [typeFilter, setTypeFilter] = useState<FilterType>('foryou');
-  const [isVerificationModalOpen, setIsVerificationModalOpen] = useState(false);
   
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<Conversation | null>(null);
 
   const hasVault = cryptoService.hasVault();
+  const isAnonymous = firebaseUser?.isAnonymous;
 
   useEffect(() => {
     if (forcedView) {
@@ -79,8 +82,21 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
 
   const renderMainContent = () => {
     if (isUpgrading) return <div className="flex justify-center py-10 animate-fade-in"><GenesisNodeFlow onComplete={handleUpgradeComplete} onBack={() => setIsUpgrading(false)} /></div>;
+    
+    if (isAnonymous && view !== 'meeting' && view !== 'knowledge') {
+        return (
+            <div className="flex flex-col items-center justify-center py-32 text-center space-y-6">
+                <div className="p-5 bg-red-500/10 rounded-full border border-red-500/20 text-red-500"><LockIcon className="h-10 w-10" /></div>
+                <h3 className="text-xl font-black text-white uppercase tracking-tighter">Protocol Restricted</h3>
+                <p className="text-sm text-gray-500 max-w-xs uppercase tracking-widest leading-loose">Anonymous nodes are restricted to Meeting Protocols. Register a Citizen Identity for full access.</p>
+                <button onClick={() => window.location.reload()} className="px-8 py-3 bg-brand-gold text-slate-950 font-black rounded-xl text-[10px] uppercase tracking-widest shadow-glow-gold">Upgrade Identity</button>
+            </div>
+        );
+    }
+
     switch (view) {
-      case 'home': return ( <div className="space-y-6"> {!hasVault && <SovereignUpgradeBanner onUpgrade={() => setIsUpgrading(true)} />} {user.status !== 'active' && <VerificationHub onGetVerifiedClick={() => setIsVerificationModalOpen(true)} onLearnMoreClick={() => setView('knowledge')} />} <div className="md:hidden"><PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} /></div> <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter={typeFilter} /> </div> );
+      case 'home': return ( <div className="space-y-6"> {!hasVault && <SovereignUpgradeBanner onUpgrade={() => setIsUpgrading(true)} />} <div className="md:hidden"><PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} /></div> <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter={typeFilter} /> </div> );
+      case 'governance': return <GovernancePage user={user} />;
       case 'meeting': return <MeetingHub user={user} />;
       case 'state': return <StateRegistry user={user} />;
       case 'security': return <div className="max-w-2xl mx-auto"><IdentityVault onRestore={() => setView('home')} /></div>;
@@ -91,7 +107,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       case 'chats': return <ChatsPage user={user} initialTarget={selectedChat} onClose={() => { setSelectedChat(null); setView('home'); }} onViewProfile={onViewProfile as any} onNewMessageClick={() => setIsNewChatModalOpen(true)} onNewGroupClick={() => {}} />;
       case 'ledger': return <LedgerPage />;
       case 'community': return <CommunityPage currentUser={user} onViewProfile={onViewProfile as any} />;
-      case 'profile': return <MemberProfile currentUser={user} onUpdateUser={onUpdateUser} onViewProfile={onViewProfile as any} onGetVerifiedClick={() => setIsVerificationModalOpen(true)} />;
+      case 'profile': return <MemberProfile currentUser={user} onUpdateUser={onUpdateUser} onViewProfile={onViewProfile as any} onGetVerifiedClick={() => {}} />;
       case 'notifications': return <NotificationsPage user={user} onNavigate={() => {}} onViewProfile={onViewProfile as any} />;
       case 'knowledge': return <KnowledgeBasePage currentUser={user} onUpdateUser={onUpdateUser} />;
       case 'more': return <MorePage user={user} onNavigate={setView as any} onLogout={onLogout} notificationCount={unreadCount} />;
@@ -113,7 +129,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       {isNewChatModalOpen && <MemberSearchModal isOpen={isNewChatModalOpen} onClose={() => setIsNewChatModalOpen(false)} currentUser={user} onSelectUser={setSelectedChat} />}
       {isNewPostModalOpen && <NewPostModal isOpen={isNewPostModalOpen} onClose={() => setIsNewPostModalOpen(false)} user={user} onPostCreated={handlePostCreated} />}
        {isDistressModalOpen && <DistressCallDialog isOpen={isDistressModalOpen} onClose={() => setIsDistressModalOpen(false)} onConfirm={async (c) => { setIsDistressLoading(true); try { await api.sendDistressPost(user, c); addToast('Emergency protocol initiated.', 'success'); setIsDistressModalOpen(false); } catch (e:any) { addToast(e.message, 'error'); } finally { setIsDistressLoading(false); } }} isLoading={isDistressLoading} />}
-      <VerificationRedirectModal isOpen={isVerificationModalOpen} onClose={() => setIsVerificationModalOpen(false)} />
     </div>
   );
 };

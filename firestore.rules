@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -5,11 +6,8 @@ service cloud.firestore {
     // --- HELPER FUNCTIONS ---
     function isSignedIn() { return request.auth != null; }
     function isGuest() { return isSignedIn() && request.auth.token.firebase.sign_in_provider == 'anonymous'; }
-    function isMember() { 
-      return isSignedIn() && !isGuest(); 
-    }
+    function isMember() { return isSignedIn() && !isGuest(); }
     function isAdmin() { 
-      // Defensively check for document existence to prevent rules evaluation errors
       let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
       return isMember() && userDoc != null && userDoc.data.role == 'admin'; 
     }
@@ -19,20 +17,31 @@ service cloud.firestore {
     match /users/{userId} {
       allow read, list: if isSignedIn(); 
       allow create: if isMember() && request.auth.uid == userId;
-      allow update: if (isOwner(userId) && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['role', 'status'])) || isAdmin();
+      // Allow specific balance and social fields to be updated by other members for P2P transactions and vouches
+      allow update: if isOwner(userId) || isAdmin() || (isMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ubtBalance', 'credibility_score', 'vouchCount', 'followers', 'lastSeen']));
 
       match /notifications/{id} { allow read, write: if isOwner(userId) || isAdmin(); }
       match /transactions/{id} { allow read, list: if isOwner(userId) || isAdmin(); allow create: if isMember(); }
       match /vaults/{id} { allow read, write, list: if isOwner(userId) || isAdmin(); }
     }
 
+    // --- GOVERNANCE ---
+    match /candidates/{candidateId} {
+      allow read, list: if isSignedIn();
+      allow create: if isMember();
+      allow update: if isMember() && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes', 'voteCount', 'status']));
+      allow delete: if isAdmin() || (isMember() && resource.data.userId == request.auth.uid);
+    }
+
     // --- TREASURY & LEDGER ---
     match /treasury_vaults/{vaultId} {
-      allow read, list: if isMember();
-      allow write: if isAdmin();
+      allow read, list: if isSignedIn();
+      // Allow balance updates during transfers, but ensure only the balance is touched by members
+      allow update: if isAdmin() || (isMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance']));
+      allow create, delete: if isAdmin();
     }
     match /ledger/{docId} {
-      allow read, list: if isMember();
+      allow read, list: if isSignedIn();
       allow create: if isMember();
       allow update, delete: if isAdmin();
     }
@@ -43,23 +52,25 @@ service cloud.firestore {
 
     // --- BRIDGE ---
     match /pending_ubt_purchases/{docId} {
-      allow read, list: if isMember();
+      allow read, list: if isOwner(resource.data.userId) || isAdmin();
       allow create: if isMember();
       allow update, delete: if isAdmin();
     }
 
     // --- COMMUNITY & COMMS ---
     match /posts/{postId} {
-      allow read, list: if isMember();
+      allow read, list: if isSignedIn();
       allow create: if isMember();
-      allow update: if isMember() && (resource.data.authorId == request.auth.uid || isAdmin());
+      // Explicitly allow all members to like (update upvotes) or repost (increment repostCount)
+      allow update: if isMember() && (resource.data.authorId == request.auth.uid || isAdmin() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes', 'repostCount', 'commentCount']));
       allow delete: if isAdmin() || (isMember() && resource.data.authorId == request.auth.uid);
       
-      match /comments/{id} { allow read, write, list: if isMember(); }
+      match /comments/{id} { allow read, list: if isSignedIn(); allow write: if isMember(); }
     }
     
     match /conversations/{convoId} {
-      allow read, write, list: if isMember() && request.auth.uid in resource.data.members;
+      allow read, list: if isMember() && request.auth.uid in resource.data.members;
+      allow write: if isMember() && request.auth.uid in resource.data.members;
       allow create: if isMember() && request.auth.uid in request.resource.data.members;
       
       match /messages/{id} { allow read, write, list: if isMember(); }
@@ -75,34 +86,32 @@ service cloud.firestore {
 
       match /signals/{id} { allow read, write, list: if isSignedIn(); }
       match /ice/{id} { allow read, write, list: if isSignedIn(); }
-      match /callerCandidates/{id} { allow read, write: if isSignedIn(); }
-      match /calleeCandidates/{id} { allow read, write: if isSignedIn(); }
     }
 
     // --- ECOSYSTEM MODULES ---
     match /members/{id} { 
-      allow read, list: if isMember(); 
+      allow read, list: if isSignedIn(); 
       allow create: if isMember(); 
       allow update: if isAdmin() || (isMember() && resource.data.uid == request.auth.uid);
       allow delete: if isAdmin(); 
     }
     
     match /proposals/{id} { 
-      allow read, list: if isMember(); 
+      allow read, list: if isSignedIn(); 
       allow create, update: if isMember(); 
     }
     
     match /ventures/{id} { 
-      allow read, list: if isMember(); 
+      allow read, list: if isSignedIn(); 
       allow create: if isMember(); 
       allow update: if isMember() && (resource.data.ownerId == request.auth.uid || isAdmin());
       allow delete: if isAdmin() || (isMember() && resource.data.ownerId == request.auth.uid);
       
-      match /distributions/{id} { allow read, list: if isMember(); allow write: if isAdmin(); }
+      match /distributions/{id} { allow read, list: if isSignedIn(); allow write: if isAdmin(); }
     }
     
     match /payouts/{id} { 
-      allow read, list: if isMember() && (resource.data.userId == request.auth.uid || isAdmin()); 
+      allow read, list: if isOwner(resource.data.userId) || isAdmin(); 
       allow create: if isMember(); 
       allow update: if isAdmin(); 
     }
@@ -112,13 +121,11 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
     
-    match /sustenance_cycles/{id} { allow read, list: if isMember(); allow write: if isAdmin(); }
     match /vouchers/{id} { allow read, list: if isMember(); allow write: if isAdmin(); }
-    match /activity/{id} { allow read, list: if isMember(); allow write: if isMember(); }
-    match /reports/{id} { allow read, list, write: if isMember(); }
-    match /price_verifications/{id} { allow read, list, create: if isMember(); allow update, delete: if isAdmin(); }
-    match /vouches/{id} { allow read, list: if isMember(); allow write: if isMember(); }
-    match /resources/{id} { allow read, list: if isMember(); allow write: if isAdmin(); }
-    match /disputes/{id} { allow read, list: if isMember(); allow write: if isMember(); }
+    match /activity/{id} { allow read, list: if isSignedIn(); allow write: if isMember(); }
+    match /reports/{id} { allow read, list: if isMember() || isAdmin(); allow write: if isMember(); }
+    match /vouches/{id} { allow read, list: if isSignedIn(); allow write: if isMember(); }
+    match /resources/{id} { allow read, list: if isSignedIn(); allow write: if isAdmin(); }
+    match /disputes/{id} { allow read, list: if isSignedIn(); allow write: if isMember(); }
   }
 }
