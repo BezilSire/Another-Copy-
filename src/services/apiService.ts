@@ -64,7 +64,6 @@ const globalsCollection = collection(db, 'globals');
 const pendingPurchasesCollection = collection(db, 'pending_ubt_purchases');
 const meetingsCollection = collection(db, 'meetings');
 const candidatesCollection = collection(db, 'candidates');
-// Fixed: Added missing broadcastsCollection declaration
 const broadcastsCollection = collection(db, 'broadcasts');
 
 export const api = {
@@ -347,6 +346,7 @@ export const api = {
     },
     fetchRegularPosts: async (count: number, filter: string, isAdmin: boolean, startAfterDoc?: DocumentSnapshot<DocumentData>, currentUser?: User) => {
         let q;
+        // Refined logic: 'all' and 'foryou' both pull the full unrestricted stream of posts.
         if (filter === 'all' || filter === 'foryou') q = query(postsCollection, orderBy('date', 'desc'), limit(count));
         else if (filter === 'following' && currentUser?.following && currentUser.following.length > 0) q = query(postsCollection, where('authorId', 'in', currentUser.following), orderBy('date', 'desc'), limit(count));
         else q = query(postsCollection, where('types', '==', filter), orderBy('date', 'desc'), limit(count));
