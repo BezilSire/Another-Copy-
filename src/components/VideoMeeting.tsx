@@ -85,9 +85,9 @@ const ParticipantTile: React.FC<{
                 <div className="absolute top-4 right-4 flex flex-col gap-2">
                     <button onClick={onRevoke} className="p-2 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-xl border border-red-500/30 transition-all" title="Remove Node"><UserMinusIcon className="h-3 w-3" /></button>
                     {participant.isOnStage ? (
-                         <button onClick={onDemote} className="p-2 bg-blue-600/20 hover:bg-blue-600 text-blue-500 hover:text-white rounded-xl border border-red-500/30 transition-all" title="Move to Assembly">↓</button>
+                         <button onClick={onDemote} className="p-2 bg-blue-600/20 hover:bg-blue-600 text-blue-500 hover:text-white rounded-xl border border-blue-500/30 transition-all" title="Move to Assembly">↓</button>
                     ) : (
-                         <button onClick={onPromote} className="p-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-500 hover:text-white rounded-xl border border-red-500/30 transition-all" title="Invite to Stage">↑</button>
+                         <button onClick={onPromote} className="p-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-500 hover:text-white rounded-xl border border-emerald-500/30 transition-all" title="Invite to Stage">↑</button>
                     )}
                 </div>
             )}

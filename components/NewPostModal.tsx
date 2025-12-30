@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { User, Post } from '../types';
 import { api } from '../services/apiService';
@@ -14,7 +13,6 @@ import { LoaderIcon } from './icons/LoaderIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
-// FIX: Added missing imports for ShieldCheckIcon and DatabaseIcon
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
 import { MultiSelectPills } from './MultiSelectPills';
@@ -151,7 +149,6 @@ export const NewPostModal: React.FC<NewPostModalProps> = ({ isOpen, onClose, use
     try {
       const ccapToAward = bypass ? 0 : evaluation?.ccapAward || 0;
       await api.createPost(user, content, postType, ccapToAward, requiredSkills);
-      // FIX: Using ccapToAward instead of undefined ccapAwarded
       onPostCreated(ccapToAward);
     } catch (error) {
       console.error("Failed to create post:", error);

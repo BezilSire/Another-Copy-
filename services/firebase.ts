@@ -1,4 +1,3 @@
-
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
@@ -6,7 +5,6 @@ import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
 import { getMessaging, isSupported } from 'firebase/messaging';
 import { getFunctions } from 'firebase/functions';
-// FIX: Normalized extensionless import
 import { firebaseConfig } from './firebaseConfig';
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();

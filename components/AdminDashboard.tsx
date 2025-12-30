@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Admin, Agent, Member, Broadcast, Report, User, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PendingUbtPurchase } from '../types';
+import { Admin, Agent, Member, Broadcast, Report, User, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PendingUbtPurchase, MultiSigProposal } from '../types';
 import { api } from '../services/apiService';
 import { cryptoService } from '../services/cryptoService';
 import { LayoutDashboardIcon } from './icons/LayoutDashboardIcon';
@@ -43,6 +43,7 @@ export const AdminDashboard: React.FC<{
   const [cvp, setCvp] = useState<CommunityValuePool | null>(null);
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [pendingPurchases, setPendingPurchases] = useState<PendingUbtPurchase[]>([]);
+  const [msProposals, setMsProposals] = useState<MultiSigProposal[]>([]);
   const [typeFilter, setTypeFilter] = useState<PostFilterType>('all');
   const [isUpgrading, setIsUpgrading] = useState(false);
   const { addToast } = useToast();
@@ -59,11 +60,12 @@ export const AdminDashboard: React.FC<{
     const unsubVentures = api.listenForVentures(user, setVentures, console.error);
     const unsubCvp = api.listenForCVP(user, setCvp, console.error);
     const unsubOracle = api.listenForPendingPurchases(setPendingPurchases, console.error);
+    const unsubMultisig = api.listenForMultiSigProposals(setMsProposals);
     api.getBroadcasts().then(setBroadcasts).catch(console.error);
 
     return () => {
         unsubUsers(); unsubMembers(); unsubAgents(); unsubPending(); unsubReports();
-        unsubPayouts(); unsubVentures(); unsubCvp(); unsubOracle();
+        unsubPayouts(); unsubVentures(); unsubCvp(); unsubOracle(); unsubMultisig();
     };
   }, [user]);
 
@@ -140,7 +142,7 @@ export const AdminDashboard: React.FC<{
           <div className="w-full xl:w-auto overflow-x-auto no-scrollbar">
               <nav className="-mb-px flex space-x-8" aria-label="Tabs">
                   <TabButton label="Ops" icon={<LayoutDashboardIcon/>} isActive={view === 'dashboard'} onClick={() => setView('dashboard')} />
-                  <TabButton label="Treasury" icon={<LockIcon/>} isActive={view === 'treasury'} onClick={() => setView('treasury')} />
+                  <TabButton label="Treasury" icon={<LockIcon/>} count={msProposals.length} isActive={view === 'treasury'} onClick={() => setView('treasury')} />
                   <TabButton label="Dispatch" icon={<GlobeIcon/>} isActive={view === 'dispatch'} onClick={() => setView('dispatch')} />
                   <TabButton label="Oracle" icon={<DollarSignIcon/>} isActive={view === 'oracle'} count={pendingPurchases.length} onClick={() => setView('oracle')} />
                   <TabButton label="Registrar" icon={<DatabaseIcon/>} isActive={view === 'registrar'} onClick={() => setView('registrar')} />

@@ -10,11 +10,9 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
   const sanitizeHtml = (html: string): string => {
     if (!html) return '';
 
-    // Use a temporary element to sanitize the HTML correctly.
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = html;
 
-    // Remove direct styling and ensure standard semantic flow.
     const allElements = tempDiv.querySelectorAll('*');
     allElements.forEach(el => {
       el.removeAttribute('style');
@@ -27,7 +25,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({ content, cla
 
   return (
     <div
-      className={`break-words markdown-stream ${className || ''}`}
+      className={`break-words markdown-stream leading-relaxed ${className || ''}`}
+      style={{ display: 'inline' }}
       dangerouslySetInnerHTML={{ __html: sanitizedHtml }}
     />
   );

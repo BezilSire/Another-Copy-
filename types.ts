@@ -1,8 +1,7 @@
-
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
-export type UserStatus = 'active' | 'pending' | 'suspended' | 'ousted';
+export type UserStatus = 'active' | 'pending' | 'pending_trust' | 'suspended' | 'ousted';
 export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress' | 'foryou' | 'following';
 export type ProtocolMode = 'MAINNET' | 'TESTNET';
 export type AssetType = 'SOL' | 'USDT' | 'USDC';
@@ -10,6 +9,19 @@ export type GovernanceTier = 'CITY' | 'NATIONAL' | 'GLOBAL';
 
 export type NavView = 'profile' | 'notifications' | 'sustenance' | 'knowledge' | 'security' | 'state' | 'audit' | 'ledger' | 'wallet' | 'governance';
 export type MemberView = NavView | 'home' | 'hub' | 'chats' | 'community' | 'ventures' | 'more' | 'meeting';
+
+export interface MultiSigProposal {
+    id: string;
+    fromVaultId: string;
+    toVaultId: string;
+    amount: number;
+    reason: string;
+    proposerId: string;
+    proposerName: string;
+    signatures: string[]; // List of Admin IDs
+    status: 'pending' | 'executed' | 'rejected';
+    timestamp: Timestamp;
+}
 
 export interface Candidate {
     id: string;

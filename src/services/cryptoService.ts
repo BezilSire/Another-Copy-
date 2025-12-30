@@ -41,15 +41,15 @@ const decodeBase64 = (s: string): Uint8Array => {
 };
 
 /**
- * Normalizes mnemonic input by removing extra spaces, line breaks, 
- * and converting to lowercase for consistent mathematical derivation.
+ * ABSOLUTE NORMALIZATION PROTOCOL
+ * Extracts words using a strict alphabetic regex. 
+ * This ensures "1. word", "word, ", and "word\n" all resolve to "word".
  */
 const normalizeMnemonic = (phrase: string): string => {
-    return phrase
-        .trim()
-        .toLowerCase()
-        .replace(/[\r\n\t]/g, ' ') // Replace newlines/tabs with space
-        .replace(/\s+/g, ' ');      // Collapse multiple spaces into one
+    if (!phrase) return '';
+    // Match only alphabetic sequences (the words) and join with a single space
+    const words = phrase.toLowerCase().match(/[a-z]+/g);
+    return words ? words.join(' ') : '';
 };
 
 export const cryptoService = {
@@ -59,18 +59,20 @@ export const cryptoService = {
 
     validateMnemonic: (mnemonic: string): boolean => {
         try {
-            const normalized = normalizeMnemonic(mnemonic);
-            const wordCount = normalized.split(' ').length;
+            const cleaned = normalizeMnemonic(mnemonic);
+            const wordCount = cleaned.split(' ').length;
+            // Standard BIP39 is 12 or 24 words
             if (wordCount !== 12 && wordCount !== 24) return false;
-            return bip39.validateMnemonic(normalized);
+            return bip39.validateMnemonic(cleaned);
         } catch (e) {
             return false;
         }
     },
 
     mnemonicToKeyPair: (mnemonic: string) => {
-        const normalized = normalizeMnemonic(mnemonic);
-        const seed = bip39.mnemonicToSeedSync(normalized);
+        const cleaned = normalizeMnemonic(mnemonic);
+        const seed = bip39.mnemonicToSeedSync(cleaned);
+        // Use first 32 bytes of seed for Ed25519
         const secretKey = seed.slice(0, 32);
         const keyPair = nacl.sign.keyPair.fromSeed(secretKey);
         
@@ -85,11 +87,14 @@ export const cryptoService = {
     },
 
     saveVault: async (data: VaultData, pin: string) => {
-        const normalizedMnemonic = normalizeMnemonic(data.mnemonic);
-        const encrypted = await cryptoService._encryptWithPin(JSON.stringify({ ...data, mnemonic: normalizedMnemonic }), pin);
+        const cleanedMnemonic = normalizeMnemonic(data.mnemonic);
+        const encrypted = await cryptoService._encryptWithPin(
+            JSON.stringify({ ...data, mnemonic: cleanedMnemonic }), 
+            pin
+        );
         localStorage.setItem(ENCRYPTED_VAULT_STORAGE, encrypted);
         
-        const keys = cryptoService.mnemonicToKeyPair(normalizedMnemonic);
+        const keys = cryptoService.mnemonicToKeyPair(cleanedMnemonic);
         localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, keys.publicKey);
         localStorage.setItem(SIGN_SECRET_KEY_STORAGE, keys.secretKey);
     },
@@ -101,12 +106,12 @@ export const cryptoService = {
         try {
             const dataStr = await cryptoService._decryptWithPin(encrypted, pin);
             const data = JSON.parse(dataStr) as VaultData;
-            const normalized = normalizeMnemonic(data.mnemonic);
+            const cleaned = normalizeMnemonic(data.mnemonic);
             
-            const keys = cryptoService.mnemonicToKeyPair(normalized);
+            const keys = cryptoService.mnemonicToKeyPair(cleaned);
             localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, keys.publicKey);
             localStorage.setItem(SIGN_SECRET_KEY_STORAGE, keys.secretKey);
-            return { ...data, mnemonic: normalized };
+            return { ...data, mnemonic: cleaned };
         } catch (e) {
             return null;
         }
