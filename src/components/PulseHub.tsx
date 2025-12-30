@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, GlobalEconomy, PendingUbtPurchase, UbtTransaction, TreasuryVault } from '../types';
 import { api } from '../services/apiService';

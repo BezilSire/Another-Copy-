@@ -1,6 +1,5 @@
-
 import React, { useState, useEffect } from 'react';
-import { MemberUser, Conversation, User, FilterType, MemberView } from '../types';
+import { MemberUser, Conversation, User, MemberView } from '../types';
 import { MemberBottomNav } from './MemberBottomNav';
 import { PostsFeed } from './PostsFeed';
 import { NewPostModal } from './NewPostModal';
@@ -14,7 +13,6 @@ import { CommunityPage } from './CommunityPage';
 import { MorePage } from './MorePage';
 import { SustenancePage } from './SustenancePage';
 import { NotificationsPage } from './NotificationsPage';
-import { PostTypeFilter } from './PostTypeFilter';
 import { WalletPage } from './WalletPage';
 import { ChatsPage } from './ChatsPage';
 import { MemberSearchModal } from './MemberSearchModal';
@@ -51,7 +49,6 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
   const [isDistressLoading, setIsDistressLoading] = useState(false);
   const [isUpgrading, setIsUpgrading] = useState(false);
   const { addToast } = useToast();
-  const [typeFilter, setTypeFilter] = useState<FilterType>('foryou');
   
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<Conversation | null>(null);
@@ -95,7 +92,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
     }
 
     switch (view) {
-      case 'home': return ( <div className="space-y-6"> {!hasVault && <SovereignUpgradeBanner onUpgrade={() => setIsUpgrading(true)} />} <div className="md:hidden"><PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} /></div> <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter={typeFilter} /> </div> );
+      case 'home': return ( 
+        <div className="space-y-6"> 
+          {!hasVault && <SovereignUpgradeBanner onUpgrade={() => setIsUpgrading(true)} />} 
+          {/* Main unified stream with type-based badges */}
+          <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter="all" /> 
+        </div> 
+      );
       case 'governance': return <GovernancePage user={user} />;
       case 'meeting': return <MeetingHub user={user} />;
       case 'state': return <StateRegistry user={user} />;
@@ -111,7 +114,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       case 'notifications': return <NotificationsPage user={user} onNavigate={() => {}} onViewProfile={onViewProfile as any} />;
       case 'knowledge': return <KnowledgeBasePage currentUser={user} onUpdateUser={onUpdateUser} />;
       case 'more': return <MorePage user={user} onNavigate={setView as any} onLogout={onLogout} notificationCount={unreadCount} />;
-      default: return <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter={typeFilter} />;
+      default: return <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter="all" />;
     }
   };
 
@@ -119,7 +122,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
     <div className="min-h-screen bg-transparent pb-20 md:pb-0">
       <div className="max-w-7xl mx-auto px-0 sm:px-4 lg:px-8 pt-6">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
-            <div className="hidden md:block md:col-span-3"><div className="sticky top-24"><CommunityHubSidebar activeView={view} onChangeView={setView} user={user} currentFilter={typeFilter} onFilterChange={setTypeFilter} /></div></div>
+            <div className="hidden md:block md:col-span-3"><div className="sticky top-24"><CommunityHubSidebar activeView={view} onChangeView={setView} user={user} /></div></div>
             <div className="col-span-1 md:col-span-9 lg:col-span-6"><div className="min-h-[80vh] main-layout-container">{renderMainContent()}</div></div>
             <div className="hidden lg:block lg:col-span-3"><div className="sticky top-24"><RightSidebar user={user} /></div></div>
         </div>
