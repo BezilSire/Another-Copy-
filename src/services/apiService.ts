@@ -262,6 +262,15 @@ export const api = {
         const s = await getDoc(doc(meetingsCollection, id));
         return s.exists() ? { id: s.id, ...s.data() } as Meeting : null;
     },
+    getHostActiveMeetings: async (uid: string): Promise<Meeting[]> => {
+        const q = query(
+            meetingsCollection, 
+            where('hostId', '==', uid), 
+            where('expiresAt', '>', Timestamp.now())
+        );
+        const s = await getDocs(q);
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as Meeting));
+    },
     updateMeetingSignal: (id: string, data: Partial<Meeting>) => updateDoc(doc(meetingsCollection, id), data),
     updateParticipantStatus: (id: string, uid: string, status: ParticipantStatus | null) => updateDoc(doc(meetingsCollection, id), { [`participants.${uid}`]: status }),
     listenForMeetingSignals: (id: string, cb: (m: Meeting) => void): Unsubscribe => onSnapshot(doc(meetingsCollection, id), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
