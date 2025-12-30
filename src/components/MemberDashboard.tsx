@@ -54,7 +54,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<Conversation | null>(null);
 
-  const hasVault = cryptoService.hasVault();
+  const hasLocalVault = cryptoService.hasVault();
   const isAnonymous = firebaseUser?.isAnonymous;
 
   useEffect(() => {
@@ -71,11 +71,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
   };
   
   const handleUpgradeComplete = async (mnemonic: string, pin: string) => {
-    await cryptoService.saveVault({ mnemonic }, pin);
+    const encryptedVault = await cryptoService.saveVault({ mnemonic }, pin);
     const pubKey = cryptoService.getPublicKey();
-    if (pubKey) await onUpdateUser({ publicKey: pubKey });
+    // Law: Sync to server immediately
+    if (pubKey) await onUpdateUser({ publicKey: pubKey, encryptedVault } as any);
     setIsUpgrading(false);
-    addToast("Identity Anchored. Node is now Sovereign.", "success");
+    addToast("Identity Anchored globally.", "success");
   };
 
   const renderMainContent = () => {
@@ -95,8 +96,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
     switch (view) {
       case 'home': return ( 
         <div className="space-y-6"> 
-          {!hasVault && <SovereignUpgradeBanner onUpgrade={() => setIsUpgrading(true)} />} 
-          {/* Unfiltered feed with embedded badges */}
+          {!hasLocalVault && <SovereignUpgradeBanner user={user} onUpgrade={() => setIsUpgrading(true)} />} 
           <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter="all" /> 
         </div> 
       );
@@ -121,7 +121,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
 
   return (
     <div className="min-h-screen bg-transparent pb-20 md:pb-0">
-      <div className="max-w-7xl mx-auto px-0 sm:px-4 lg:px-8 pt-6">
+      <div className="max-w-7xl auto px-0 sm:px-4 lg:px-8 pt-6">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             <div className="hidden md:block md:col-span-3"><div className="sticky top-24"><CommunityHubSidebar activeView={view} onChangeView={setView} user={user} /></div></div>
             <div className="col-span-1 md:col-span-9 lg:col-span-6"><div className="min-h-[80vh] main-layout-container">{renderMainContent()}</div></div>

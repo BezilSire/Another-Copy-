@@ -1,7 +1,7 @@
 
-import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, useRef } from 'react';
-import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, sendEmailVerification, signInAnonymously } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
+import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback } from 'react';
+import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInAnonymously, sendEmailVerification } from 'firebase/auth';
+import { doc, onSnapshot, setDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp, updateDoc } from 'firebase/firestore';
 import { useToast } from './ToastContext';
 import { api } from '../services/apiService';
 import { cryptoService, VaultData } from '../services/cryptoService';
@@ -36,9 +36,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isProcessingAuth, setIsProcessingAuth] = useState(false);
   
-  const [isSovereignLocked, setIsSovereignLocked] = useState(
-    cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked')
-  );
+  const [isSovereignLocked, setIsSovereignLocked] = useState(false);
 
   const { addToast } = useToast();
 
@@ -77,6 +75,19 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           if (userDoc.exists()) {
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
             setCurrentUser(userData);
+
+            // SYSTEM LAW: Server Vault Sync
+            // If the account has an encrypted vault on the server but not locally, inject it.
+            const serverVault = (userData as any).encryptedVault;
+            if (serverVault && !cryptoService.hasVault()) {
+                cryptoService.injectVault(serverVault);
+            }
+
+            // Check lock state
+            const hasLocalVault = cryptoService.hasVault();
+            const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
+            setIsSovereignLocked(hasLocalVault && !isUnlocked);
+
           } else {
             setCurrentUser(null);
           }
@@ -86,14 +97,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }, (error) => {
           console.warn("Node synchronization restricted:", error.message);
           setIsLoadingAuth(false);
-          setIsProcessingAuth(false);
         });
         
         api.setupPresence(user.uid);
       } else {
         setCurrentUser(null);
         setIsLoadingAuth(false);
-        setIsProcessingAuth(false);
       }
     }, (error) => {
       console.error("Auth status sync failed:", error);
@@ -124,11 +133,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await signInAnonymously(auth);
     } catch (error: any) {
         setIsProcessingAuth(false);
-        if (error.code === 'auth/admin-restricted-operation' || error.code === 'auth/operation-not-allowed') {
-            addToast("Guest Bridge Blocked: Anonymous sign-in must be enabled in Firebase Console.", "error");
-        } else {
-            addToast("Guest Bridge Failed. Check connection.", "error");
-        }
+        addToast("Guest Bridge Failed.", "error");
         throw error;
     }
   }, [addToast]);
@@ -169,7 +174,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         email: credentials.email,
         name_lowercase: credentials.name.toLowerCase(),
         role: 'agent',
-        status: 'pending',
+        status: 'active',
         circle: credentials.circle,
         agent_code: generateAgentCode(),
         referralCode: generateReferralCode(),
@@ -213,9 +218,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             agent_id: 'GENESIS_PROTOCOL',
             agent_name: 'Self-Registered',
             date_registered: serverTimestamp(),
-            payment_status: 'pending_verification',
+            payment_status: 'complete',
             registration_amount: 10,
-            welcome_message: `Welcome, ${memberData.full_name}. Node operational.`,
+            welcome_message: `Welcome, ${memberData.full_name}. Citizen Node operational.`,
             membership_card_id: `UGC-M-${generateReferralCode()}`,
             phone: '', circle: '',
         });
@@ -226,7 +231,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             email: memberData.email,
             name_lowercase: memberData.full_name.toLowerCase(),
             role: 'member',
-            status: 'pending',
+            status: 'active',
             isProfileComplete: false,
             member_id: memberRef.id,
             credibility_score: 100,
@@ -234,7 +239,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             referralCode: generateReferralCode(),
             referredBy: memberData.referralCode || '',
             referrerId: referrerId,
-            hasCompletedInduction: false,
+            hasCompletedInduction: true,
             phone: '', address: '', circle: '', id_card_number: '',
             ubtBalance: 0, initialUbtStake: 0,
             publicKey: pubKey,

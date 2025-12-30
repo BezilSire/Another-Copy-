@@ -20,29 +20,24 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
     const [isGenerating, setIsGenerating] = useState(false);
 
     useEffect(() => {
-        // Only trigger generation once when on Step 1 and if mnemonic is not yet set
         if (step === 1 && !mnemonic && !isGenerating) {
             setIsGenerating(true);
             try {
-                // Cryptographic derivation is synchronous and near-instant
                 const newMnemonic = cryptoService.generateMnemonic();
                 setMnemonic(newMnemonic);
             } catch (error) {
-                console.error("CRITICAL_CORE_ERROR: Entropy generation failed. Check Buffer shim.", error);
+                console.error("CRITICAL_CORE_ERROR: Entropy generation failed.", error);
             } finally {
-                // Always clear generating state to prevent UI hang
                 setIsGenerating(false);
             }
         }
     }, [step, mnemonic, isGenerating]);
 
-    // Derived word list
     const words = mnemonic ? mnemonic.split(' ') : [];
 
     const handleNextStep = () => {
         if (step === 1) {
             if (!mnemonic) return;
-            // Pick a random word to verify for provenance
             setVerifyWordIndex(Math.floor(Math.random() * 12));
             setStep(2);
         } else if (step === 2) {
@@ -62,7 +57,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
     };
 
     return (
-        <div className="module-frame glass-module p-8 sm:p-12 rounded-[3rem] border-brand-gold/20 shadow-premium animate-fade-in max-w-2xl w-full relative">
+        <div className="module-frame glass-module p-8 sm:p-12 rounded-[3rem] border-brand-gold/20 shadow-premium animate-fade-in max-w-2xl w-full relative z-50 pointer-events-auto">
             <div className="corner-tl !border-brand-gold/40"></div><div className="corner-tr !border-brand-gold/40"></div><div className="corner-bl !border-brand-gold/40"></div><div className="corner-br !border-brand-gold/40"></div>
             
             <div className="flex flex-col items-center mb-10 text-center">
@@ -102,7 +97,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                     <button 
                         onClick={handleNextStep} 
                         disabled={isGenerating || !mnemonic}
-                        className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-3 disabled:opacity-20"
+                        className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-3 disabled:opacity-20 cursor-pointer"
                     >
                         I Have Anchored My Phrase <ArrowRightIcon className="h-4 w-4"/>
                     </button>
@@ -121,7 +116,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                         autoFocus
                         onKeyDown={(e) => e.key === 'Enter' && handleNextStep()}
                     />
-                    <button onClick={handleNextStep} disabled={!verifyInput} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.3em] text-[10px] shadow-glow-gold active:scale-95 transition-all">
+                    <button onClick={handleNextStep} disabled={!verifyInput} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.3em] text-[10px] shadow-glow-gold active:scale-95 transition-all cursor-pointer">
                         Verify Anchor
                     </button>
                 </div>
@@ -129,11 +124,11 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
 
             {step === 3 && (
                 <div className="space-y-10 animate-fade-in max-w-sm mx-auto">
-                    <p className="text-gray-400 text-sm leading-relaxed text-center uppercase tracking-widest font-black opacity-80">Establish a <strong className="text-white">6-digit PIN</strong> for daily node access.</p>
+                    <p className="text-gray-400 text-sm leading-relaxed text-center uppercase tracking-widest font-black opacity-80">Establish a <strong className="text-white">6-digit PIN</strong> for node access.</p>
                     
                     <div className="space-y-4">
                         <input 
-                            type="password" 
+                            type="text" 
                             inputMode="numeric"
                             maxLength={6}
                             value={pin}
@@ -142,7 +137,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                             placeholder="••••••"
                         />
                         <input 
-                            type="password" 
+                            type="text" 
                             inputMode="numeric"
                             maxLength={6}
                             value={confirmPin}
@@ -153,13 +148,13 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                         />
                     </div>
 
-                    <button onClick={handleNextStep} disabled={pin.length !== 6 || pin !== confirmPin} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.3em] text-[10px] shadow-glow-gold active:scale-95 transition-all">
+                    <button onClick={handleNextStep} disabled={pin.length !== 6 || pin !== confirmPin} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.3em] text-[10px] shadow-glow-gold active:scale-95 transition-all cursor-pointer">
                         Initialize Node Anchor
                     </button>
                 </div>
             )}
 
-            <button onClick={onBack} className="w-full mt-10 text-[9px] font-black text-gray-700 hover:text-white uppercase tracking-[0.5em] transition-colors">
+            <button onClick={onBack} className="w-full mt-10 text-[9px] font-black text-gray-700 hover:text-white uppercase tracking-[0.5em] transition-colors cursor-pointer">
                 Cancel Initialization
             </button>
         </div>

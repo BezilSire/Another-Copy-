@@ -71,7 +71,10 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
         }
     };
 
-    const handleVerifySeed = async () => {
+    const handleVerifySeed = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        
         const fullPhrase = phraseParts.join(' ').trim();
         if (!cryptoService.validateMnemonic(fullPhrase)) {
             alert("INTEGRITY ERROR: Recovery phrase invalid format.");
@@ -136,7 +139,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
 
     if (isLazarusMode) {
         return (
-            <div className="space-y-8 animate-fade-in w-full max-w-2xl">
+            <div className="space-y-8 animate-fade-in w-full max-w-2xl pointer-events-auto">
                  <div className="module-frame glass-module p-10 rounded-[3rem] border-red-500/20 shadow-premium animate-fade-in text-center space-y-8">
                     <div className="p-5 bg-red-500/10 rounded-full w-20 h-20 mx-auto flex items-center justify-center border border-red-500/20 shadow-glow-matrix">
                         <AlertTriangleIcon className="h-10 w-10 text-red-500" />
@@ -155,7 +158,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
 
     if (sessionMismatch) {
         return (
-            <div className="module-frame glass-module p-10 rounded-[3rem] border-red-500/20 shadow-premium animate-fade-in max-md w-full text-center space-y-8">
+            <div className="module-frame glass-module p-10 rounded-[3rem] border-red-500/20 shadow-premium animate-fade-in max-md w-full text-center space-y-8 pointer-events-auto">
                 <div className="p-5 bg-red-500/10 rounded-full w-20 h-20 mx-auto flex items-center justify-center border border-red-500/20">
                     <ShieldCheckIcon className="h-10 w-10 text-red-500" />
                 </div>
@@ -171,18 +174,18 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                 <div className="flex flex-col gap-3">
                     <button 
                         onClick={() => api.logout().then(() => window.location.reload())}
-                        className="w-full py-5 bg-white text-black font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-xl"
+                        className="w-full py-5 bg-white text-black font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-xl cursor-pointer"
                     >
                         Switch Node (Logout)
                     </button>
-                    <button onClick={onBack} className="w-full py-3 text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-widest">Abort</button>
+                    <button onClick={onBack} className="w-full py-3 text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-widest cursor-pointer">Abort</button>
                 </div>
             </div>
         );
     }
 
     return (
-        <div className="module-frame glass-module p-6 sm:p-10 rounded-[3.5rem] border-white/10 shadow-premium animate-fade-in max-w-2xl w-full relative overflow-hidden font-sans">
+        <div className="module-frame glass-module p-6 sm:p-10 rounded-[3.5rem] border-white/10 shadow-premium animate-fade-in max-w-2xl w-full relative overflow-hidden font-sans pointer-events-auto">
             <div className="corner-tl !border-white/40"></div><div className="corner-tr !border-white/40"></div><div className="corner-bl !border-white/40"></div><div className="corner-br !border-white/40"></div>
             
             <div className="text-center mb-8 relative z-10">
@@ -222,9 +225,10 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
 
                     <div className="flex flex-col gap-4">
                         <button 
+                            type="button"
                             onClick={handleVerifySeed}
                             disabled={isVerifying || phraseParts.some(w => !w)}
-                            className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all disabled:opacity-20 flex justify-center items-center gap-3"
+                            className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all disabled:opacity-20 flex justify-center items-center gap-3 cursor-pointer"
                         >
                             {isVerifying ? (
                                 <>
@@ -246,12 +250,15 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                             <div className="p-6 bg-blue-900/5 rounded-3xl border border-blue-900/20 group hover:border-blue-500/30 transition-all">
                                 <p className="text-[10px] text-gray-400 mb-4 leading-relaxed uppercase tracking-widest font-black opacity-60">Restore access via cloud credentials.</p>
                                 <button 
-                                    onClick={() => {
+                                    type="button"
+                                    onClick={(e) => {
+                                        e.preventDefault();
+                                        e.stopPropagation();
                                         if(window.confirm("ACCOUNT_RECOVERY: This will overwrite your existing local vault using your authenticated credentials. Proceed?")) {
                                             setIsLazarusMode(true);
                                         }
                                     }}
-                                    className="px-8 py-4 bg-white/5 hover:bg-brand-gold hover:text-slate-950 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/10 flex items-center justify-center gap-3 mx-auto shadow-xl"
+                                    className="px-8 py-4 bg-white/5 hover:bg-brand-gold hover:text-slate-950 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/10 flex items-center justify-center gap-3 mx-auto shadow-xl cursor-pointer"
                                 >
                                     <UserCircleIcon className="h-5 w-5" /> Account Rotation
                                 </button>
@@ -260,7 +267,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                     </div>
                 </div>
             ) : (
-                <div className="space-y-10 animate-fade-in relative z-10 max-w-sm mx-auto">
+                <div className="space-y-10 animate-fade-in relative z-10 max-w-sm mx-auto pointer-events-auto">
                     <div className="text-center space-y-4">
                         <div className="inline-flex p-4 bg-emerald-500/10 rounded-2xl text-emerald-500 border border-emerald-500/20 shadow-glow-matrix">
                             <ShieldCheckIcon className="h-8 w-8" />
@@ -285,36 +292,37 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                     <div className="space-y-4">
                         <p className="text-[9px] text-gray-500 uppercase font-black tracking-widest text-center">Establish local node access PIN</p>
                         <input 
-                            type="password"
+                            type="text"
                             inputMode="numeric"
                             maxLength={6}
                             value={pin}
                             onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
                             placeholder="SET SECURITY PIN"
-                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-3xl font-black tracking-[0.5em] focus:border-brand-gold focus:ring-4 focus:ring-brand-gold/10 transition-all outline-none"
+                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-3xl font-black tracking-[0.5em] focus:border-brand-gold outline-none"
                         />
                         <input 
-                            type="password"
+                            type="text"
                             inputMode="numeric"
                             maxLength={6}
                             value={confirmPin}
                             onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
                             placeholder="CONFIRM PIN"
-                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-3xl font-black tracking-[0.5em] focus:border-brand-gold focus:ring-4 focus:ring-brand-gold/10 transition-all outline-none"
+                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-3xl font-black tracking-[0.5em] focus:border-brand-gold outline-none"
                         />
                     </div>
                     
                     <button 
+                        type="button"
                         onClick={handleReset}
                         disabled={isVerifying || pin.length < 6 || pin !== confirmPin}
-                        className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all disabled:opacity-20"
+                        className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all disabled:opacity-20 cursor-pointer"
                     >
                         {isVerifying ? <LoaderIcon className="h-6 w-6 animate-spin mx-auto"/> : "Complete Re-Anchor"}
                     </button>
                 </div>
             )}
 
-            <button onClick={onBack} className="w-full mt-10 text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-[0.5em] transition-colors flex items-center justify-center gap-3 relative z-10">
+            <button onClick={onBack} className="w-full mt-10 text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-[0.5em] transition-colors flex items-center justify-center gap-3 relative z-10 cursor-pointer">
                 <ArrowLeftIcon className="h-3 w-3" /> Abort Protocol
             </button>
         </div>

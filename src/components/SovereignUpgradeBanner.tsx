@@ -3,12 +3,17 @@ import React from 'react';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { ArrowRightIcon } from './icons/ArrowRightIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
+import { User } from '../types';
 
 interface SovereignUpgradeBannerProps {
   onUpgrade: () => void;
+  user: User;
 }
 
-export const SovereignUpgradeBanner: React.FC<SovereignUpgradeBannerProps> = ({ onUpgrade }) => {
+export const SovereignUpgradeBanner: React.FC<SovereignUpgradeBannerProps> = ({ onUpgrade, user }) => {
+  // SYSTEM LAW: If user has a vault anchored on server, they are sovereign. Hide banner.
+  if ((user as any).encryptedVault) return null;
+
   return (
     <div className="mb-8 relative group cursor-pointer overflow-hidden rounded-[2rem] border border-brand-gold/30 shadow-glow-gold bg-slate-950/80 backdrop-blur-xl animate-pulse-soft" onClick={onUpgrade}>
       <div className="absolute inset-0 bg-gradient-to-r from-brand-gold/[0.05] to-transparent pointer-events-none"></div>

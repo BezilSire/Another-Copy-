@@ -15,8 +15,8 @@ interface State {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-/* Fixed: Explicitly import and extend Component to resolve type resolution issues for 'setState' and 'props' */
-export class ErrorBoundary extends Component<Props, State> {
+/* Fixed: Use React.Component to ensure correct type inheritance for setState and props */
+export class ErrorBoundary extends React.Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,
@@ -33,7 +33,7 @@ export class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error);
-    /* Fixed: Call setState directly from Component to ensure it is recognized by the compiler */
+    /* Fixed: Call setState directly from React.Component to ensure it is recognized by the compiler */
     this.setState({ 
       hasError: true,
       error, 
@@ -76,7 +76,7 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    /* Fixed: Access props directly from Component to ensure children is correctly resolved */
+    /* Fixed: Access props directly from React.Component base class to ensure children is correctly resolved */
     return this.props.children;
   }
 }

@@ -40,14 +40,8 @@ const decodeBase64 = (s: string): Uint8Array => {
     }
 };
 
-/**
- * ABSOLUTE NORMALIZATION PROTOCOL
- * Extracts words using a strict alphabetic regex. 
- * This ensures "1. word", "word, ", and "word\n" all resolve to "word".
- */
 const normalizeMnemonic = (phrase: string): string => {
     if (!phrase) return '';
-    // Match only alphabetic sequences (the words) and join with a single space
     const words = phrase.toLowerCase().match(/[a-z]+/g);
     return words ? words.join(' ') : '';
 };
@@ -61,7 +55,6 @@ export const cryptoService = {
         try {
             const cleaned = normalizeMnemonic(mnemonic);
             const wordCount = cleaned.split(' ').length;
-            // Standard BIP39 is 12 or 24 words
             if (wordCount !== 12 && wordCount !== 24) return false;
             return bip39.validateMnemonic(cleaned);
         } catch (e) {
@@ -72,7 +65,6 @@ export const cryptoService = {
     mnemonicToKeyPair: (mnemonic: string) => {
         const cleaned = normalizeMnemonic(mnemonic);
         const seed = bip39.mnemonicToSeedSync(cleaned);
-        // Use first 32 bytes of seed for Ed25519
         const secretKey = seed.slice(0, 32);
         const keyPair = nacl.sign.keyPair.fromSeed(secretKey);
         
@@ -86,7 +78,7 @@ export const cryptoService = {
         return !!localStorage.getItem(ENCRYPTED_VAULT_STORAGE);
     },
 
-    saveVault: async (data: VaultData, pin: string) => {
+    saveVault: async (data: VaultData, pin: string): Promise<string> => {
         const cleanedMnemonic = normalizeMnemonic(data.mnemonic);
         const encrypted = await cryptoService._encryptWithPin(
             JSON.stringify({ ...data, mnemonic: cleanedMnemonic }), 
@@ -97,6 +89,12 @@ export const cryptoService = {
         const keys = cryptoService.mnemonicToKeyPair(cleanedMnemonic);
         localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, keys.publicKey);
         localStorage.setItem(SIGN_SECRET_KEY_STORAGE, keys.secretKey);
+        
+        return encrypted; // Return for server sync
+    },
+
+    injectVault: (encryptedVault: string) => {
+        localStorage.setItem(ENCRYPTED_VAULT_STORAGE, encryptedVault);
     },
 
     unlockVault: async (pin: string): Promise<VaultData | null> => {
