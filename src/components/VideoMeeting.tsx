@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { User, Meeting, ParticipantStatus, RTCSignal, ICESignal } from '../types';
 import { api } from '../services/apiService';
@@ -14,6 +15,7 @@ import { UserMinusIcon } from './icons/UserMinusIcon';
 import { ClockIcon } from './icons/ClockIcon';
 import { ArrowUpRightIcon } from './icons/ArrowUpRightIcon';
 import { HandIcon } from './icons/HandIcon';
+import { XCircleIcon } from './icons/XCircleIcon';
 
 const servers = {
     iceServers: [
@@ -108,11 +110,23 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
     const joinedAtRef = useRef(Date.now());
     const { addToast } = useToast();
 
-    // Fix: Declared handleManualEnd using useCallback and moved it above its first usage in useEffect to fix scope errors.
+    // Protocol Shutdown (Individual Exit)
     const handleManualEnd = useCallback(async () => { 
         await api.updateParticipantStatus(meetingId, user.id, null); 
         onEnd(); 
     }, [meetingId, user.id, onEnd]);
+
+    // Decommission Protocol (Early Finish for All)
+    const handleDecommission = useCallback(async () => {
+        if (!isHost) return;
+        if (!window.confirm("CRITICAL PROTOCOL: Terminate meeting for all peers? This action is immutable.")) return;
+        try {
+            await api.deleteMeeting(meetingId);
+            onEnd();
+        } catch (e) {
+            addToast("Decommission failed.", "error");
+        }
+    }, [isHost, meetingId, onEnd, addToast]);
 
     useEffect(() => {
         let timer: number;
@@ -186,7 +200,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                     const pc = pcs.current[ice.from];
                     if (pc) try { await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(ice.candidate))); } catch (e) {}
                 });
-            } catch (e) { addToast("Media Denied.", "error"); onEnd(); }
+            } catch (e) { addToast("Media Access Denied. Verify permissions.", "error"); onEnd(); }
         };
         init();
         return () => {
@@ -217,7 +231,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
             <div className="p-6 border-b border-white/5 bg-slate-900/50 backdrop-blur-xl flex justify-between items-center z-50">
                 <div className="flex items-center gap-4">
                     <div className="p-2 bg-brand-gold/10 rounded-xl border border-brand-gold/20 shadow-glow-gold"><ShieldCheckIcon className="h-6 w-6 text-brand-gold" /></div>
-                    <div><h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">{meetingTitle}</h2><p className="text-[8px] text-emerald-500 uppercase tracking-widest mt-0.5">{assemblyList.length} Nodes Synchronized</p></div>
+                    <div><h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">{meetingTitle}</h2><p className="text-[8px] text-emerald-500 uppercase tracking-widest mt-0.5">{assemblyList.length} Nodes Online</p></div>
                 </div>
                 <div className="px-5 py-2.5 bg-white/5 rounded-full border border-white/10 flex items-center gap-3"><ClockIcon className="h-3 w-3 text-brand-gold" /><span className="text-[11px] font-black text-white font-mono tracking-widest">{timeLeft}</span></div>
             </div>
@@ -272,12 +286,26 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                 >
                     <HandIcon className="h-6 w-6" />
                 </button>
-                <button 
-                    onClick={handleManualEnd}
-                    className="w-16 h-16 sm:w-20 sm:h-20 bg-red-600 hover:bg-red-500 text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.4)] active:scale-90 transition-all border-4 border-red-900/30"
-                >
-                    <PhoneOffIcon className="h-8 w-8" />
-                </button>
+                <div className="flex flex-col items-center gap-2">
+                    <button 
+                        onClick={handleManualEnd}
+                        className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-700 hover:bg-slate-600 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all border-4 border-slate-600/30"
+                    >
+                        <XCircleIcon className="h-8 w-8" />
+                    </button>
+                    <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">Leave Stage</span>
+                </div>
+                {isHost && (
+                    <div className="flex flex-col items-center gap-2">
+                        <button 
+                            onClick={handleDecommission}
+                            className="w-16 h-16 sm:w-20 sm:h-20 bg-red-600 hover:bg-red-500 text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.4)] active:scale-90 transition-all border-4 border-red-900/30"
+                        >
+                            <PhoneOffIcon className="h-8 w-8" />
+                        </button>
+                        <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">Decommission</span>
+                    </div>
+                )}
             </div>
         </div>
     );

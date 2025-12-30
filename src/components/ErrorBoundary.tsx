@@ -15,7 +15,7 @@ interface State {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-/* Fix: Explicitly inherit from Component to ensure setState and props are available and correctly typed */
+// Fix: Explicitly inherit from Component to ensure setState and props are available and correctly typed
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
@@ -34,7 +34,7 @@ export class ErrorBoundary extends Component<Props, State> {
   /* Use componentDidCatch to log errors and update state */
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error);
-    /* Fix: Accessing setState which is inherited from the base Component class */
+    // Fixed: Accessing setState which is inherited from the base Component class
     this.setState({ 
       hasError: true,
       error, 
@@ -77,7 +77,7 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    /* Fix: Access children from the inherited props property of Component */
+    // Fixed: Access children from the inherited props property of Component
     return this.props.children;
   }
 }

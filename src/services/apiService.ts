@@ -46,7 +46,7 @@ import {
     Conversation, Message, Notification, Activity,
     PublicUserProfile, PayoutRequest, Transaction, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase,
     CitizenResource, Dispute, Meeting, GlobalEconomy, CommunityValuePool, Proposal, Venture, SustenanceCycle, SustenanceVoucher, Comment, Distribution, VentureEquityHolding,
-    RedemptionCycle, ParticipantStatus, RTCSignal, ICESignal
+    RedemptionCycle, ParticipantStatus, RTCSignal, ICESignal, Candidate
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -63,8 +63,9 @@ const disputesCollection = collection(db, 'disputes');
 const globalsCollection = collection(db, 'globals');
 const pendingPurchasesCollection = collection(db, 'pending_ubt_purchases');
 const meetingsCollection = collection(db, 'meetings');
+const candidatesCollection = collection(db, 'candidates');
+// Fixed: Added missing broadcastsCollection declaration
 const broadcastsCollection = collection(db, 'broadcasts');
-const vouchersCollection = collection(db, 'vouchers');
 
 export const api = {
     login: (email: string, password: string): Promise<FirebaseUser> => {
@@ -141,6 +142,43 @@ export const api = {
             t.set(doc(ledgerCollection, transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         }); 
     },
+
+    // --- GOVERNANCE PROTOCOLS ---
+    applyForExecutive: async (candidateData: Omit<Candidate, 'id' | 'voteCount' | 'votes' | 'createdAt' | 'status'>) => {
+        return addDoc(candidatesCollection, {
+            ...candidateData,
+            voteCount: 0,
+            votes: [],
+            status: 'applying',
+            createdAt: serverTimestamp()
+        });
+    },
+
+    deleteCandidate: (candidateId: string) => deleteDoc(doc(candidatesCollection, candidateId)),
+
+    voteForCandidate: (candidateId: string, voterId: string) => runTransaction(db, async t => {
+        const ref = doc(candidatesCollection, candidateId);
+        const snap = await t.get(ref);
+        if (!snap.exists()) throw new Error("Candidate node lost.");
+        const data = snap.data() as Candidate;
+        if (data.votes.includes(voterId)) throw new Error("DUPLICATE_SIGNATURE: Voter has already cast ballot for this node.");
+        
+        const newVoteCount = (data.voteCount || 0) + 1;
+        const newStatus = newVoteCount >= 20 ? 'mandated' : 'applying';
+        
+        t.update(ref, { 
+            votes: arrayUnion(voterId), 
+            voteCount: increment(1),
+            status: newStatus
+        });
+    }),
+
+    listenForCandidates: (cb: (c: Candidate[]) => void): Unsubscribe => {
+        return onSnapshot(query(candidatesCollection, orderBy('voteCount', 'desc')), s => {
+            cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Candidate)));
+        });
+    },
+
     syncInternalVaults: (admin: Admin, from: TreasuryVault, to: TreasuryVault, amt: number, reason: string) => runTransaction(db, async t => {
         const fromRef = doc(vaultsCollection, from.id);
         const toRef = doc(vaultsCollection, to.id);
@@ -222,7 +260,7 @@ export const api = {
     },
     updateMeetingSignal: (id: string, data: Partial<Meeting>) => updateDoc(doc(meetingsCollection, id), data),
     updateParticipantStatus: (id: string, uid: string, status: ParticipantStatus | null) => updateDoc(doc(meetingsCollection, id), { [`participants.${uid}`]: status }),
-    listenForMeetingSignals: (id: string, cb: (m: Meeting) => void): Unsubscribe => onSnapshot(doc(meetingsCollection, id), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting), (error) => console.warn("Meeting sync restricted:", error.message)),
+    listenForMeetingSignals: (id: string, cb: (m: Meeting) => void): Unsubscribe => onSnapshot(doc(meetingsCollection, id), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
     
     // Peer-to-Peer Mesh Signaling
     addSignal: (meetingId: string, signal: RTCSignal) => addDoc(collection(db, 'meetings', meetingId, 'signals'), { ...signal, timestamp: Date.now() }),
@@ -231,59 +269,47 @@ export const api = {
     listenForSignals: (meetingId: string, toUid: string, cb: (s: RTCSignal) => void): Unsubscribe => {
         return onSnapshot(query(collection(db, 'meetings', meetingId, 'signals'), where('to', '==', toUid)), s => {
             s.docChanges().forEach(change => { if (change.type === 'added') cb(change.doc.data() as RTCSignal); });
-        }, (error) => console.warn("Signal stream restricted:", error.message));
+        });
     },
     listenForIce: (meetingId: string, toUid: string, cb: (c: ICESignal) => void): Unsubscribe => {
         return onSnapshot(query(collection(db, 'meetings', meetingId, 'ice'), where('to', '==', toUid)), s => {
             s.docChanges().forEach(change => { if (change.type === 'added') cb(change.doc.data() as ICESignal); });
-        }, (error) => console.warn("ICE stream restricted:", error.message));
+        });
     },
 
     deleteMeeting: (id: string) => deleteDoc(doc(meetingsCollection, id)),
 
-    listenForGlobalEconomy: (cb: (e: GlobalEconomy | null) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(doc(globalsCollection, 'economy'), s => cb(s.exists() ? s.data() as GlobalEconomy : null), (error) => { if(err) err(error); else console.warn("Economy Restricted:", error.message); }),
-    listenToVaults: (cb: (v: TreasuryVault[]) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(vaultsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), (error) => { if(err) err(error); else console.warn("Vault Access Restricted:", error.message); }),
-    listenForNotifications: (uid: string, cb: (n: Notification[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'notifications'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Notification))), (error) => { if(err) err(error); else console.warn("Notification stream restricted:", error.message); }),
-    listenForUserTransactions: (uid: string, cb: (txs: Transaction[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'transactions'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as any))), (error) => { if(err) err(error); else console.warn("Transaction stream restricted:", error.message); }),
-    listenToUserVaults: (uid: string, cb: (v: any[]) => void): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'vaults'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), (error) => console.warn("Vault sync restricted:", error.message)),
-    listenForConversations: (uid: string, cb: (c: Conversation[]) => void, err?: any): Unsubscribe => onSnapshot(query(conversationsCollection, where('members', 'array-contains', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation))), (error) => { if(err) err(error); else console.warn("Convo stream restricted:", error.message); }),
-    listenForMessages: (cid: string, u: User, cb: (m: Message[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'conversations', cid, 'messages'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Message))), (error) => { if(err) err(error); else console.warn("Message sync restricted:", error.message); }),
+    listenForGlobalEconomy: (cb: (e: GlobalEconomy | null) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(doc(globalsCollection, 'economy'), s => cb(s.exists() ? s.data() as GlobalEconomy : null), err),
+    listenToVaults: (cb: (v: TreasuryVault[]) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(vaultsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), err),
+    listenForNotifications: (uid: string, cb: (n: Notification[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'notifications'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Notification))), err),
+    listenForUserTransactions: (uid: string, cb: (txs: Transaction[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'transactions'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as any))), err),
+    listenToUserVaults: (uid: string, cb: (v: any[]) => void): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'vaults'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), console.error),
+    listenForConversations: (uid: string, cb: (c: Conversation[]) => void, err?: any): Unsubscribe => onSnapshot(query(conversationsCollection, where('members', 'array-contains', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation))), err),
+    listenForMessages: (cid: string, u: User, cb: (m: Message[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, conversationsCollection.path, cid, 'messages'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Message))), err),
+    listenForActivity: (circle: string, cb: (a: Activity[]) => void, err?: any): Unsubscribe => onSnapshot(query(activityCollection, where('causerCircle', '==', circle), orderBy('timestamp', 'desc'), limit(10)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), err),
+    listenForAllUsers: (admin: User, cb: (u: User[]) => void, err?: any): Unsubscribe => onSnapshot(usersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), err),
+    listenForAllMembers: (admin: User, cb: (m: Member[]) => void, err?: any): Unsubscribe => onSnapshot(membersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
+    listenForAllAgents: (admin: User, cb: (a: Agent[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Agent))), err),
+    listenForPendingMembers: (admin: User, cb: (m: Member[]) => void, err?: any): Unsubscribe => onSnapshot(query(membersCollection, where('payment_status', '==', 'pending_verification')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
+    listenForReports: (admin: User, cb: (r: any[]) => void, err?: any): Unsubscribe => onSnapshot(collection(db, 'reports'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), err),
+    listenForPayoutRequests: (admin: User, cb: (r: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(payoutsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
+    listenForPendingPurchases: (cb: (p: PendingUbtPurchase[]) => void, err?: any): Unsubscribe => onSnapshot(query(pendingPurchasesCollection, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), err),
+    listenForUserVentures: (uid: string, cb: (v: any[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('ownerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), err),
+    listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(query(payoutsCollection, where('userId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
+    listenForReferredUsers: (uid: string, cb: (u: PublicUserProfile[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('referrerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile))), err),
+    listenForProposals: (cb: (p: Proposal[]) => void, err?: any): Unsubscribe => onSnapshot(query(proposalsCollection, orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Proposal))), err),
+    listenToResources: (circle: string, cb: (r: CitizenResource[]) => void): Unsubscribe => onSnapshot(circle === 'ANY' ? resourcesCollection : query(resourcesCollection, where('circle', '==', circle)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource)))),
+    listenToTribunals: (cb: (d: Dispute[]) => void): Unsubscribe => onSnapshot(query(disputesCollection, where('status', '==', 'TRIBUNAL')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Dispute)))),
+
+    listenForVentures: (admin: User, cb: (v: Venture[]) => void, err?: any): Unsubscribe => onSnapshot(collection(db, 'ventures'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err),
     
-    listenForActivity: (circle: string, cb: (a: Activity[]) => void, err?: any): Unsubscribe => {
-        // Guard against undefined circle
-        if (!circle) {
-            console.warn("Activity listener aborted: No circle ID provided.");
-            return () => {};
-        }
-        return onSnapshot(query(activityCollection, where('causerCircle', '==', circle), orderBy('timestamp', 'desc'), limit(10)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), (error) => { if(err) err(error); else console.warn("Activity stream restricted:", error.message); });
-    },
-    
-    listenForAllUsers: (admin: User, cb: (u: User[]) => void, err?: any): Unsubscribe => onSnapshot(usersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), (error) => { if(err) err(error); else console.warn("User list restricted:", error.message); }),
-    listenForAllMembers: (admin: User, cb: (m: Member[]) => void, err?: any): Unsubscribe => onSnapshot(membersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), (error) => { if(err) err(error); else console.warn("Member list restricted:", error.message); }),
-    listenForAllAgents: (admin: User, cb: (a: Agent[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Agent))), (error) => { if(err) err(error); else console.warn("Agent list restricted:", error.message); }),
-    listenForPendingMembers: (admin: User, cb: (m: Member[]) => void, err?: any): Unsubscribe => onSnapshot(query(membersCollection, where('payment_status', '==', 'pending_verification')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), (error) => { if(err) err(error); else console.warn("Queue restricted:", error.message); }),
-    listenForReports: (admin: User, cb: (r: any[]) => void, err?: any): Unsubscribe => onSnapshot(collection(db, 'reports'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), (error) => { if(err) err(error); else console.warn("Report stream restricted:", error.message); }),
-    listenForPayoutRequests: (admin: User, cb: (r: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(payoutsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), (error) => { if(err) err(error); else console.warn("Payout stream restricted:", error.message); }),
-    listenForPendingPurchases: (cb: (p: PendingUbtPurchase[]) => void, err?: any): Unsubscribe => onSnapshot(query(pendingPurchasesCollection, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), (error) => { if(err) err(error); else console.warn("Bridge stream restricted:", error.message); }),
-    listenForUserVentures: (uid: string, cb: (v: any[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('ownerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), (error) => { if(err) err(error); else console.warn("Venture stream restricted:", error.message); }),
-    listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(query(payoutsCollection, where('userId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), (error) => { if(err) err(error); else console.warn("User payout restricted:", error.message); }),
-    listenForReferredUsers: (uid: string, cb: (u: PublicUserProfile[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('referrerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile))), (error) => { if(err) err(error); else console.warn("Referral stream restricted:", error.message); }),
-    listenForProposals: (cb: (p: Proposal[]) => void, err?: any): Unsubscribe => onSnapshot(query(proposalsCollection, orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Proposal))), (error) => { if(err) err(error); else console.warn("Proposal stream restricted:", error.message); }),
-    listenToResources: (circle: string, cb: (r: CitizenResource[]) => void): Unsubscribe => {
-        const q = circle === 'ANY' ? resourcesCollection : query(resourcesCollection, where('circle', '==', circle));
-        return onSnapshot(q, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource))), (error) => console.warn("Resource stream restricted:", error.message));
-    },
-    listenToTribunals: (cb: (d: Dispute[]) => void): Unsubscribe => onSnapshot(query(disputesCollection, where('status', '==', 'TRIBUNAL')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Dispute))), (error) => console.warn("Tribunal stream restricted:", error.message)),
+    listenForCVP: (admin: User, cb: (c: CommunityValuePool | null) => void, err?: any): Unsubscribe => onSnapshot(doc(globalsCollection, 'cvp'), s => cb(s.exists() ? { id: s.id, ...s.data() } as CommunityValuePool : null), err),
 
-    listenForVentures: (admin: User, cb: (v: Venture[]) => void, err?: any): Unsubscribe => onSnapshot(collection(db, 'ventures'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), (error) => { if(err) err(error); else console.warn("Venture list restricted:", error.message); }),
-    
-    listenForCVP: (admin: User, cb: (c: CommunityValuePool | null) => void, err?: any): Unsubscribe => onSnapshot(doc(globalsCollection, 'cvp'), s => cb(s.exists() ? { id: s.id, ...s.data() } as CommunityValuePool : null), (error) => { if(err) err(error); else console.warn("CVP sync restricted:", error.message); }),
+    listenForFundraisingVentures: (cb: (v: Venture[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('status', '==', 'fundraising')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err),
 
-    listenForFundraisingVentures: (cb: (v: Venture[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('status', '==', 'fundraising')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), (error) => { if(err) err(error); else console.warn("Fundraising stream restricted:", error.message); }),
+    listenForPostsByAuthor: (authorId: string, cb: (posts: Post[]) => void, err?: any): Unsubscribe => onSnapshot(query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), err),
 
-    listenForPostsByAuthor: (authorId: string, cb: (posts: Post[]) => void, err?: any): Unsubscribe => onSnapshot(query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), (error) => { if(err) err(error); else console.warn("Author posts restricted:", error.message); }),
-
-    listenForComments: (parentId: string, cb: (comments: Comment[]) => void, coll: 'posts' | 'proposals', err?: any): Unsubscribe => onSnapshot(query(collection(db, coll, parentId, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), (error) => { if(err) err(error); else console.warn("Comment stream restricted:", error.message); }),
+    listenForComments: (parentId: string, cb: (comments: Comment[]) => void, coll: 'posts' | 'proposals', err?: any): Unsubscribe => onSnapshot(query(collection(db, coll, parentId, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), err),
 
     initializeTreasury: async (admin: Admin) => {
         const batch = writeBatch(db);
@@ -321,7 +347,7 @@ export const api = {
     },
     fetchRegularPosts: async (count: number, filter: string, isAdmin: boolean, startAfterDoc?: DocumentSnapshot<DocumentData>, currentUser?: User) => {
         let q;
-        if (filter === 'all') q = query(postsCollection, orderBy('date', 'desc'), limit(count));
+        if (filter === 'all' || filter === 'foryou') q = query(postsCollection, orderBy('date', 'desc'), limit(count));
         else if (filter === 'following' && currentUser?.following && currentUser.following.length > 0) q = query(postsCollection, where('authorId', 'in', currentUser.following), orderBy('date', 'desc'), limit(count));
         else q = query(postsCollection, where('types', '==', filter), orderBy('date', 'desc'), limit(count));
         if (startAfterDoc) q = query(q, startAfter(startAfterDoc));
@@ -572,7 +598,7 @@ export const api = {
     },
 
     getAllSustenanceVouchers: async (): Promise<SustenanceVoucher[]> => {
-        const snap = await getDocs(vouchersCollection);
+        const snap = await getDocs(collection(db, 'vouchers'));
         return snap.docs.map(d => ({ id: d.id, ...d.data() } as SustenanceVoucher));
     },
 
