@@ -95,9 +95,9 @@ export const PinVaultLogin: React.FC<PinVaultLoginProps> = ({ onUnlock, onReset 
                                 disabled={status === 'unlocking' || status === 'success'}
                                 onChange={(e) => handleInput(e.target.value, i)}
                                 onKeyDown={(e) => handleKeyDown(e, i)}
-                                className={`w-full aspect-[4/5] bg-black border-[3px] rounded-2xl text-center text-5xl font-black transition-all outline-none
-                                    ${status === 'error' ? 'border-red-500 bg-red-950/40 text-red-500' : digit ? 'border-brand-gold ring-4 ring-brand-gold/10 text-brand-gold shadow-glow-gold' : 'border-white/10 text-white'}
-                                    ${status === 'success' ? 'border-emerald-500 bg-emerald-950/40 shadow-glow-matrix text-emerald-500' : ''}
+                                className={`w-full aspect-[4/5] bg-white border-[3px] rounded-2xl text-center text-5xl font-black text-black transition-all outline-none
+                                    ${status === 'error' ? 'border-red-500 bg-red-50' : digit ? 'border-brand-gold ring-4 ring-brand-gold/20' : 'border-white/10 shadow-inner'}
+                                    ${status === 'success' ? 'border-emerald-500 bg-emerald-50' : ''}
                                 `}
                             />
                         </div>

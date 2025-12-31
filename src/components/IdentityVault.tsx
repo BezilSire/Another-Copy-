@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { cryptoService } from '../services/cryptoService';
 import { useToast } from '../contexts/ToastContext';
@@ -146,11 +147,13 @@ export const IdentityVault: React.FC<{ onRestore: () => void }> = ({ onRestore }
                 <div className="space-y-4">
                     <label className="label-caps text-center !text-[10px] !text-gray-500">Verify PIN to Manage Access</label>
                         <input 
-                        type="password" 
+                        type="text" 
+                        inputMode="numeric"
+                        maxLength={6}
                         placeholder="ENTER 6-DIGIT PIN" 
                         value={password}
-                        onChange={e => setPassword(e.target.value)}
-                        className="w-full bg-black border border-white/10 rounded-2xl p-6 text-brand-gold text-center font-mono text-3xl tracking-[0.5em] focus:ring-2 focus:ring-brand-gold/30 outline-none"
+                        onChange={e => setPassword(e.target.value.replace(/\D/g, ''))}
+                        className="w-full bg-white border border-white/10 rounded-2xl p-6 text-black text-center font-mono text-3xl tracking-[0.5em] focus:ring-4 focus:ring-brand-gold/30 outline-none transition-all"
                     />
                 </div>
                 

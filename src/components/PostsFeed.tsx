@@ -142,7 +142,7 @@ const CommentSection: React.FC<{ parentId: string, currentUser: User }> = ({ par
 
 const ActionButton: React.FC<{ icon: React.ReactNode; count?: number; onClick: () => void; isActive?: boolean; activeColor?: string; label?: string; }> = 
 ({ icon, count, onClick, isActive, activeColor = 'text-green-400', label }) => (
-    <button onClick={onClick} className={`flex-1 flex items-center justify-center space-x-3 py-3 rounded-2xl transition-all duration-300 cursor-pointer ${isActive ? `${activeColor} bg-white/5 shadow-inner` : 'hover:bg-white/5 text-gray-500 hover:text-white'}`}>
+    <button onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClick(); }} className={`flex-1 flex items-center justify-center space-x-3 py-3 rounded-2xl transition-all duration-300 cursor-pointer ${isActive ? `${activeColor} bg-white/5 shadow-inner` : 'hover:bg-white/5 text-gray-500 hover:text-white'}`}>
         {icon}
         {count !== undefined && count > 0 && <span className="text-[11px] font-black font-mono">{count}</span>}
         {label && <span className="hidden sm:inline text-[9px] font-black uppercase tracking-widest">{label}</span>}
@@ -324,23 +324,53 @@ export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, autho
     }, [authorId]);
 
     const handleUpvote = useCallback(async (postId: string) => {
+        // Optimistic UI Protocol
+        setPosts(prev => prev.map(p => {
+            if (p.id === postId) {
+                const alreadyUpvoted = p.upvotes.includes(user.id);
+                return {
+                    ...p,
+                    upvotes: alreadyUpvoted 
+                        ? p.upvotes.filter(id => id !== user.id) 
+                        : [...p.upvotes, user.id]
+                };
+            }
+            return p;
+        }));
+
         try {
             await api.upvotePost(postId, user.id);
-            setPosts(prev => prev.map(p => p.id === postId ? { ...p, upvotes: p.upvotes.includes(user.id) ? p.upvotes.filter(id => id !== user.id) : [...p.upvotes, user.id] } : p));
-        } catch (error) { addToast('Protocol signature failed.', 'error'); }
+        } catch (error) {
+            // Revert state on sync failure
+            addToast('Ledger sync failed. Reverting state.', 'error');
+            setPosts(prev => prev.map(p => {
+                if (p.id === postId) {
+                    const alreadyUpvoted = p.upvotes.includes(user.id);
+                    return {
+                        ...p,
+                        upvotes: alreadyUpvoted 
+                            ? p.upvotes.filter(id => id !== user.id) 
+                            : [...p.upvotes, user.id]
+                    };
+                }
+                return p;
+            }));
+        }
     }, [user.id, addToast]);
 
     const handleShare = (post: Post) => {
-        const link = `${window.location.origin}/post/${post.id}`;
+        const text = `Check out this protocol dispatch from ${post.authorName} on the Ubuntium Global Commons: "${post.content.replace(/<[^>]*>/g, '').substring(0, 100)}..."`;
+        const url = window.location.origin;
+
         if (navigator.share) {
             navigator.share({
                 title: 'Ubuntium Protocol Dispatch',
-                text: `${post.authorName}'s dispatch on the Global Commons: ${post.content.substring(0, 100)}...`,
-                url: link
+                text,
+                url
             }).catch(() => {});
         } else {
-            navigator.clipboard.writeText(link);
-            addToast("Link copied to node buffer.", "info");
+            navigator.clipboard.writeText(`${text} ${url}`);
+            addToast("Handshake link copied to node buffer.", "info");
         }
     };
 

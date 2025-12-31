@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import * as QRCodeLib from 'qrcode';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
@@ -9,8 +10,8 @@ import { LoaderIcon } from './icons/LoaderIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
 import { QrCodeIcon } from './icons/QrCodeIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
-import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
+import { CameraIcon } from './icons/CameraIcon';
 
 const QRCode = (QRCodeLib as any).default || QRCodeLib;
 
@@ -31,6 +32,7 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
     const [sendAmount, setSendAmount] = useState('');
     const [showConfirmation, setShowConfirmation] = useState(false);
     const [cameraReady, setCameraReady] = useState(false);
+    const [cameraError, setCameraError] = useState(false);
     const [facingMode, setFacingMode] = useState<'user' | 'environment'>('environment');
     const { addToast } = useToast();
     
@@ -53,34 +55,36 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
         }
     }, [mode, currentUser]);
 
+    const startCamera = async () => {
+        setCameraError(false);
+        try {
+            if (html5QrCodeRef.current?.isScanning) {
+                await html5QrCodeRef.current.stop();
+            }
+
+            const html5QrCode = new Html5Qrcode("reader", {
+                formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+                verbose: false
+            });
+            html5QrCodeRef.current = html5QrCode;
+
+            await html5QrCode.start(
+                { facingMode: facingMode },
+                { fps: 20, qrbox: { width: 250, height: 250 } },
+                onScanSuccess,
+                () => {}
+            );
+            setCameraReady(true);
+        } catch (err) {
+            console.error("Camera init failed:", err);
+            setCameraError(true);
+        }
+    };
+
     useEffect(() => {
         if (mode === 'scan_code' && !scannedData) {
-            const startCamera = async () => {
-                try {
-                    const html5QrCode = new Html5Qrcode("reader", {
-                        formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
-                        verbose: false
-                    });
-                    html5QrCodeRef.current = html5QrCode;
-
-                    await html5QrCode.start(
-                        { facingMode: facingMode },
-                        { fps: 20, qrbox: { width: 250, height: 250 } },
-                        onScanSuccess,
-                        () => {}
-                    );
-                    setCameraReady(true);
-                } catch (err) {
-                    console.error("Camera init failed:", err);
-                    addToast("Camera access denied.", "error");
-                }
-            };
-
-            const timer = setTimeout(startCamera, 300);
-            return () => {
-                clearTimeout(timer);
-                stopCamera();
-            };
+            startCamera();
+            return () => stopCamera();
         } else {
             stopCamera();
         }
@@ -227,14 +231,27 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
                             <div className="relative w-full aspect-square rounded-[3rem] overflow-hidden border border-brand-gold/20 bg-black shadow-2xl">
                                 <div id="reader" className="w-full h-full"></div>
                                 
-                                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
-                                    <div className="w-64 h-64 border-2 border-brand-gold/40 rounded-[2rem] relative overflow-hidden">
-                                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-brand-gold shadow-[0_0_15px_#D4AF37] animate-scan-move"></div>
+                                {cameraError ? (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center bg-slate-900 p-8 text-center z-30">
+                                        <CameraIcon className="h-12 w-12 text-red-500 mb-4" />
+                                        <p className="text-white font-bold mb-6">Camera Access Blocked</p>
+                                        <button 
+                                            onClick={startCamera}
+                                            className="px-8 py-3 bg-brand-gold text-slate-950 font-black rounded-xl text-[10px] uppercase tracking-widest shadow-glow-gold active:scale-95"
+                                        >
+                                            Connect Lens Node
+                                        </button>
                                     </div>
-                                    <p className="text-[10px] font-black text-brand-gold uppercase tracking-[0.5em] mt-10 animate-pulse">
-                                        {cameraReady ? 'Targeting Node...' : 'Initializing Lens...'}
-                                    </p>
-                                </div>
+                                ) : (
+                                    <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none z-10">
+                                        <div className="w-64 h-64 border-2 border-brand-gold/40 rounded-[2rem] relative overflow-hidden">
+                                            <div className="absolute top-0 left-0 right-0 h-0.5 bg-brand-gold shadow-[0_0_15px_#D4AF37] animate-scan-move"></div>
+                                        </div>
+                                        <p className="text-[10px] font-black text-brand-gold uppercase tracking-[0.5em] mt-10 animate-pulse">
+                                            {cameraReady ? 'Targeting Node...' : 'Initializing Lens...'}
+                                        </p>
+                                    </div>
+                                )}
                                 
                                 {cameraReady && (
                                     <button 
@@ -304,15 +321,6 @@ export const UBTScan: React.FC<UBTScanProps> = ({ currentUser, onTransactionComp
                     </div>
                 )}
             </div>
-            <style>{`
-                @keyframes scan-move {
-                    0% { transform: translateY(0); }
-                    100% { transform: translateY(256px); }
-                }
-                .animate-scan-move {
-                    animation: scan-move 2s linear infinite;
-                }
-            `}</style>
         </div>
     );
 };

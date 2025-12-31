@@ -298,7 +298,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                             value={pin}
                             onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
                             placeholder="SET SECURITY PIN"
-                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-3xl font-black tracking-[0.5em] focus:border-brand-gold outline-none"
+                            className="w-full bg-white border-2 border-white/10 rounded-2xl p-6 text-black text-center text-3xl font-black tracking-[0.5em] focus:ring-4 focus:ring-brand-gold/30 transition-all outline-none"
                         />
                         <input 
                             type="text"
@@ -307,7 +307,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                             value={confirmPin}
                             onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
                             placeholder="CONFIRM PIN"
-                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-3xl font-black tracking-[0.5em] focus:border-brand-gold outline-none"
+                            className="w-full bg-white border-2 border-white/10 rounded-2xl p-6 text-black text-center text-3xl font-black tracking-[0.5em] focus:ring-4 focus:ring-brand-gold/30 transition-all outline-none"
                         />
                     </div>
                     

@@ -133,7 +133,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                             maxLength={6}
                             value={pin}
                             onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
-                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-4xl font-black tracking-[0.5em] focus:border-brand-gold outline-none transition-all"
+                            className="w-full bg-white border-2 border-white/10 rounded-2xl p-6 text-black text-center text-4xl font-black tracking-[0.5em] focus:ring-4 focus:ring-brand-gold/30 outline-none transition-all"
                             placeholder="••••••"
                         />
                         <input 
@@ -142,7 +142,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                             maxLength={6}
                             value={confirmPin}
                             onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
-                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-4xl font-black tracking-[0.5em] focus:border-brand-gold outline-none transition-all"
+                            className="w-full bg-white border-2 border-white/10 rounded-2xl p-6 text-black text-center text-4xl font-black tracking-[0.5em] focus:ring-4 focus:ring-brand-gold/30 outline-none transition-all"
                             placeholder="CONFIRM"
                             onKeyDown={(e) => e.key === 'Enter' && pin.length === 6 && handleNextStep()}
                         />
