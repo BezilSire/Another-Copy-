@@ -1,4 +1,4 @@
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
 
@@ -15,8 +15,7 @@ interface State {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-/* Fix: Import Component directly and extend it to ensure correct type inheritance for setState and props */
-export class ErrorBoundary extends Component<Props, State> {
+export class ErrorBoundary extends React.Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,
@@ -31,9 +30,9 @@ export class ErrorBoundary extends Component<Props, State> {
     return { hasError: true, error, errorInfo: null };
   }
 
+  // Fix: Inherit from React.Component and ensure setState is available for error state updates
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error);
-    /* Fix: setState is now correctly typed after extending Component */
     this.setState({ 
       hasError: true,
       error, 
@@ -76,7 +75,7 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    /* Fix: this.props is now accessible after extending Component */
+    // Fix: Inherit from React.Component to allow access to this.props.children
     return this.props.children;
   }
 }
