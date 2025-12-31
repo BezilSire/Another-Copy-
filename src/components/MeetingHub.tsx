@@ -136,6 +136,7 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ user }) => {
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                {/* HOST PANEL */}
                 <div className="module-frame glass-module p-10 rounded-[3rem] border-white/5 hover:border-brand-gold/30 transition-all shadow-xl space-y-8">
                     <div className="space-y-6">
                         <div className="p-4 bg-brand-gold/10 rounded-2xl w-fit border border-brand-gold/20">
@@ -161,6 +162,7 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ user }) => {
                     </div>
                 </div>
 
+                {/* JOIN PANEL */}
                 <div className="module-frame glass-module p-10 rounded-[3rem] border-white/5 hover:border-blue-500/30 transition-all shadow-xl space-y-8">
                     <form onSubmit={(e) => { e.preventDefault(); handleJoin(meetingIdInput); }} className="space-y-8">
                         <div className="space-y-6">
@@ -178,6 +180,7 @@ export const MeetingHub: React.FC<MeetingHubProps> = ({ user }) => {
                 </div>
             </div>
 
+            {/* PERSISTENT NODE LIST */}
             {hostedMeetings.length > 0 && (
                 <div className="space-y-6 animate-fade-in pt-10">
                     <h2 className="label-caps !text-[11px] text-gray-400 pl-4">Active Persistent Nodes</h2>

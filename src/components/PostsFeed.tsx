@@ -17,7 +17,6 @@ import { LoaderIcon } from './icons/LoaderIcon';
 import { MarkdownRenderer } from './MarkdownRenderer';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { LogoIcon } from './icons/LogoIcon';
-// Added missing AlertTriangleIcon import
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { SirenIcon } from './icons/SirenIcon';
 import { PinIcon } from './icons/PinIcon';
