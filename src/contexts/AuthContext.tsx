@@ -1,3 +1,4 @@
+
 import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, useRef } from 'react';
 import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInAnonymously, sendEmailVerification, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
@@ -38,10 +39,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isSovereignLocked, setIsSovereignLocked] = useState(false);
   
   const { addToast } = useToast();
-  const syncTimeoutRef = useRef<any>(null);
 
-  // RULE OF LAW: Non-Blocking Identity Pulse
-  const syncIdentity = useCallback(async (uid: string) => {
+  const syncIdentity = useCallback(async (uid: string, email: string | null) => {
     try {
         const userDocRef = doc(db, 'users', uid);
         const userDoc = await getDoc(userDocRef);
@@ -50,35 +49,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
             setCurrentUser(userData);
             
-            // Mirror vault locally if cloud holds the anchor
             const serverVault = (userData as any).encryptedVault;
             if (serverVault && !cryptoService.hasVault()) {
                 cryptoService.injectVault(serverVault);
             }
             
-            const hasLocalVault = cryptoService.hasVault();
             const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
-            setIsSovereignLocked(hasLocalVault && !isUnlocked);
-            return true;
+            setIsSovereignLocked(cryptoService.hasVault() && !isUnlocked);
         } else {
-            // Self-Heal: Check members registry if user doc is missing
-            const memberQuery = query(collection(db, 'members'), where('uid', '==', uid), limit(1));
-            const memberSnap = await getDocs(memberQuery);
-            if (!memberSnap.empty) {
-                // Member exists but user doc is missing - could be a sync latency
-                return false;
-            }
+            setCurrentUser({
+                id: uid,
+                name: email?.split('@')[0] || 'Citizen',
+                email: email || '',
+                role: 'member',
+                status: 'active',
+                circle: 'GLOBAL',
+                isProfileComplete: false,
+                hasCompletedInduction: true,
+                createdAt: Timestamp.now(),
+                lastSeen: Timestamp.now()
+            } as any);
         }
-        return false;
     } catch (e) {
-        return false;
+        console.error("Identity sync error:", e);
+    } finally {
+        setIsLoadingAuth(false);
     }
   }, []);
 
   const refreshIdentity = async () => {
     if (firebaseUser) {
         setIsProcessingAuth(true);
-        await syncIdentity(firebaseUser.uid);
+        await syncIdentity(firebaseUser.uid, firebaseUser.email);
         setIsProcessingAuth(false);
     }
   };
@@ -90,7 +92,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
       if (userDocListener) userDocListener();
-      if (syncTimeoutRef.current) clearTimeout(syncTimeoutRef.current);
 
       if (user) {
         if (user.isAnonymous) {
@@ -100,8 +101,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return;
         }
 
-        // Silent Heartbeat Sync
         const userDocRef = doc(db, 'users', user.uid);
+        syncIdentity(user.uid, user.email);
+
         userDocListener = onSnapshot(userDocRef, (userDoc) => {
           if (userDoc.exists()) {
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
@@ -112,16 +114,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 cryptoService.injectVault(serverVault);
             }
 
-            const hasLocalVault = cryptoService.hasVault();
             const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
-            setIsSovereignLocked(hasLocalVault && !isUnlocked);
-            
-            setIsLoadingAuth(false);
-            setIsProcessingAuth(false);
-          } else {
-             // Resilience Pulse
-             syncIdentity(user.uid);
+            setIsSovereignLocked(cryptoService.hasVault() && !isUnlocked);
           }
+          setIsLoadingAuth(false);
+          setIsProcessingAuth(false);
         });
         
         api.setupPresence(user.uid);
@@ -166,13 +163,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           sessionStorage.setItem('ugc_temp_pin', pin);
           sessionStorage.setItem('ugc_node_unlocked', 'true');
           setIsSovereignLocked(false);
+          
+          if (firebaseUser) await syncIdentity(firebaseUser.uid, firebaseUser.email);
+          
           setIsProcessingAuth(false);
           addToast("Identity Verified.", "success");
       } catch (err) {
           setIsProcessingAuth(false);
           addToast("Verification failed.", "error");
       }
-  }, [addToast]);
+  }, [addToast, firebaseUser, syncIdentity]);
 
   const logout = useCallback(async () => {
     if (currentUser) api.goOffline(currentUser.id);
@@ -292,6 +292,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (!isCompletingProfile) addToast('Identity updated.', 'success');
     } catch (error: any) {
         addToast('Update failed.', 'error');
+        // Fix: Re-throw the error so UI components know the operation didn't complete
+        throw error;
     }
   }, [currentUser, addToast]);
 

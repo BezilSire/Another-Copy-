@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -36,7 +37,7 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 };
 
 const App: React.FC = () => {
-  const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser, isSovereignLocked, refreshIdentity } = useAuth();
+  const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser } = useAuth();
   const [isBooting, setIsBooting] = useState(true);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
@@ -45,6 +46,14 @@ const App: React.FC = () => {
   const [isRadarOpen, setIsRadarOpen] = useState(false);
   const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
   const [forceView, setForceView] = useState<string | null>(null);
+  
+  // Rule: Use sessionStorage to make the skip persistent across refreshes in a session
+  const [hasSkippedProfile, setHasSkippedProfile] = useState(() => sessionStorage.getItem('ugc_skip_anchor') === 'true');
+
+  const handleSkipProfile = () => {
+      sessionStorage.setItem('ugc_skip_anchor', 'true');
+      setHasSkippedProfile(true);
+  };
 
   useEffect(() => {
       const params = new URLSearchParams(window.location.search);
@@ -59,7 +68,12 @@ const App: React.FC = () => {
     }
   }, [currentUser, firebaseUser]);
 
-  const confirmLogout = async () => { await logout(); setIsLogoutConfirmOpen(false); window.location.reload(); };
+  const confirmLogout = async () => { 
+      sessionStorage.removeItem('ugc_skip_anchor');
+      await logout(); 
+      setIsLogoutConfirmOpen(false); 
+      window.location.reload(); 
+  };
   const handleOpenChat = () => setChatTarget('main');
   const handleOpenMeet = () => setForceView('meeting');
   const handleOpenVote = () => setForceView('governance');
@@ -68,31 +82,46 @@ const App: React.FC = () => {
   const renderMainContent = () => {
     if (isBooting) return null;
     
-    // 1. Handle Guest/Anonymous sessions
     if (firebaseUser?.isAnonymous) {
         if (activeMeetingId && currentUser) return <VideoMeeting user={currentUser} meetingId={activeMeetingId} isHost={false} onEnd={confirmLogout} />;
         return <GuestMeetingPage meetingId={activeMeetingId || ''} />;
     }
 
-    // 2. Handle Meeting redirections for unauth users
     if (activeMeetingId && !firebaseUser && !isLoadingAuth) return <GuestMeetingPage meetingId={activeMeetingId} />;
     
-    // 3. SOVEREIGN OPEN ACCESS: If we have a user, go to dashboard. 
-    // Secure elements (PIN/Anchor) are now handled INLINE, not as a blockade.
-    if (currentUser) {
-        if (activeMeetingId) return <VideoMeeting user={currentUser} meetingId={activeMeetingId} isHost={false} onEnd={() => { setActiveMeetingId(null); window.history.pushState({}, '', window.location.pathname); }} />;
-        if (chatTarget) return <ChatsPage user={currentUser} initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null} onClose={() => setChatTarget(null)} onViewProfile={handleViewProfile} onNewMessageClick={() => {}} onNewGroupClick={() => {}} />;
-        if (viewingProfileId) return <div className="main-container py-10"><PublicProfile userId={viewingProfileId} currentUser={currentUser} onBack={() => setViewingProfileId(null)} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(currentUser, target); setViewingProfileId(null); setChatTarget(convo); } }} onViewProfile={(id) => setViewingProfileId(id)} isAdminView={currentUser.role === 'admin'} /></div>;
+    if (currentUser || firebaseUser) {
+        const userToRender = currentUser || ({ 
+            id: firebaseUser?.uid, 
+            name: firebaseUser?.email?.split('@')[0] || 'Citizen', 
+            role: 'member', 
+            status: 'active',
+            circle: 'GLOBAL',
+            isProfileComplete: false
+        } as any);
+
+        if (activeMeetingId) return <VideoMeeting user={userToRender} meetingId={activeMeetingId} isHost={false} onEnd={() => { setActiveMeetingId(null); window.history.pushState({}, '', window.location.pathname); }} />;
+        if (chatTarget) return <ChatsPage user={userToRender} initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null} onClose={() => setChatTarget(null)} onViewProfile={handleViewProfile} onNewMessageClick={() => {}} onNewGroupClick={() => {}} />;
+        if (viewingProfileId) return <div className="main-container py-10"><PublicProfile userId={viewingProfileId} currentUser={userToRender} onBack={() => setViewingProfileId(null)} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(userToRender, target); setViewingProfileId(null); setChatTarget(convo); } }} onViewProfile={(id) => setViewingProfileId(id)} isAdminView={userToRender.role === 'admin'} /></div>;
         
-        if (!currentUser.isProfileComplete) return <div className="main-container py-12"><CompleteProfilePage user={currentUser} onProfileComplete={async (data) => { await updateUser(data); }} /></div>;
+        // Identity Anchor Block: Allow bypass if skipped
+        if (!userToRender.isProfileComplete && !firebaseUser?.isAnonymous && !hasSkippedProfile) {
+            return (
+                <div className="main-container py-12">
+                    <CompleteProfilePage 
+                        user={userToRender} 
+                        onProfileComplete={async (data) => { await updateUser(data); }} 
+                        onCancel={handleSkipProfile}
+                    />
+                </div>
+            );
+        }
         
-        if (currentUser.role === 'admin') return <AdminDashboard user={currentUser as Admin} onUpdateUser={updateUser} unreadCount={unreadNotificationCount} onOpenChat={handleOpenChat} onViewProfile={handleViewProfile} />;
-        if (currentUser.role === 'agent') return <AgentDashboard user={currentUser as Agent} broadcasts={[]} onUpdateUser={updateUser} activeView="dashboard" setActiveView={() => {}} onViewProfile={handleViewProfile} />;
-        return <MemberDashboard user={currentUser as MemberUser} onUpdateUser={updateUser} unreadCount={unreadNotificationCount} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={handleViewProfile} forcedView={forceView} clearForcedView={() => setForceView(null)} />;
+        if (userToRender.role === 'admin') return <AdminDashboard user={userToRender as Admin} onUpdateUser={updateUser} unreadCount={unreadNotificationCount} onOpenChat={handleOpenChat} onViewProfile={handleViewProfile} />;
+        if (userToRender.role === 'agent') return <AgentDashboard user={userToRender as Agent} broadcasts={[]} onUpdateUser={updateUser} activeView="dashboard" setActiveView={() => {}} onViewProfile={handleViewProfile} />;
+        return <MemberDashboard user={userToRender as MemberUser} onUpdateUser={updateUser} unreadCount={unreadNotificationCount} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={handleViewProfile} forcedView={forceView} clearForcedView={() => setForceView(null)} />;
     }
     
-    // 4. Background Syncing: If firebase is logged in but doc hasn't arrived, show a subtle sync HUD
-    if (isLoadingAuth || isProcessingAuth || firebaseUser) {
+    if (isLoadingAuth || isProcessingAuth) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-black p-10 text-center animate-fade-in">
                 <div className="relative mb-8">
@@ -102,7 +131,7 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 <div className="space-y-4">
-                    <div className="text-[10px] uppercase font-black tracking-[0.5em] text-white/30 font-mono italic">Synchronizing_Protocol_Data</div>
+                    <div className="text-[10px] uppercase font-black tracking-[0.5em] text-white/30 font-mono italic">Synchronizing_Protocol_State</div>
                     <div className="w-48 h-1 bg-white/5 mx-auto rounded-full overflow-hidden">
                         <div className="h-full bg-brand-gold/40 animate-scan-move"></div>
                     </div>
@@ -111,7 +140,6 @@ const App: React.FC = () => {
         );
     }
 
-    // 5. Unauthenticated State
     return <AuthPage />;
   };
 
@@ -120,9 +148,9 @@ const App: React.FC = () => {
       {isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
       {!isBooting && (
           <div className="flex-1 flex flex-col animate-fade-in">
-            {currentUser && !firebaseUser?.isAnonymous && (
+            { (currentUser || firebaseUser) && !firebaseUser?.isAnonymous && (
                 <Header 
-                    user={currentUser} 
+                    user={currentUser || { name: 'Citizen', role: 'member' } as any} 
                     onLogout={() => setIsLogoutConfirmOpen(true)} 
                     onViewProfile={handleViewProfile} 
                     onChatClick={() => handleOpenChat()} 

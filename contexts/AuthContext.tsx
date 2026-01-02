@@ -40,7 +40,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   
   const { addToast } = useToast();
 
-  const syncIdentity = useCallback(async (uid: string) => {
+  // Optimized Sync: Establish entry first, enrich data second
+  const syncIdentity = useCallback(async (uid: string, email: string | null) => {
     try {
         const userDocRef = doc(db, 'users', uid);
         const userDoc = await getDoc(userDocRef);
@@ -56,11 +57,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             
             const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
             setIsSovereignLocked(cryptoService.hasVault() && !isUnlocked);
-            return true;
+        } else {
+            // Optimistic Provisioning: If doc doesn't exist yet, provide a skeletal user to prevent loops
+            setCurrentUser({
+                id: uid,
+                name: email?.split('@')[0] || 'Citizen',
+                email: email || '',
+                role: 'member',
+                status: 'active',
+                circle: 'GLOBAL',
+                isProfileComplete: false,
+                hasCompletedInduction: true,
+                createdAt: Timestamp.now(),
+                lastSeen: Timestamp.now()
+            } as any);
         }
-        return false;
     } catch (e) {
-        return false;
+        console.error("Identity sync error:", e);
     } finally {
         setIsLoadingAuth(false);
     }
@@ -69,7 +82,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const refreshIdentity = async () => {
     if (firebaseUser) {
         setIsProcessingAuth(true);
-        await syncIdentity(firebaseUser.uid);
+        await syncIdentity(firebaseUser.uid, firebaseUser.email);
         setIsProcessingAuth(false);
     }
   };
@@ -83,6 +96,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       if (userDocListener) userDocListener();
 
       if (user) {
+        // Immediate Entry Protocol
         if (user.isAnonymous) {
             const guestName = sessionStorage.getItem('ugc_guest_name') || 'Guest Citizen';
             setCurrentUser({ id: user.uid, name: guestName, role: 'member', status: 'active', circle: 'GLOBAL', isProfileComplete: true } as any);
@@ -90,7 +104,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return;
         }
 
+        // Parallel Sync: Start listener but also fetch current state immediately
         const userDocRef = doc(db, 'users', user.uid);
+        syncIdentity(user.uid, user.email);
+
         userDocListener = onSnapshot(userDocRef, (userDoc) => {
           if (userDoc.exists()) {
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
@@ -151,8 +168,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           sessionStorage.setItem('ugc_node_unlocked', 'true');
           setIsSovereignLocked(false);
           
-          // Force profile sync to ensure dashboard sees the unlocked status immediately
-          if (firebaseUser) await syncIdentity(firebaseUser.uid);
+          if (firebaseUser) await syncIdentity(firebaseUser.uid, firebaseUser.email);
           
           setIsProcessingAuth(false);
           addToast("Identity Verified.", "success");

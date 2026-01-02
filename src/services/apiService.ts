@@ -1,3 +1,4 @@
+
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -58,7 +59,6 @@ const proposalsCollection = collection(db, 'proposals');
 const payoutsCollection = collection(db, 'payouts');
 const vaultsCollection = collection(db, 'treasury_vaults');
 const ledgerCollection = collection(db, 'ledger');
-// Fix: Added missing collection references for state registry and justice modules
 const resourcesCollection = collection(db, 'resources');
 const disputesCollection = collection(db, 'disputes');
 const globalsCollection = collection(db, 'globals');
@@ -107,7 +107,8 @@ export const api = {
         if (snapshot.empty) return null;
         return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as User;
     },
-    updateUser: (uid: string, data: Partial<User>) => updateDoc(doc(db, 'users', uid), data),
+    // Fix: Using setDoc with merge: true to ensure resiliency if the document doesn't exist yet
+    updateUser: (uid: string, data: Partial<User>) => setDoc(doc(db, 'users', uid), data, { merge: true }),
     
     getUsersByUids: async (uids: string[]): Promise<User[]> => {
         if (uids.length === 0) return [];

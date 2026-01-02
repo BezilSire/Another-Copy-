@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { User } from '../types';
 import { useToast } from '../contexts/ToastContext';
@@ -56,12 +57,11 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
           circle: formData.circle,
           isProfileComplete: true
       };
-      // Logic: Wait for the identity to be anchored to the ledger
       await onProfileComplete(dataToSubmit);
       addToast('Identity anchored to mainnet.', 'success');
-    } catch (error: any) {
-      console.error("Protocol sync fail:", error);
-      // AuthContext handles specific "Update failed" toast, so we just reset local saving state
+    } catch (error) {
+      // Re-Toast here if needed, but AuthContext already handles it
+      console.error("Profile anchor fail:", error);
     } finally {
       setIsSaving(false);
     }
@@ -69,21 +69,20 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
 
   return (
     <div className="max-w-3xl mx-auto px-4 font-sans relative">
+        {onCancel && (
+            <button 
+                type="button"
+                onClick={onCancel}
+                className="absolute -top-4 -right-4 sm:top-4 sm:right-4 z-50 p-3 bg-slate-900/80 hover:bg-red-500/20 text-gray-500 hover:text-red-500 rounded-full border border-white/10 transition-all cursor-pointer shadow-xl active:scale-90"
+                title="Explore App First"
+            >
+                <XCircleIcon className="h-6 w-6" />
+            </button>
+        )}
+
         <div className="module-frame glass-module p-8 sm:p-12 rounded-[3.5rem] border-white/10 shadow-premium animate-fade-in relative overflow-hidden">
             <div className="corner-tl opacity-30"></div><div className="corner-tr opacity-30"></div>
             
-            {/* High-Visibility Bypass Action */}
-            {onCancel && (
-                <button 
-                    type="button"
-                    onClick={onCancel}
-                    className="absolute top-6 right-6 z-50 p-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl border border-red-500/20 transition-all cursor-pointer shadow-lg active:scale-90"
-                    title="Explore App First"
-                >
-                    <XCircleIcon className="h-6 w-6" />
-                </button>
-            )}
-
             <div className="text-center mb-10">
                 <div className="w-20 h-20 bg-brand-gold/10 rounded-2xl flex items-center justify-center border border-brand-gold/20 mx-auto mb-6 shadow-glow-gold">
                     <ShieldCheckIcon className="h-10 w-10 text-brand-gold" />
@@ -117,25 +116,13 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
                     <textarea name="bio" rows={4} value={formData.bio} onChange={handleChange} required className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white text-sm leading-relaxed" placeholder="Tell the community a little about your node purpose..."/>
                 </div>
 
-                <div className="flex flex-col gap-4">
-                    <button 
-                        type="submit" 
-                        disabled={isSaving || isProcessingAuth} 
-                        className={`w-full py-6 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[12px] shadow-glow-gold transition-all active:scale-95 flex items-center justify-center gap-3 cursor-pointer ${isSaving || isProcessingAuth ? 'opacity-70 grayscale cursor-not-allowed' : ''}`}
-                    >
-                        {isSaving || isProcessingAuth ? <LoaderIcon className="h-5 w-5 animate-spin" /> : "Complete Handshake"}
-                    </button>
-                    
-                    {onCancel && (
-                        <button 
-                            type="button"
-                            onClick={onCancel}
-                            className="w-full py-2 text-[10px] font-black text-gray-600 hover:text-white uppercase tracking-[0.3em] transition-colors"
-                        >
-                            Skip for now & explore
-                        </button>
-                    )}
-                </div>
+                <button 
+                    type="submit" 
+                    disabled={isSaving} 
+                    className={`w-full py-6 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[12px] shadow-glow-gold transition-all active:scale-95 flex items-center justify-center gap-3 cursor-pointer ${isSaving ? 'opacity-70 grayscale' : ''}`}
+                >
+                    {isSaving ? <LoaderIcon className="h-5 w-5 animate-spin" /> : "Complete Handshake"}
+                </button>
             </form>
         </div>
     </div>

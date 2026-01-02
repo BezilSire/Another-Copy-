@@ -1,3 +1,4 @@
+
 import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
@@ -15,9 +16,8 @@ interface State {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-// Fix: Explicitly extend React.Component to ensure internal properties like setState and props are visible to TypeScript
+// Fix: Explicitly extend React.Component to ensure setState and props are correctly inherited and typed by TypeScript
 export class ErrorBoundary extends React.Component<Props, State> {
-  // Fix: Explicitly declare and initialize state property to resolve "Property 'state' does not exist" errors
   public state: State = {
     hasError: false,
     error: null,
@@ -33,7 +33,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return { hasError: true, error, errorInfo: null };
   }
 
-  // Fix: setState is a method inherited from the React.Component base class
+  // Fix: Explicitly extending React.Component resolves the error where 'setState' was not found on the class instance
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error, errorInfo);
     this.setState({ 
@@ -48,7 +48,6 @@ export class ErrorBoundary extends React.Component<Props, State> {
   };
 
   public render() {
-    // Correctly access the state property inherited from Component
     const { hasError, error } = this.state;
 
     if (hasError) {
@@ -79,7 +78,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    // Fix: Access props correctly from the inherited React.Component base class
+    // Fix: Explicitly extending React.Component ensures 'this.props' is correctly typed and accessible
     return this.props.children;
   }
 }
