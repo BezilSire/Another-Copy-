@@ -23,10 +23,11 @@ import { RadarModal } from './components/RadarModal';
 import { MeetingHub } from './components/MeetingHub';
 import { GuestMeetingPage } from './components/GuestMeetingPage';
 import { VideoMeeting } from './components/VideoMeeting';
+import { RotateCwIcon } from './components/icons/RotateCwIcon';
 
 const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [logs, setLogs] = useState<string[]>([]);
-  const sequence = ["> BOOTING UBUNTIUM_CORE_v5.1.0...", "> INITIALIZING CRYPTO_LAYER... [ OK ]", "> CONNECTING TO GLOBAL_DAG_MAINNET...", "> RESOLVING SOVEREIGN_ID_PROVENANCE...", "> HANDSHAKE STABILIZED. NODE_ONLINE.", "> WELCOME CITIZEN."];
+  const sequence = ["> BOOTING UBUNTIUM_CORE_v5.1.0...", "> INITIALIZING CRYPTO_LAYER... [ OK ]", "> CONNECTING TO GLOBAL_DAG_MAINNET...", "> RESOLVING SOVEREIGN_ID_PROVENANCE...", "> WELCOME CITIZEN."];
   useEffect(() => {
     let i = 0;
     const interval = window.setInterval(() => { if (i < sequence.length) { setLogs(prev => [...prev, sequence[i]]); i++; } else { window.clearInterval(interval); setTimeout(onComplete, 300); } }, 70);
@@ -41,7 +42,7 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 };
 
 const App: React.FC = () => {
-  const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser, isSovereignLocked, unlockSovereignSession } = useAuth();
+  const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser, isSovereignLocked, unlockSovereignSession, refreshIdentity } = useAuth();
   const [isBooting, setIsBooting] = useState(true);
   const [isRecovering, setIsRecovering] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
@@ -75,18 +76,22 @@ const App: React.FC = () => {
   const renderMainContent = () => {
     if (isBooting) return null;
     
+    // 1. Handle Guest/Anonymous sessions
     if (firebaseUser?.isAnonymous) {
         if (activeMeetingId && currentUser) return <VideoMeeting user={currentUser} meetingId={activeMeetingId} isHost={false} onEnd={confirmLogout} />;
         return <GuestMeetingPage meetingId={activeMeetingId || ''} />;
     }
 
+    // 2. Handle Meeting redirections for unauth users
     if (activeMeetingId && !firebaseUser && !isLoadingAuth) return <GuestMeetingPage meetingId={activeMeetingId} />;
     
+    // 3. Handle Sovereign PIN Locks
     if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
         if (isRecovering) return <div className="flex-1 flex flex-col justify-center items-center px-4 min-h-screen bg-black"><RecoveryProtocol onBack={() => setIsRecovering(false)} onComplete={handleSecurityRecoveryComplete} /></div>;
         return <div className="flex-1 flex flex-col justify-center items-center px-4 min-h-screen bg-black"><PinVaultLogin onUnlock={unlockSovereignSession} onReset={() => setIsRecovering(true)} /></div>;
     }
 
+    // 4. Handle authenticated users with valid records
     if (currentUser) {
         if (activeMeetingId) return <VideoMeeting user={currentUser} meetingId={activeMeetingId} isHost={false} onEnd={() => { setActiveMeetingId(null); window.history.pushState({}, '', window.location.pathname); }} />;
         if (chatTarget) return <ChatsPage user={currentUser} initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null} onClose={() => setChatTarget(null)} onViewProfile={handleViewProfile} onNewMessageClick={() => {}} onNewGroupClick={() => {}} />;
@@ -99,9 +104,48 @@ const App: React.FC = () => {
         return <MemberDashboard user={currentUser as MemberUser} onUpdateUser={updateUser} unreadCount={unreadNotificationCount} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={handleViewProfile} forcedView={forceView} clearForcedView={() => setForceView(null)} />;
     }
     
-    if (isLoadingAuth || isProcessingAuth) return <div className="flex flex-col items-center justify-center min-h-screen bg-black p-10 text-center animate-fade-in"><div className="relative mb-8"><LoaderIcon className="h-14 w-14 animate-spin text-brand-gold opacity-40" /><div className="absolute inset-0 flex items-center justify-center"><div className="w-2.5 h-2.5 bg-brand-gold rounded-full animate-ping"></div></div></div><div className="text-[10px] uppercase font-black tracking-[0.5em] text-white/30 font-mono">Synchronizing_Node_State</div></div>;
-    if (!firebaseUser) return <AuthPage />;
-    return <div className="flex flex-col items-center justify-center min-h-screen bg-black p-6 text-center animate-fade-in"><AlertTriangleIcon className="h-12 w-12 text-brand-gold mb-6 opacity-40" /><h2 className="text-xl font-black text-white uppercase tracking-tighter mb-4">Identity Not Indexed</h2><p className="text-sm text-gray-400 max-w-xs mx-auto uppercase tracking-widest leading-loose">Session verified but citizen record missing.</p><div className="flex flex-col gap-4 mt-10 w-full max-w-xs"><button onClick={() => window.location.reload()} className="w-full py-5 bg-brand-gold text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-glow-gold">Retry Handshake</button><button onClick={confirmLogout} className="w-full py-4 bg-white/5 text-white font-black rounded-2xl text-[10px] uppercase tracking-widest border border-white/10 hover:bg-white/10 transition-all">Sign Out</button></div></div>;
+    // 5. Loading logic - Only spin if we are truly processing a known session
+    if (isLoadingAuth || isProcessingAuth) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-black p-10 text-center animate-fade-in">
+                <div className="relative mb-8">
+                    <LoaderIcon className="h-14 w-14 animate-spin text-brand-gold opacity-40" />
+                    <div className="absolute inset-0 flex items-center justify-center">
+                        <div className="w-2.5 h-2.5 bg-brand-gold rounded-full animate-ping"></div>
+                    </div>
+                </div>
+                <div className="text-[10px] uppercase font-black tracking-[0.5em] text-white/30 font-mono">Synchronizing_Node_State</div>
+            </div>
+        );
+    }
+    
+    // 6. Handle Latency Loop: Firebase is logged in but currentUser didn't populate (Missing document or sync error)
+    if (firebaseUser) {
+        return (
+            <div className="flex flex-col items-center justify-center min-h-screen bg-black p-6 text-center animate-fade-in">
+                <div className="module-frame glass-module p-10 sm:p-16 rounded-[4rem] border-red-500/20 shadow-premium max-w-md w-full relative">
+                    <AlertTriangleIcon className="h-16 w-16 text-brand-gold mx-auto mb-10 opacity-60" />
+                    <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 leading-none gold-text">Node Recovery Required</h2>
+                    <p className="text-sm text-gray-400 leading-loose uppercase font-black tracking-widest opacity-60 mb-10">
+                        Identity authenticated via cloud, but ledger synchronization is latent.
+                    </p>
+                    <div className="flex flex-col gap-4">
+                        <button 
+                            onClick={refreshIdentity} 
+                            disabled={isProcessingAuth}
+                            className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-3"
+                        >
+                            {isProcessingAuth ? <LoaderIcon className="h-4 w-4 animate-spin" /> : <><RotateCwIcon className="h-4 w-4" /> Force Re-Anchor</>}
+                        </button>
+                        <button onClick={confirmLogout} className="w-full py-4 text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-widest transition-colors">Terminate Session</button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
+
+    // 7. Base case: Guest / Login
+    return <AuthPage />;
   };
 
   return (

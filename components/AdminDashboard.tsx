@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Admin, Agent, Member, Broadcast, Report, User, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PendingUbtPurchase, MultiSigProposal } from '../types';
 import { api } from '../services/apiService';
@@ -10,7 +11,6 @@ import { Dashboard } from './Dashboard';
 import { LedgerPage } from './LedgerPage';
 import { AdminProfile } from './AdminProfile';
 import { PostsFeed } from './PostsFeed';
-import { PostTypeFilter } from './PostTypeFilter';
 import { TreasuryManager } from './TreasuryManager';
 import { LockIcon } from './icons/LockIcon';
 import { AdminDispatchTerminal } from './AdminDispatchTerminal';
@@ -44,7 +44,6 @@ export const AdminDashboard: React.FC<{
   const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
   const [pendingPurchases, setPendingPurchases] = useState<PendingUbtPurchase[]>([]);
   const [msProposals, setMsProposals] = useState<MultiSigProposal[]>([]);
-  const [typeFilter, setTypeFilter] = useState<PostFilterType>('all');
   const [isUpgrading, setIsUpgrading] = useState(false);
   const { addToast } = useToast();
 
@@ -116,7 +115,7 @@ export const AdminDashboard: React.FC<{
             return <AdminJusticeTerminal admin={user} reports={reports} />;
         case 'wallet': return <LedgerPage />;
         case 'profile': return <AdminProfile user={user} onUpdateUser={onUpdateUser} />;
-        case 'feed': return ( <> <PostTypeFilter currentFilter={typeFilter} onFilterChange={setTypeFilter} isAdminView /><PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter={typeFilter} isAdminView /></> );
+        case 'feed': return ( <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter="all" isAdminView /> );
         default: return null;
     }
   };

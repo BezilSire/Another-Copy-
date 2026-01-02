@@ -1,7 +1,7 @@
 
 import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback } from 'react';
-import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInAnonymously, sendEmailVerification } from 'firebase/auth';
-import { doc, onSnapshot, setDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp, updateDoc } from 'firebase/firestore';
+import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInAnonymously, sendEmailVerification, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { doc, onSnapshot, setDoc, getDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
 import { useToast } from './ToastContext';
 import { api } from '../services/apiService';
 import { cryptoService, VaultData } from '../services/cryptoService';
@@ -26,6 +26,7 @@ interface AuthContextType {
   sendPasswordReset: (email: string) => Promise<void>;
   updateUser: (updatedUser: Partial<User> & { isCompletingProfile?: boolean }) => Promise<void>;
   unlockSovereignSession: (data: VaultData, pin: string) => Promise<void>;
+  refreshIdentity: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -40,10 +41,49 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const { addToast } = useToast();
 
+  // SYSTEM LAW: Deep Identity Sync logic
+  const syncIdentity = useCallback(async (uid: string) => {
+    try {
+        const userDocRef = doc(db, 'users', uid);
+        const userDoc = await getDoc(userDocRef);
+        if (userDoc.exists()) {
+            const userData = { id: userDoc.id, ...userDoc.data() } as User;
+            setCurrentUser(userData);
+            
+            // Sync Vault from server if missing locally
+            const serverVault = (userData as any).encryptedVault;
+            if (serverVault && !cryptoService.hasVault()) {
+                cryptoService.injectVault(serverVault);
+            }
+            
+            const hasLocalVault = cryptoService.hasVault();
+            const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
+            setIsSovereignLocked(hasLocalVault && !isUnlocked);
+            return true;
+        }
+        return false;
+    } catch (e) {
+        console.error("Deep Sync Failed:", e);
+        return false;
+    }
+  }, []);
+
+  // Fix: Implemented refreshIdentity for AuthContext
+  const refreshIdentity = async () => {
+    if (firebaseUser) {
+        setIsProcessingAuth(true);
+        await syncIdentity(firebaseUser.uid);
+        setIsProcessingAuth(false);
+    }
+  };
+
   useEffect(() => {
+    // Force local persistence for session stability
+    setPersistence(auth, browserLocalPersistence);
+
     let userDocListener: (() => void) | undefined;
 
-    const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       setFirebaseUser(user);
 
       if (userDocListener) {
@@ -76,33 +116,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
             setCurrentUser(userData);
 
-            // SYSTEM LAW: Server Vault Sync
-            // If the account has an encrypted vault on the server but not locally, inject it.
+            // Server Vault Sync
             const serverVault = (userData as any).encryptedVault;
             if (serverVault && !cryptoService.hasVault()) {
                 cryptoService.injectVault(serverVault);
             }
 
-            // Check lock state
             const hasLocalVault = cryptoService.hasVault();
             const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
             setIsSovereignLocked(hasLocalVault && !isUnlocked);
-
+            
+            setIsLoadingAuth(false);
+            setIsProcessingAuth(false);
           } else {
-            setCurrentUser(null);
+              // Attempt one-time self-healing fetch
+              syncIdentity(user.uid).then(found => {
+                  if (!found) {
+                    setCurrentUser(null);
+                    setIsLoadingAuth(false);
+                  }
+              });
           }
-          
-          setIsLoadingAuth(false);
-          setIsProcessingAuth(false);
         }, (error) => {
           console.warn("Node synchronization restricted:", error.message);
-          setIsLoadingAuth(false);
+          // Fallback to static sync on listener error
+          syncIdentity(user.uid).finally(() => setIsLoadingAuth(false));
         });
         
         api.setupPresence(user.uid);
       } else {
         setCurrentUser(null);
         setIsLoadingAuth(false);
+        setIsProcessingAuth(false);
       }
     }, (error) => {
       console.error("Auth status sync failed:", error);
@@ -113,7 +158,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       unsubscribeAuth();
       if (userDocListener) userDocListener();
     };
-  }, []);
+  }, [syncIdentity]);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     setIsProcessingAuth(true);
@@ -292,6 +337,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     sendPasswordReset,
     updateUser,
     unlockSovereignSession,
+    refreshIdentity,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

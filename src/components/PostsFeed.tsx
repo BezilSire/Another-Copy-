@@ -53,7 +53,9 @@ const CommentItem: React.FC<{
                 <div className="bg-white/5 rounded-2xl px-5 py-3 border border-white/5 group-hover/comment:border-white/10 transition-all">
                     <div className="flex items-center justify-between mb-1">
                          <span className="font-black text-[10px] text-white uppercase tracking-tight">{comment.authorName}</span>
-                        <p className="text-[8px] text-gray-500 font-bold uppercase">{comment.timestamp ? formatTimeAgo(comment.timestamp.toDate().toISOString()) : 'sending...'}</p>
+                        <p className="text-[8px] text-gray-500 font-bold uppercase">
+                            {comment.timestamp ? formatTimeAgo(comment.timestamp.toDate().toISOString()) : 'SYNCING...'}
+                        </p>
                     </div>
                     <div className="text-sm text-gray-300 leading-relaxed break-words">
                         <MarkdownRenderer content={comment.content} />
@@ -132,7 +134,7 @@ const CommentSection: React.FC<{ parentId: string, currentUser: User }> = ({ par
                     placeholder="Contribute to the thread..."
                     className="flex-1 bg-transparent border-none py-3 text-white text-sm focus:outline-none placeholder-gray-800"
                 />
-                <button type="submit" disabled={isSubmitting || !newComment.trim()} className="p-4 rounded-2xl text-slate-950 bg-brand-gold hover:bg-brand-gold-light shadow-glow-gold disabled:opacity-20 active:scale-90 transition-all">
+                <button type="submit" disabled={isSubmitting || !newComment.trim()} className="p-4 rounded-2xl text-slate-950 bg-brand-gold hover:bg-brand-gold-light shadow-glow-gold disabled:opacity-20 active:scale-90 transition-all cursor-pointer">
                     {isSubmitting ? <LoaderIcon className="h-4 w-4 animate-spin"/> : <SendIcon className="h-4 w-4"/>}
                 </button>
             </form>
@@ -192,14 +194,14 @@ export const PostItem: React.FC<{
                     {isAuthor && (
                         <button 
                             onClick={(e) => { e.stopPropagation(); onEdit(post); }} 
-                            className="p-2.5 bg-brand-gold text-slate-950 hover:bg-white rounded-xl shadow-glow-gold transition-all" 
+                            className="p-2.5 bg-brand-gold text-slate-950 hover:bg-white rounded-xl shadow-glow-gold transition-all cursor-pointer" 
                         >
                             <PencilIcon className="h-4 w-4" />
                         </button>
                     )}
                     <button 
                         onClick={(e) => { e.stopPropagation(); onDelete(post.id); }} 
-                        className="p-2.5 bg-red-600 text-white hover:bg-red-500 rounded-xl shadow-lg transition-all" 
+                        className="p-2.5 bg-red-600 text-white hover:bg-red-500 rounded-xl shadow-lg transition-all cursor-pointer" 
                     >
                         <TrashIcon className="h-4 w-4" />
                     </button>
@@ -209,12 +211,12 @@ export const PostItem: React.FC<{
             {post.isPinned && <div className="flex items-center space-x-1 text-xs text-brand-gold mb-6 font-black uppercase tracking-widest"><PinIcon className="h-3 w-3"/><span>Pinned dispatch</span></div>}
             
             <div className="flex items-start space-x-5">
-                <button onClick={() => onViewProfile(post.authorId)} className="shrink-0 transition-transform active:scale-90">
+                <button onClick={() => onViewProfile(post.authorId)} className="shrink-0 transition-transform active:scale-90 cursor-pointer">
                      {post.authorRole === 'admin' ? <div className="w-12 h-12 bg-brand-gold/10 rounded-2xl border border-brand-gold/20 flex items-center justify-center shadow-glow-gold"><LogoIcon className="h-7 w-7 text-brand-gold" /></div> : <div className="w-12 h-12 bg-slate-950 rounded-2xl border border-white/10 flex items-center justify-center shadow-inner"><UserCircleIcon className="h-8 w-8 text-gray-700" /></div>}
                 </button>
                 <div className="flex-1 min-w-0 pt-1">
                     <div className="flex items-center gap-2 flex-wrap pr-20">
-                        <button onClick={() => onViewProfile(post.authorId)} className="font-black text-white hover:text-brand-gold uppercase tracking-tight text-sm truncate">{post.authorName}</button>
+                        <button onClick={() => onViewProfile(post.authorId)} className="font-black text-white hover:text-brand-gold uppercase tracking-tight text-sm truncate cursor-pointer">{post.authorName}</button>
                         {post.authorRole === 'admin' && <ShieldCheckIcon className="h-3.5 w-3.5 text-blue-500"/>}
                         <span className={`px-2 py-0.5 rounded-lg border text-[7px] font-black uppercase tracking-[0.2em] flex items-center gap-1 ${typeInfo.badgeClasses}`}>
                             {typeInfo.icon} {typeInfo.title}
@@ -246,7 +248,7 @@ export const PostItem: React.FC<{
                 {needsTruncation && (
                     <button 
                         onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }}
-                        className="mt-6 w-full sm:w-auto text-[9px] font-black text-brand-gold hover:text-white uppercase tracking-[0.4em] transition-all flex items-center justify-center gap-3 bg-white/5 px-6 py-3 rounded-2xl border border-white/5 hover:border-brand-gold/30 shadow-inner active:scale-95"
+                        className="mt-6 w-full sm:w-auto text-[9px] font-black text-brand-gold hover:text-white uppercase tracking-[0.4em] transition-all flex items-center justify-center gap-3 bg-white/5 px-6 py-3 rounded-2xl border border-white/5 hover:border-brand-gold/30 shadow-inner active:scale-95 cursor-pointer"
                     >
                         <span>{isExpanded ? '[ COLLAPSE_DISPATCH ]' : '[ READ_FULL_DISPATCH... ]'}</span>
                         <ArrowRightIcon className={`h-3 w-3 transition-transform duration-500 ${isExpanded ? '-rotate-90' : 'rotate-90'}`} />
@@ -266,7 +268,7 @@ export const PostItem: React.FC<{
     );
 };
 
-export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, authorId, isAdminView = false }) => {
+export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, authorId, isAdminView = false, typeFilter = 'all' }) => {
     const [posts, setPosts] = useState<Post[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -290,9 +292,10 @@ export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, autho
         }
 
         try {
+            // Fix: Respect the incoming typeFilter prop
             const { posts: newPosts, lastVisible: nextDoc } = await api.fetchRegularPosts(
                 15, 
-                'all', 
+                typeFilter, 
                 isAdminView, 
                 loadMore ? (lastVisibleRef.current || undefined) : undefined, 
                 user
@@ -306,7 +309,7 @@ export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, autho
         } finally {
             setIsLoading(false);
         }
-    }, [authorId, isAdminView, user]);
+    }, [authorId, isAdminView, user, typeFilter]);
 
     useEffect(() => { loadPosts(false); }, [loadPosts]);
 
@@ -341,7 +344,6 @@ export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, autho
         try {
             await api.upvotePost(postId, user.id);
         } catch (error) {
-            // Revert state on sync failure
             addToast('Ledger sync failed. Reverting state.', 'error');
             setPosts(prev => prev.map(p => {
                 if (p.id === postId) {
@@ -367,7 +369,10 @@ export const PostsFeed: React.FC<PostsFeedProps> = ({ user, onViewProfile, autho
                 title: 'Ubuntium Protocol Dispatch',
                 text,
                 url
-            }).catch(() => {});
+            }).catch(() => {
+                navigator.clipboard.writeText(`${text} ${url}`);
+                addToast("Handshake link copied to node buffer.", "info");
+            });
         } else {
             navigator.clipboard.writeText(`${text} ${url}`);
             addToast("Handshake link copied to node buffer.", "info");

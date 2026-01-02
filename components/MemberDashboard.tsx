@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { MemberUser, Conversation, User, MemberView } from '../types';
 import { MemberBottomNav } from './MemberBottomNav';
@@ -30,6 +31,9 @@ import { MeetingHub } from './MeetingHub';
 import { GovernancePage } from './GovernancePage';
 import { useAuth } from '../contexts/AuthContext';
 import { LockIcon } from './icons/LockIcon';
+import { IntentLab } from './IntentLab';
+import { AssemblyHub } from './AssemblyHub';
+import { RegistryHub } from './RegistryHub';
 
 interface MemberDashboardProps {
   user: MemberUser;
@@ -53,7 +57,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
   const [isNewChatModalOpen, setIsNewChatModalOpen] = useState(false);
   const [selectedChat, setSelectedChat] = useState<Conversation | null>(null);
 
-  const hasVault = cryptoService.hasVault();
+  const hasLocalVault = cryptoService.hasVault();
   const isAnonymous = firebaseUser?.isAnonymous;
 
   useEffect(() => {
@@ -70,11 +74,11 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
   };
   
   const handleUpgradeComplete = async (mnemonic: string, pin: string) => {
-    await cryptoService.saveVault({ mnemonic }, pin);
+    const encryptedVault = await cryptoService.saveVault({ mnemonic }, pin);
     const pubKey = cryptoService.getPublicKey();
-    if (pubKey) await onUpdateUser({ publicKey: pubKey });
+    if (pubKey) await onUpdateUser({ publicKey: pubKey, encryptedVault } as any);
     setIsUpgrading(false);
-    addToast("Identity Anchored. Node is now Sovereign.", "success");
+    addToast("Identity Anchored globally.", "success");
   };
 
   const renderMainContent = () => {
@@ -85,8 +89,8 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
             <div className="flex flex-col items-center justify-center py-32 text-center space-y-6">
                 <div className="p-5 bg-red-500/10 rounded-full border border-red-500/20 text-red-500"><LockIcon className="h-10 w-10" /></div>
                 <h3 className="text-xl font-black text-white uppercase tracking-tighter">Protocol Restricted</h3>
-                <p className="text-sm text-gray-500 max-w-xs uppercase tracking-widest leading-loose">Anonymous nodes are restricted to Meeting Protocols. Register a Citizen Identity for full access.</p>
-                <button onClick={() => window.location.reload()} className="px-8 py-3 bg-brand-gold text-slate-950 font-black rounded-xl text-[10px] uppercase tracking-widest shadow-glow-gold">Upgrade Identity</button>
+                <p className="text-sm text-gray-500 max-w-xs uppercase tracking-widest leading-loose">Anonymous nodes are restricted. Register a Citizen Identity for full access.</p>
+                <button onClick={() => window.location.reload()} className="px-8 py-3 bg-brand-gold text-slate-950 font-black rounded-xl text-[10px] uppercase tracking-widest shadow-glow-gold">Establish Anchor</button>
             </div>
         );
     }
@@ -94,11 +98,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
     switch (view) {
       case 'home': return ( 
         <div className="space-y-6"> 
-          {!hasVault && <SovereignUpgradeBanner onUpgrade={() => setIsUpgrading(true)} />} 
-          {/* Main unified stream with type-based badges */}
+          {!hasLocalVault && <SovereignUpgradeBanner user={user} onUpgrade={() => setIsUpgrading(true)} />} 
           <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter="all" /> 
         </div> 
       );
+      case 'lab': return <IntentLab user={user} onUpdateUser={onUpdateUser} />;
+      case 'assembly': return <AssemblyHub currentUser={user} onViewProfile={onViewProfile as any} />;
+      case 'registry': return <RegistryHub user={user} />;
       case 'governance': return <GovernancePage user={user} />;
       case 'meeting': return <MeetingHub user={user} />;
       case 'state': return <StateRegistry user={user} />;
@@ -120,7 +126,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
 
   return (
     <div className="min-h-screen bg-transparent pb-20 md:pb-0">
-      <div className="max-w-7xl mx-auto px-0 sm:px-4 lg:px-8 pt-6">
+      <div className="max-w-7xl auto px-0 sm:px-4 lg:px-8 pt-6">
         <div className="grid grid-cols-1 md:grid-cols-12 gap-6">
             <div className="hidden md:block md:col-span-3"><div className="sticky top-24"><CommunityHubSidebar activeView={view} onChangeView={setView} user={user} /></div></div>
             <div className="col-span-1 md:col-span-9 lg:col-span-6"><div className="min-h-[80vh] main-layout-container">{renderMainContent()}</div></div>

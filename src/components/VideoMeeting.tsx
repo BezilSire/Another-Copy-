@@ -85,9 +85,9 @@ const ParticipantTile: React.FC<{
                 <div className="absolute top-4 right-4 flex flex-col gap-2">
                     <button onClick={onRevoke} className="p-2 bg-red-600/20 hover:bg-red-600 text-red-500 hover:text-white rounded-xl border border-red-500/30 transition-all" title="Remove Node"><UserMinusIcon className="h-3 w-3" /></button>
                     {participant.isOnStage ? (
-                         <button onClick={onDemote} className="p-2 bg-blue-600/20 hover:bg-blue-600 text-blue-500 hover:text-white rounded-xl border border-blue-500/30 transition-all" title="Move to Assembly">↓</button>
+                         <button onClick={onDemote} className="p-2 bg-blue-600/20 hover:bg-blue-600 text-blue-500 hover:text-white rounded-xl border border-red-500/30 transition-all" title="Move to Assembly">↓</button>
                     ) : (
-                         <button onClick={onPromote} className="p-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-500 hover:text-white rounded-xl border border-emerald-500/30 transition-all" title="Invite to Stage">↑</button>
+                         <button onClick={onPromote} className="p-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-500 hover:text-white rounded-xl border border-red-500/30 transition-all" title="Invite to Stage">↑</button>
                     )}
                 </div>
             )}
@@ -157,7 +157,8 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
         pc.ontrack = (event) => setRemoteStreams(prev => ({ ...prev, [targetUid]: event.streams[0] }));
         pc.onicecandidate = (event) => {
-            if (event.candidate) api.addIceCandidate(meetingId, { candidate: JSON.stringify(event.candidate), sdpMLineIndex: event.candidate.sdpMLineIndex || 0, sdpMid: event.candidate.sdpMid || '', from: user.id, to: targetUid, timestamp: Date.now() });
+            /* Fix: Added timestamp, sdpMLineIndex, and sdpMid to match ICESignal type in types.ts */
+            if (event.candidate) api.addIceCandidate(meetingId, { candidate: JSON.stringify(event.candidate), sdpMLineIndex: event.candidate.sdpMLineIndex ?? undefined, sdpMid: event.candidate.sdpMid ?? undefined, from: user.id, to: targetUid, timestamp: Date.now() });
         };
         return pc;
     };
@@ -183,6 +184,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                             const pc = createPeerConnection(p.uid, stream);
                             const offer = await pc.createOffer();
                             await pc.setLocalDescription(offer);
+                            /* Fix: Added timestamp to match RTCSignal type in types.ts */
                             api.addSignal(meetingId, { type: 'offer', sdp: offer.sdp!, from: user.id, to: p.uid, timestamp: Date.now() });
                         }
                     });
@@ -193,6 +195,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                         await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signal.sdp }));
                         const answer = await pc.createAnswer();
                         await pc.setLocalDescription(answer);
+                        /* Fix: Added timestamp to match RTCSignal type in types.ts */
                         api.addSignal(meetingId, { type: 'answer', sdp: answer.sdp!, from: user.id, to: signal.from, timestamp: Date.now() });
                     } else if (signal.type === 'answer') await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: signal.sdp }));
                 });

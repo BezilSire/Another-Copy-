@@ -1,3 +1,6 @@
+
+import { Timestamp } from 'firebase/firestore';
+
 export const INTERESTS_LIST = [
     'Entrepreneurship', 'Marketing', 'Technology', 'Psychology', 'Growth Hacking', 
     'Finance', 'Economics', 'Art & Design', 'Community Building', 'Sustainability', 
@@ -11,7 +14,6 @@ export const SKILLS_LIST = [
     'Community Management', 'Farming Techniques', 'Teaching & Mentorship', 'Healthcare Services', 'Mechanical Repair',
     'Electrical Engineering', 'Event Planning', 'Customer Support', 'Supply Chain Management'
 ];
-
 
 export const generateAgentCode = (): string => {
   const prefix = 'UGC';
@@ -70,8 +72,24 @@ export const exportToCsv = (filename: string, data: Record<string, any>[]) => {
   }
 };
 
-export const formatTimeAgo = (dateString: string): string => {
-  const date = new Date(dateString);
+/**
+ * Converts various date formats into a standard Date object or null if invalid.
+ */
+export const safeDate = (val: any): Date | null => {
+    if (!val) return null;
+    if (val instanceof Date) return val;
+    if (val instanceof Timestamp) return val.toDate();
+    if (typeof val === 'object' && val.seconds !== undefined) {
+        return new Timestamp(val.seconds, val.nanoseconds || 0).toDate();
+    }
+    const d = new Date(val);
+    return isNaN(d.getTime()) ? null : d;
+};
+
+export const formatTimeAgo = (val: any): string => {
+  const date = safeDate(val);
+  if (!date) return "Syncing...";
+  
   const now = new Date();
   const seconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 

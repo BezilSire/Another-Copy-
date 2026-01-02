@@ -1,4 +1,3 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -7,10 +6,15 @@ service cloud.firestore {
     function isSignedIn() { return request.auth != null; }
     function isGuest() { return isSignedIn() && request.auth.token.firebase.sign_in_provider == 'anonymous'; }
     function isMember() { return isSignedIn() && !isGuest(); }
+    
+    // Improved Admin check: Resilient to document casing and evaluation delays
     function isAdmin() { 
-      let userDoc = get(/databases/$(database)/documents/users/$(request.auth.uid));
-      return isMember() && userDoc != null && userDoc.data.role == 'admin'; 
+      return isMember() && 
+             exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+             (get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin' || 
+              get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'ADMIN'); 
     }
+    
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
 
     // --- IDENTITY & WALLETS ---
@@ -18,7 +22,7 @@ service cloud.firestore {
       allow read, list: if isSignedIn(); 
       allow create: if isMember() && request.auth.uid == userId;
       // Allow specific balance and social fields to be updated by other members for P2P transactions and vouches
-      allow update: if isOwner(userId) || isAdmin() || (isMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ubtBalance', 'credibility_score', 'vouchCount', 'followers', 'lastSeen']));
+      allow update: if isOwner(userId) || isAdmin() || (isMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ubtBalance', 'credibility_score', 'vouchCount', 'followers', 'lastSeen', 'fcmToken', 'encryptedVault', 'publicKey']));
 
       match /notifications/{id} { allow read, write: if isOwner(userId) || isAdmin(); }
       match /transactions/{id} { allow read, list: if isOwner(userId) || isAdmin(); allow create: if isMember(); }
@@ -49,10 +53,15 @@ service cloud.firestore {
       allow read: if isSignedIn();
       allow write: if isAdmin();
     }
+    match /multisig_proposals/{id} {
+      allow read, list: if isAdmin();
+      allow write: if isAdmin();
+    }
 
-    // --- BRIDGE ---
+    // --- BRIDGE / ORACLE ---
     match /pending_ubt_purchases/{docId} {
-      allow read, list: if isOwner(resource.data.userId) || isAdmin();
+      // Admins must be able to 'list' these globally for the Oracle terminal
+      allow read, list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
       allow create: if isMember();
       allow update, delete: if isAdmin();
     }
@@ -76,10 +85,9 @@ service cloud.firestore {
       match /messages/{id} { allow read, write, list: if isMember(); }
     }
 
-    // --- MEETINGS (Mesh Enhanced) ---
+    // --- MEETINGS ---
     match /meetings/{meetingId} {
-      allow get: if true;
-      allow list: if isAdmin();
+      allow read: if isSignedIn();
       allow create: if isMember();
       allow update: if isSignedIn();
       allow delete: if isAdmin() || (isSignedIn() && resource.data.hostId == request.auth.uid);
@@ -111,7 +119,8 @@ service cloud.firestore {
     }
     
     match /payouts/{id} { 
-      allow read, list: if isOwner(resource.data.userId) || isAdmin(); 
+      // Admins must be able to 'list' these globally for the Payout terminal
+      allow read, list: if isAdmin() || (isMember() && resource.data.userId == request.auth.uid); 
       allow create: if isMember(); 
       allow update: if isAdmin(); 
     }
@@ -120,10 +129,15 @@ service cloud.firestore {
       allow read, list: if isSignedIn();
       allow write: if isAdmin();
     }
+
+    match /price_verifications/{id} {
+        allow read, list: if isAdmin();
+        allow create: if isMember();
+    }
     
     match /vouchers/{id} { allow read, list: if isMember(); allow write: if isAdmin(); }
     match /activity/{id} { allow read, list: if isSignedIn(); allow write: if isMember(); }
-    match /reports/{id} { allow read, list: if isMember() || isAdmin(); allow write: if isMember(); }
+    match /reports/{id} { allow read, list: if isAdmin() || isMember(); allow write: if isMember(); }
     match /vouches/{id} { allow read, list: if isSignedIn(); allow write: if isMember(); }
     match /resources/{id} { allow read, list: if isSignedIn(); allow write: if isAdmin(); }
     match /disputes/{id} { allow read, list: if isSignedIn(); allow write: if isMember(); }

@@ -107,7 +107,7 @@ export const IdentityVault: React.FC<{ onRestore: () => void }> = ({ onRestore }
                     </div>
                     <div>
                         <h4 className="text-lg font-black text-white uppercase tracking-widest">{isAdmin ? 'Authority Root Rotation' : 'Emergency Node Rotation'}</h4>
-                        <p className="text-[10px] text-gray-400 mt-2 leading-relaxed uppercase font-bold tracking-wider opacity-80">
+                        <p className="text-[10px] text-white mt-2 leading-relaxed uppercase font-bold tracking-wider opacity-80">
                             You are generating a new set of master keys. Your cloud account remains the anchor, but local signatures will change.
                         </p>
                     </div>
@@ -122,7 +122,7 @@ export const IdentityVault: React.FC<{ onRestore: () => void }> = ({ onRestore }
             <div className="module-frame bg-slate-950 p-10 rounded-[3rem] border-white/5 shadow-premium relative">
                  <div className="corner-tl opacity-30"></div>
                  <div className="flex justify-between items-center mb-8">
-                    <p className="label-caps !text-[10px] text-gray-500 !tracking-[0.4em]">Public Node Address</p>
+                    <p className="label-caps !text-[10px] text-white !tracking-[0.4em]">Public Node Address</p>
                     <button onClick={handleCopyKey} className="p-3 bg-white/5 rounded-xl text-brand-gold hover:text-brand-gold-light transition-all border border-white/10">
                         {isCopied ? <ClipboardCheckIcon className="h-5 w-5 text-emerald-500" /> : <ClipboardIcon className="h-5 w-5" />}
                     </button>

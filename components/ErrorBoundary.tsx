@@ -15,7 +15,7 @@ interface State {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-// Inherit from Component to ensure setState and props are correctly identified by the compiler
+// Fix: Explicitly extend Component from the react library to ensure props and setState are correctly inherited
 export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
@@ -23,17 +23,14 @@ export class ErrorBoundary extends Component<Props, State> {
     errorInfo: null
   };
 
-  constructor(props: Props) {
-    super(props);
-  }
-
   public static getDerivedStateFromError(error: Error): State {
+    // Update state so the next render will show the fallback UI.
     return { hasError: true, error, errorInfo: null };
   }
 
-  // Use inherited setState to update error state upon catching a breach
+  // Fix: setState is now correctly accessible from the Component base class
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Handshake Failure Exception:', error);
+    console.error('Handshake Failure Exception:', error, errorInfo);
     this.setState({ 
       hasError: true,
       error, 
@@ -76,7 +73,7 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Access children through inherited props
+    // Fix: Access children via this.props which is now correctly inherited from Component
     return this.props.children;
   }
 }

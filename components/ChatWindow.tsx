@@ -2,11 +2,13 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { User, Conversation, Message } from '../types';
 import { api } from '../services/apiService';
+import { cryptoService } from '../services/cryptoService';
 import { SendIcon } from './icons/SendIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { ChatHeader } from './ChatHeader';
 import { CheckIcon } from './icons/CheckIcon';
 import { CheckAllIcon } from './icons/CheckAllIcon';
+import { safeDate } from '../utils';
 
 interface ChatWindowProps {
   conversation: Conversation;
@@ -49,10 +51,19 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, currentUse
     e.preventDefault();
     if (!newMessage.trim()) return;
 
+    // Cryptographic Dispatch Protocol
+    const timestamp = Date.now();
+    const nonce = cryptoService.generateNonce();
+    const payload = `MSG:${currentUser.id}:${conversation.id}:${newMessage.trim()}:${timestamp}:${nonce}`;
+    const signature = cryptoService.signTransaction(payload);
+
     const messageData: Omit<Message, 'id' | 'timestamp'> = {
       senderId: currentUser.id,
       senderName: currentUser.name,
       text: newMessage.trim(),
+      signature: signature,
+      hash: payload,
+      nonce: nonce
     };
     
     setNewMessage('');
@@ -64,8 +75,8 @@ export const ChatWindow: React.FC<ChatWindowProps> = ({ conversation, currentUse
   };
 
   const formatMessageTime = (timestamp: any) => {
-      if (!timestamp) return '';
-      const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+      const date = safeDate(timestamp);
+      if (!date) return '';
       return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
   };
 

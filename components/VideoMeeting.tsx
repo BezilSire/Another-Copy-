@@ -15,6 +15,8 @@ import { UserMinusIcon } from './icons/UserMinusIcon';
 import { ClockIcon } from './icons/ClockIcon';
 import { ArrowUpRightIcon } from './icons/ArrowUpRightIcon';
 import { HandIcon } from './icons/HandIcon';
+import { XCircleIcon } from './icons/XCircleIcon';
+import { safeDate } from '../utils';
 
 const servers = {
     iceServers: [
@@ -86,7 +88,7 @@ const ParticipantTile: React.FC<{
                     {participant.isOnStage ? (
                          <button onClick={onDemote} className="p-2 bg-blue-600/20 hover:bg-blue-600 text-blue-500 hover:text-white rounded-xl border border-blue-500/30 transition-all" title="Move to Assembly">↓</button>
                     ) : (
-                         <button onClick={onPromote} className="p-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-500 hover:text-white rounded-xl border border-emerald-500/30 transition-all" title="Invite to Stage">↑</button>
+                         <button onClick={onPromote} className="p-2 bg-emerald-600/20 hover:bg-emerald-600 text-emerald-500 hover:text-white rounded-xl border border-red-500/30 transition-all" title="Invite to Stage">↑</button>
                     )}
                 </div>
             )}
@@ -109,6 +111,24 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
     const joinedAtRef = useRef(Date.now());
     const { addToast } = useToast();
 
+    // Protocol Shutdown (Individual Exit)
+    const handleManualEnd = useCallback(async () => { 
+        await api.updateParticipantStatus(meetingId, user.id, null); 
+        onEnd(); 
+    }, [meetingId, user.id, onEnd]);
+
+    // Decommission Protocol (Early Finish for All)
+    const handleDecommission = useCallback(async () => {
+        if (!isHost) return;
+        if (!window.confirm("CRITICAL PROTOCOL: Terminate meeting for all peers? This action is immutable.")) return;
+        try {
+            await api.deleteMeeting(meetingId);
+            onEnd();
+        } catch (e) {
+            addToast("Decommission failed.", "error");
+        }
+    }, [isHost, meetingId, onEnd, addToast]);
+
     useEffect(() => {
         let timer: number;
         const fetchMeta = async () => {
@@ -116,7 +136,8 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
             if (m) {
                 setMeetingTitle(m.title);
                 timer = window.setInterval(() => {
-                    const diff = m.expiresAt.toDate().getTime() - Date.now();
+                    const expiry = safeDate(m.expiresAt);
+                    const diff = expiry ? expiry.getTime() - Date.now() : 0;
                     if (diff <= 0) handleManualEnd();
                     else {
                         const h = Math.floor(diff / 3600000);
@@ -129,7 +150,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
         };
         fetchMeta();
         return () => clearInterval(timer);
-    }, [meetingId]);
+    }, [meetingId, handleManualEnd]);
 
     const createPeerConnection = (targetUid: string, stream: MediaStream) => {
         if (pcs.current[targetUid]) return pcs.current[targetUid];
@@ -138,7 +159,8 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
         stream.getTracks().forEach(track => pc.addTrack(track, stream));
         pc.ontrack = (event) => setRemoteStreams(prev => ({ ...prev, [targetUid]: event.streams[0] }));
         pc.onicecandidate = (event) => {
-            if (event.candidate) api.addIceCandidate(meetingId, { candidate: JSON.stringify(event.candidate), sdpMLineIndex: event.candidate.sdpMLineIndex || 0, sdpMid: event.candidate.sdpMid || '', from: user.id, to: targetUid, timestamp: Date.now() });
+            /* Fix: Added timestamp, sdpMLineIndex, and sdpMid to match ICESignal type in types.ts */
+            if (event.candidate) api.addIceCandidate(meetingId, { candidate: JSON.stringify(event.candidate), sdpMLineIndex: event.candidate.sdpMLineIndex ?? undefined, sdpMid: event.candidate.sdpMid ?? undefined, from: user.id, to: targetUid, timestamp: Date.now() });
         };
         return pc;
     };
@@ -164,6 +186,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                             const pc = createPeerConnection(p.uid, stream);
                             const offer = await pc.createOffer();
                             await pc.setLocalDescription(offer);
+                            /* Fix: Added timestamp to match RTCSignal type in types.ts */
                             api.addSignal(meetingId, { type: 'offer', sdp: offer.sdp!, from: user.id, to: p.uid, timestamp: Date.now() });
                         }
                     });
@@ -174,6 +197,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                         await pc.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: signal.sdp }));
                         const answer = await pc.createAnswer();
                         await pc.setLocalDescription(answer);
+                        /* Fix: Added timestamp to match RTCSignal type in types.ts */
                         api.addSignal(meetingId, { type: 'answer', sdp: answer.sdp!, from: user.id, to: signal.from, timestamp: Date.now() });
                     } else if (signal.type === 'answer') await pc.setRemoteDescription(new RTCSessionDescription({ type: 'answer', sdp: signal.sdp }));
                 });
@@ -181,7 +205,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                     const pc = pcs.current[ice.from];
                     if (pc) try { await pc.addIceCandidate(new RTCIceCandidate(JSON.parse(ice.candidate))); } catch (e) {}
                 });
-            } catch (e) { addToast("Media Denied.", "error"); onEnd(); }
+            } catch (e) { addToast("Media Access Denied. Verify permissions.", "error"); onEnd(); }
         };
         init();
         return () => {
@@ -191,7 +215,6 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
         };
     }, [meetingId]);
 
-    const handleManualEnd = async () => { await api.updateParticipantStatus(meetingId, user.id, null); onEnd(); };
     const toggleMic = () => { if (localStream) { const t = localStream.getAudioTracks()[0]; t.enabled = !t.enabled; setIsMicOn(t.enabled); api.updateParticipantStatus(meetingId, user.id, { ...participants[user.id], isMicOn: t.enabled }); } };
     const toggleVideo = () => { if (localStream) { const t = localStream.getVideoTracks()[0]; t.enabled = !t.enabled; setIsVideoOn(t.enabled); api.updateParticipantStatus(meetingId, user.id, { ...participants[user.id], isVideoOn: t.enabled }); } };
     const toggleHand = () => { const s = !isHandRaised; setIsHandRaised(s); api.updateParticipantStatus(meetingId, user.id, { ...participants[user.id], isRequestingStage: s }); };
@@ -213,7 +236,7 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
             <div className="p-6 border-b border-white/5 bg-slate-900/50 backdrop-blur-xl flex justify-between items-center z-50">
                 <div className="flex items-center gap-4">
                     <div className="p-2 bg-brand-gold/10 rounded-xl border border-brand-gold/20 shadow-glow-gold"><ShieldCheckIcon className="h-6 w-6 text-brand-gold" /></div>
-                    <div><h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">{meetingTitle}</h2><p className="text-[8px] text-emerald-500 uppercase tracking-widest mt-0.5">{assemblyList.length} Nodes Synchronized</p></div>
+                    <div><h2 className="text-sm font-black text-white uppercase tracking-[0.3em]">{meetingTitle}</h2><p className="text-[8px] text-emerald-500 uppercase tracking-widest mt-0.5">{assemblyList.length} Nodes Online</p></div>
                 </div>
                 <div className="px-5 py-2.5 bg-white/5 rounded-full border border-white/10 flex items-center gap-3"><ClockIcon className="h-3 w-3 text-brand-gold" /><span className="text-[11px] font-black text-white font-mono tracking-widest">{timeLeft}</span></div>
             </div>
@@ -268,12 +291,26 @@ export const VideoMeeting: React.FC<VideoMeetingProps> = ({ user, meetingId, isH
                 >
                     <HandIcon className="h-6 w-6" />
                 </button>
-                <button 
-                    onClick={handleManualEnd}
-                    className="w-16 h-16 sm:w-20 sm:h-20 bg-red-600 hover:bg-red-500 text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.4)] active:scale-90 transition-all border-4 border-red-900/30"
-                >
-                    <PhoneOffIcon className="h-8 w-8" />
-                </button>
+                <div className="flex flex-col items-center gap-2">
+                    <button 
+                        onClick={handleManualEnd}
+                        className="w-16 h-16 sm:w-20 sm:h-20 bg-slate-700 hover:bg-slate-600 text-white rounded-full flex items-center justify-center shadow-lg active:scale-90 transition-all border-4 border-slate-600/30"
+                    >
+                        <XCircleIcon className="h-8 w-8" />
+                    </button>
+                    <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">Leave Stage</span>
+                </div>
+                {isHost && (
+                    <div className="flex flex-col items-center gap-2">
+                        <button 
+                            onClick={handleDecommission}
+                            className="w-16 h-16 sm:w-20 sm:h-20 bg-red-600 hover:bg-red-500 text-white rounded-full flex items-center justify-center shadow-[0_0_30px_rgba(239,68,68,0.4)] active:scale-90 transition-all border-4 border-red-900/30"
+                        >
+                            <PhoneOffIcon className="h-8 w-8" />
+                        </button>
+                        <span className="text-[8px] font-black text-red-500 uppercase tracking-widest">Decommission</span>
+                    </div>
+                )}
             </div>
         </div>
     );

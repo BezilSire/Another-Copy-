@@ -1,4 +1,3 @@
-
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -50,16 +49,6 @@ import {
     RedemptionCycle, ParticipantStatus, RTCSignal, ICESignal, Candidate, MultiSigProposal
 } from '../types';
 
-// --- TEMPORAL GATE (RATE LIMITING) ---
-const lastActionTimes: Record<string, number> = {};
-const throttle = (key: string, limitMs: number = 3000) => {
-    const now = Date.now();
-    if (lastActionTimes[key] && now - lastActionTimes[key] < limitMs) {
-        throw new Error("HANDSHAKE_SATURATION: Node is cooling down. Please wait.");
-    }
-    lastActionTimes[key] = now;
-};
-
 const usersCollection = collection(db, 'users');
 const membersCollection = collection(db, 'members');
 const postsCollection = collection(db, 'posts');
@@ -69,6 +58,7 @@ const proposalsCollection = collection(db, 'proposals');
 const payoutsCollection = collection(db, 'payouts');
 const vaultsCollection = collection(db, 'treasury_vaults');
 const ledgerCollection = collection(db, 'ledger');
+// Fix: Added missing collection references for state registry and justice modules
 const resourcesCollection = collection(db, 'resources');
 const disputesCollection = collection(db, 'disputes');
 const globalsCollection = collection(db, 'globals');
@@ -132,14 +122,12 @@ export const api = {
     },
 
     requestPayout: (u: User, n: string, p: string, a: number) => {
-        throttle(`payout-${u.id}`, 60000);
         return addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() });
     },
     
     requestCommissionPayout: (a: Agent, name: string, phone: string, amount: number) => addDoc(payoutsCollection, { userId: a.id, userName: a.name, type: 'referral', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp() }),
 
     processUbtTransaction: async (transaction: UbtTransaction) => {
-        throttle(`tx-${transaction.senderId}`, 5000);
         return runTransaction(db, async (t) => {
             const econRef = doc(globalsCollection, 'economy');
             const floatRef = doc(vaultsCollection, 'FLOAT');
@@ -171,7 +159,6 @@ export const api = {
     deleteCandidate: (candidateId: string) => deleteDoc(doc(candidatesCollection, candidateId)),
 
     voteForCandidate: (candidateId: string, voterId: string) => runTransaction(db, async t => {
-        throttle(`votecan-${voterId}`, 5000);
         const ref = doc(candidatesCollection, candidateId);
         const snap = await t.get(ref);
         if (!snap.exists()) throw new Error("Candidate node lost.");
@@ -246,7 +233,6 @@ export const api = {
     },
 
     createMeeting: async (u: User, title: string, expiresAt: Date): Promise<string> => {
-        throttle(`meet-${u.id}`, 30000);
         const id = Math.floor(100000 + Math.random() * 900000).toString();
         await setDoc(doc(meetingsCollection, id), {
             id, hostId: u.id, hostName: u.name, title,
@@ -263,11 +249,7 @@ export const api = {
         return s.exists() ? { id: s.id, ...s.data() } as Meeting : null;
     },
     getHostActiveMeetings: async (uid: string): Promise<Meeting[]> => {
-        const q = query(
-            meetingsCollection, 
-            where('hostId', '==', uid), 
-            where('expiresAt', '>', Timestamp.now())
-        );
+        const q = query(meetingsCollection, where('hostId', '==', uid), where('expiresAt', '>', Timestamp.now()));
         const s = await getDocs(q);
         return s.docs.map(d => ({ id: d.id, ...d.data() } as Meeting));
     },
@@ -336,7 +318,6 @@ export const api = {
     registerResource: (data: Partial<CitizenResource>) => addDoc(resourcesCollection, { ...data, createdAt: serverTimestamp() }),
 
     createPost: async (u: User, content: string, type: Post['types'], award: number, skills: string[] = []) => {
-        throttle(`post-${u.id}`, 10000);
         return addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: skills, commentCount: 0, repostCount: 0, ccapAwarded: award });
     },
     deletePost: (id: string) => deleteDoc(doc(postsCollection, id)),
@@ -388,7 +369,6 @@ export const api = {
     },
     markConversationAsRead: (id: string, uid: string) => updateDoc(doc(conversationsCollection, id), { readBy: arrayUnion(uid) }),
     sendMessage: async (id: string, msg: any, convo: Conversation) => {
-        throttle(`msg-${msg.senderId}`, 1000);
         const batch = writeBatch(db);
         batch.set(doc(collection(db, 'conversations', id, 'messages')), { ...msg, timestamp: serverTimestamp() });
         batch.update(doc(conversationsCollection, id), { lastMessage: msg.text, lastMessageTimestamp: serverTimestamp(), lastMessageSenderId: msg.senderId, readBy: [msg.senderId] });
@@ -405,7 +385,6 @@ export const api = {
         return s.docs.map(d => ({ id: d.id, ...d.data() } as any));
     },
     voteOnProposal: (pid: string, uid: string, v: 'for'|'against') => runTransaction(db, async t => {
-        throttle(`voteprop-${uid}`, 5000);
         const ref = doc(proposalsCollection, pid);
         const snap = await t.get(ref);
         if (!snap.exists()) return;
@@ -419,7 +398,6 @@ export const api = {
         return s.docs.map(d => ({ id: d.id, ...d.data() } as Member));
     },
     registerMember: async (a: Agent, d: NewMember) => {
-        throttle(`reg-${a.id}`, 20000);
         const welcome = await generateWelcomeMessage(d.full_name, d.circle);
         const ref = await addDoc(membersCollection, { ...d, agent_id: a.id, agent_name: a.name, date_registered: serverTimestamp(), welcome_message: welcome, membership_card_id: `UGC-M-${Math.random().toString(36).substring(2, 8).toUpperCase()}` });
         return { id: ref.id, ...d, agent_id: a.id, agent_name: a.name, welcome_message: welcome } as any;
@@ -470,7 +448,6 @@ export const api = {
         return Array.from(new Map(res.map(i => [i.id, i])).values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     },
     vouchForCitizen: (transaction: UbtTransaction) => runTransaction(db, async (t) => {
-        throttle(`vouch-${transaction.senderId}`, 10000);
         const receiverRef = doc(usersCollection, transaction.receiverId);
         const econRef = doc(globalsCollection, 'economy');
         const econSnap = await t.get(econRef);
@@ -503,7 +480,6 @@ export const api = {
     },
 
     sendDistressPost: async (u: User, content: string) => {
-        throttle(`distress-${u.id}`, 60000);
         return addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress', commentCount: 0, repostCount: 0 });
     },
 

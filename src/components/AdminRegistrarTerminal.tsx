@@ -175,7 +175,7 @@ export const AdminRegistrarTerminal: React.FC<{ admin: Admin }> = ({ admin }) =>
                                      <span className="text-[8px] text-emerald-500 font-mono">ACTIVE_FLOW</span>
                                  </div>
                                  <div className="w-full bg-black h-1.5 rounded-full overflow-hidden border border-white/5 shadow-inner">
-                                     <div className="h-full bg-emerald-500 shadow-glow-matrix animate-pulse-soft" style={{ width: '85%' }}></div>
+                                     <div className="h-full bg-emerald-500 shadow-glow-matrix animate-pulse-soft" style={{ width: '45%' }}></div>
                                  </div>
                              </div>
 

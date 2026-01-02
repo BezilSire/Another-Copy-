@@ -39,6 +39,12 @@ const decodeBase64 = (s: string): Uint8Array => {
     }
 };
 
+const normalizeMnemonic = (phrase: string): string => {
+    if (!phrase) return '';
+    const words = phrase.toLowerCase().match(/[a-z]+/g);
+    return words ? words.join(' ') : '';
+};
+
 export const cryptoService = {
     generateMnemonic: (): string => {
         return bip39.generateMnemonic();
@@ -46,14 +52,18 @@ export const cryptoService = {
 
     validateMnemonic: (mnemonic: string): boolean => {
         try {
-            return bip39.validateMnemonic(mnemonic.trim().toLowerCase());
+            const cleaned = normalizeMnemonic(mnemonic);
+            const wordCount = cleaned.split(' ').length;
+            if (wordCount !== 12 && wordCount !== 24) return false;
+            return bip39.validateMnemonic(cleaned);
         } catch (e) {
             return false;
         }
     },
 
     mnemonicToKeyPair: (mnemonic: string) => {
-        const seed = bip39.mnemonicToSeedSync(mnemonic.trim().toLowerCase());
+        const cleaned = normalizeMnemonic(mnemonic);
+        const seed = bip39.mnemonicToSeedSync(cleaned);
         const secretKey = seed.slice(0, 32);
         const keyPair = nacl.sign.keyPair.fromSeed(secretKey);
         
@@ -67,13 +77,24 @@ export const cryptoService = {
         return !!localStorage.getItem(ENCRYPTED_VAULT_STORAGE);
     },
 
-    saveVault: async (data: VaultData, pin: string) => {
-        const encrypted = await cryptoService._encryptWithPin(JSON.stringify(data), pin);
+    // Fix: Added injectVault method to allow server-to-local identity synchronization
+    injectVault: (encryptedVault: string) => {
+        localStorage.setItem(ENCRYPTED_VAULT_STORAGE, encryptedVault);
+    },
+
+    saveVault: async (data: VaultData, pin: string): Promise<string> => {
+        const cleanedMnemonic = normalizeMnemonic(data.mnemonic);
+        const encrypted = await cryptoService._encryptWithPin(
+            JSON.stringify({ ...data, mnemonic: cleanedMnemonic }), 
+            pin
+        );
         localStorage.setItem(ENCRYPTED_VAULT_STORAGE, encrypted);
         
-        const keys = cryptoService.mnemonicToKeyPair(data.mnemonic);
+        const keys = cryptoService.mnemonicToKeyPair(cleanedMnemonic);
         localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, keys.publicKey);
         localStorage.setItem(SIGN_SECRET_KEY_STORAGE, keys.secretKey);
+        
+        return encrypted;
     },
 
     unlockVault: async (pin: string): Promise<VaultData | null> => {
@@ -83,11 +104,12 @@ export const cryptoService = {
         try {
             const dataStr = await cryptoService._decryptWithPin(encrypted, pin);
             const data = JSON.parse(dataStr) as VaultData;
+            const cleaned = normalizeMnemonic(data.mnemonic);
             
-            const keys = cryptoService.mnemonicToKeyPair(data.mnemonic);
+            const keys = cryptoService.mnemonicToKeyPair(cleaned);
             localStorage.setItem(SIGN_PUBLIC_KEY_STORAGE, keys.publicKey);
             localStorage.setItem(SIGN_SECRET_KEY_STORAGE, keys.secretKey);
-            return data;
+            return { ...data, mnemonic: cleaned };
         } catch (e) {
             return null;
         }
