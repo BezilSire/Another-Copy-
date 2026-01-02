@@ -15,22 +15,15 @@ import { ChatsPage } from './components/ChatsPage';
 import { PublicProfile } from './components/PublicProfile';
 import { LogoIcon } from './components/icons/LogoIcon';
 import { LoaderIcon } from './components/icons/LoaderIcon';
-import { AlertTriangleIcon } from './components/icons/AlertTriangleIcon';
-import { PinVaultLogin } from './components/PinVaultLogin';
-import { RecoveryProtocol } from './components/RecoveryProtocol';
-import { cryptoService, VaultData } from './services/cryptoService';
+import { cryptoService } from './services/cryptoService';
 import { RadarModal } from './components/RadarModal';
-import { MeetingHub } from './components/MeetingHub';
-import { GuestMeetingPage } from './components/GuestMeetingPage';
-import { VideoMeeting } from './components/VideoMeeting';
-import { RotateCwIcon } from './components/icons/RotateCwIcon';
 
 const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [logs, setLogs] = useState<string[]>([]);
-  const sequence = ["> BOOTING UBUNTIUM_CORE_v5.1.0...", "> INITIALIZING CRYPTO_LAYER... [ OK ]", "> CONNECTING TO GLOBAL_DAG_MAINNET...", "> RESOLVING SOVEREIGN_ID_PROVENANCE...", "> WELCOME CITIZEN."];
+  const sequence = ["> BOOTING UBUNTIUM_CORE_v5.2.1...", "> INITIALIZING CRYPTO_LAYER...", "> SYNCING_GLOBAL_DAG...", "> RESOLVING_SOVEREIGN_ID...", "> WELCOME CITIZEN."];
   useEffect(() => {
     let i = 0;
-    const interval = window.setInterval(() => { if (i < sequence.length) { setLogs(prev => [...prev, sequence[i]]); i++; } else { window.clearInterval(interval); setTimeout(onComplete, 300); } }, 70);
+    const interval = window.setInterval(() => { if (i < sequence.length) { setLogs(prev => [...prev, sequence[i]]); i++; } else { window.clearInterval(interval); setTimeout(onComplete, 300); } }, 60);
     return () => window.clearInterval(interval);
   }, [onComplete]);
   return (
@@ -42,22 +35,14 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 };
 
 const App: React.FC = () => {
-  const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser, isSovereignLocked, unlockSovereignSession, refreshIdentity } = useAuth();
+  const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser, refreshIdentity } = useAuth();
   const [isBooting, setIsBooting] = useState(true);
-  const [isRecovering, setIsRecovering] = useState(false);
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<Conversation | 'main' | null>(null);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const [isRadarOpen, setIsRadarOpen] = useState(false);
-  const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
   const [forceView, setForceView] = useState<string | null>(null);
-
-  useEffect(() => {
-      const params = new URLSearchParams(window.location.search);
-      const joinId = params.get('join');
-      if (joinId) setActiveMeetingId(joinId);
-  }, []);
 
   useEffect(() => {
     if (currentUser && !firebaseUser?.isAnonymous) {
@@ -71,29 +56,12 @@ const App: React.FC = () => {
   const handleOpenMeet = () => setForceView('meeting');
   const handleOpenVote = () => setForceView('governance');
   const handleViewProfile = (userId: string | null) => { setChatTarget(null); setViewingProfileId(userId); };
-  const handleSecurityRecoveryComplete = (mnemonic: string, pin: string, data: VaultData) => { cryptoService.saveVault({ mnemonic }, pin).then(() => { unlockSovereignSession(data, pin).then(() => setIsRecovering(false)); }); };
   
   const renderMainContent = () => {
     if (isBooting) return null;
     
-    // 1. Handle Guest/Anonymous sessions
-    if (firebaseUser?.isAnonymous) {
-        if (activeMeetingId && currentUser) return <VideoMeeting user={currentUser} meetingId={activeMeetingId} isHost={false} onEnd={confirmLogout} />;
-        return <GuestMeetingPage meetingId={activeMeetingId || ''} />;
-    }
-
-    // 2. Handle Meeting redirections for unauth users
-    if (activeMeetingId && !firebaseUser && !isLoadingAuth) return <GuestMeetingPage meetingId={activeMeetingId} />;
-    
-    // 3. Handle Sovereign PIN Locks
-    if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
-        if (isRecovering) return <div className="flex-1 flex flex-col justify-center items-center px-4 min-h-screen bg-black"><RecoveryProtocol onBack={() => setIsRecovering(false)} onComplete={handleSecurityRecoveryComplete} /></div>;
-        return <div className="flex-1 flex flex-col justify-center items-center px-4 min-h-screen bg-black"><PinVaultLogin onUnlock={unlockSovereignSession} onReset={() => setIsRecovering(true)} /></div>;
-    }
-
-    // 4. Handle authenticated users with valid records
+    // 1. Authenticated User Dashboard
     if (currentUser) {
-        if (activeMeetingId) return <VideoMeeting user={currentUser} meetingId={activeMeetingId} isHost={false} onEnd={() => { setActiveMeetingId(null); window.history.pushState({}, '', window.location.pathname); }} />;
         if (chatTarget) return <ChatsPage user={currentUser} initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null} onClose={() => setChatTarget(null)} onViewProfile={handleViewProfile} onNewMessageClick={() => {}} onNewGroupClick={() => {}} />;
         if (viewingProfileId) return <div className="main-container py-10"><PublicProfile userId={viewingProfileId} currentUser={currentUser} onBack={() => setViewingProfileId(null)} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(currentUser, target); setViewingProfileId(null); setChatTarget(convo); } }} onViewProfile={(id) => setViewingProfileId(id)} isAdminView={currentUser.role === 'admin'} /></div>;
         
@@ -104,7 +72,7 @@ const App: React.FC = () => {
         return <MemberDashboard user={currentUser as MemberUser} onUpdateUser={updateUser} unreadCount={unreadNotificationCount} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={handleViewProfile} forcedView={forceView} clearForcedView={() => setForceView(null)} />;
     }
     
-    // 5. Loading logic - Only spin if we are truly processing a known session
+    // 2. High-Speed Sync HUD (Only shown during active processing, not on idle firebase presence)
     if (isLoadingAuth || isProcessingAuth) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-black p-10 text-center animate-fade-in">
@@ -114,37 +82,17 @@ const App: React.FC = () => {
                         <div className="w-2.5 h-2.5 bg-brand-gold rounded-full animate-ping"></div>
                     </div>
                 </div>
-                <div className="text-[10px] uppercase font-black tracking-[0.5em] text-white/30 font-mono">Synchronizing_Node_State</div>
-            </div>
-        );
-    }
-    
-    // 6. Handle Latency Loop: Firebase is logged in but currentUser didn't populate (Missing document or sync error)
-    if (firebaseUser) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-black p-6 text-center animate-fade-in">
-                <div className="module-frame glass-module p-10 sm:p-16 rounded-[4rem] border-red-500/20 shadow-premium max-w-md w-full relative">
-                    <AlertTriangleIcon className="h-16 w-16 text-brand-gold mx-auto mb-10 opacity-60" />
-                    <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 leading-none gold-text">Node Recovery Required</h2>
-                    <p className="text-sm text-gray-400 leading-loose uppercase font-black tracking-widest opacity-60 mb-10">
-                        Identity authenticated via cloud, but ledger synchronization is latent.
-                    </p>
-                    <div className="flex flex-col gap-4">
-                        <button 
-                            onClick={refreshIdentity} 
-                            disabled={isProcessingAuth}
-                            className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-3"
-                        >
-                            {isProcessingAuth ? <LoaderIcon className="h-4 w-4 animate-spin" /> : <><RotateCwIcon className="h-4 w-4" /> Force Re-Anchor</>}
-                        </button>
-                        <button onClick={confirmLogout} className="w-full py-4 text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-widest transition-colors">Terminate Session</button>
+                <div className="space-y-4">
+                    <div className="text-[10px] uppercase font-black tracking-[0.5em] text-white/30 font-mono italic">Synchronizing_Protocol_Data</div>
+                    <div className="w-48 h-1 bg-white/5 mx-auto rounded-full overflow-hidden">
+                        <div className="h-full bg-brand-gold/40 animate-scan-move"></div>
                     </div>
                 </div>
             </div>
         );
     }
 
-    // 7. Base case: Guest / Login
+    // 3. Unauthenticated State
     return <AuthPage />;
   };
 
@@ -153,7 +101,7 @@ const App: React.FC = () => {
       {isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
       {!isBooting && (
           <div className="flex-1 flex flex-col animate-fade-in">
-            {!isSovereignLocked && currentUser && !firebaseUser?.isAnonymous && (
+            {currentUser && !firebaseUser?.isAnonymous && (
                 <Header 
                     user={currentUser} 
                     onLogout={() => setIsLogoutConfirmOpen(true)} 
@@ -166,7 +114,7 @@ const App: React.FC = () => {
             )}
             <main className="flex-1">{renderMainContent()}</main>
             <ToastContainer />
-            <ConfirmationDialog isOpen={isLogoutConfirmOpen} onClose={() => setIsLogoutConfirmOpen(false)} onConfirm={confirmLogout} title="Disconnect Node" message="Are you sure you want to end the secure protocol handshake?" confirmButtonText="Terminate" />
+            <ConfirmationDialog isOpen={isLogoutConfirmOpen} onClose={() => setIsLogoutConfirmOpen(false)} onConfirm={confirmLogout} title="Disconnect Node" message="End your secure session with the global ledger?" confirmButtonText="Terminate" />
             {isRadarOpen && currentUser && <RadarModal isOpen={isRadarOpen} onClose={() => setIsRadarOpen(false)} currentUser={currentUser} onViewProfile={handleViewProfile} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(currentUser, target); setViewingProfileId(null); setChatTarget(convo); } }} />}
           </div>
       )}

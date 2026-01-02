@@ -15,20 +15,25 @@ interface State {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-// Fix: Explicitly extend React.Component from the react library to ensure props and setState are correctly inherited
+// Fix: Explicitly extend React.Component to ensure internal properties like setState and props are visible to TypeScript
 export class ErrorBoundary extends React.Component<Props, State> {
+  // Fix: Explicitly declare and initialize state property to resolve "Property 'state' does not exist" errors
   public state: State = {
     hasError: false,
     error: null,
     errorInfo: null
   };
 
+  constructor(props: Props) {
+    super(props);
+  }
+
   public static getDerivedStateFromError(error: Error): State {
     // Update state so the next render will show the fallback UI.
     return { hasError: true, error, errorInfo: null };
   }
 
-  // Fix: setState is now correctly accessible from the React.Component base class
+  // Fix: setState is a method inherited from the React.Component base class
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error, errorInfo);
     this.setState({ 
@@ -43,6 +48,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
   };
 
   public render() {
+    // Correctly access the state property inherited from Component
     const { hasError, error } = this.state;
 
     if (hasError) {
@@ -66,14 +72,14 @@ export class ErrorBoundary extends React.Component<Props, State> {
                 onClick={this.handleReset}
                 className="w-full py-6 bg-white text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-xs shadow-xl active:scale-95 transition-all flex justify-center items-center gap-3"
             >
-                <RotateCwIcon className="h-5 w-5" /> Reset Protocol State
+                <RotateCwIcon className="h-4 w-4" /> Reset Protocol State
             </button>
           </div>
         </div>
       );
     }
 
-    // Fix: Access children via this.props which is now correctly inherited from React.Component
+    // Fix: Access props correctly from the inherited React.Component base class
     return this.props.children;
   }
 }

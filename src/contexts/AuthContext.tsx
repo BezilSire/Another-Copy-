@@ -8,16 +8,19 @@ import { auth, db } from '../services/firebase';
 import { User, Agent, NewPublicMemberData } from '../types';
 import { generateReferralCode, generateAgentCode } from '../utils';
 
+type LoginCredentials = { email: string; password: string };
+type AgentSignupCredentials = Pick<Agent, 'name' | 'email' | 'circle'> & { password: string };
+
 interface AuthContextType {
   currentUser: User | null;
   firebaseUser: FirebaseUser | null;
   isLoadingAuth: boolean;
   isProcessingAuth: boolean;
   isSovereignLocked: boolean;
-  login: (credentials: { email: string; password: string }) => Promise<void>;
+  login: (credentials: LoginCredentials) => Promise<void>;
   loginAnonymously: (displayName: string) => Promise<void>;
   logout: () => Promise<void>;
-  agentSignup: (credentials: any) => Promise<void>;
+  agentSignup: (credentials: AgentSignupCredentials) => Promise<void>;
   publicMemberSignup: (data: NewPublicMemberData, password: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   updateUser: (updatedUser: Partial<User> & { isCompletingProfile?: boolean }) => Promise<void>;
@@ -37,7 +40,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const { addToast } = useToast();
   const syncTimeoutRef = useRef<any>(null);
 
-  // RULE OF LAW: Silent State Healing
+  // RULE OF LAW: Non-Blocking Identity Pulse
   const syncIdentity = useCallback(async (uid: string) => {
     try {
         const userDocRef = doc(db, 'users', uid);
@@ -47,7 +50,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
             setCurrentUser(userData);
             
-            // Re-anchor vault if cloud holds the mirror
+            // Mirror vault locally if cloud holds the anchor
             const serverVault = (userData as any).encryptedVault;
             if (serverVault && !cryptoService.hasVault()) {
                 cryptoService.injectVault(serverVault);
@@ -57,6 +60,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
             setIsSovereignLocked(hasLocalVault && !isUnlocked);
             return true;
+        } else {
+            // Self-Heal: Check members registry if user doc is missing
+            const memberQuery = query(collection(db, 'members'), where('uid', '==', uid), limit(1));
+            const memberSnap = await getDocs(memberQuery);
+            if (!memberSnap.empty) {
+                // Member exists but user doc is missing - could be a sync latency
+                return false;
+            }
         }
         return false;
     } catch (e) {
@@ -89,7 +100,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             return;
         }
 
-        // Silent Synchronization heartbeat
+        // Silent Heartbeat Sync
         const userDocRef = doc(db, 'users', user.uid);
         userDocListener = onSnapshot(userDocRef, (userDoc) => {
           if (userDoc.exists()) {
@@ -104,11 +115,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const hasLocalVault = cryptoService.hasVault();
             const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
             setIsSovereignLocked(hasLocalVault && !isUnlocked);
+            
             setIsLoadingAuth(false);
             setIsProcessingAuth(false);
           } else {
-             // If doc doesn't exist yet, we stay in loading state while background creation finishes
-             // rather than showing an error.
+             // Resilience Pulse
              syncIdentity(user.uid);
           }
         });
@@ -127,13 +138,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     };
   }, [syncIdentity]);
 
-  const login = useCallback(async (credentials: any) => {
+  const login = useCallback(async (credentials: LoginCredentials) => {
     setIsProcessingAuth(true);
     try {
       await api.login(credentials.email, credentials.password);
     } catch (error: any) {
       setIsProcessingAuth(false); 
-      addToast(error.message || 'Handshake failed', 'error');
+      addToast(error.message || 'Identity Handshake Failed', 'error');
       throw error;
     }
   }, [addToast]);
@@ -145,7 +156,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await signInAnonymously(auth);
     } catch (error: any) {
         setIsProcessingAuth(false);
-        addToast("Bridge access restricted.", "error");
+        addToast("Bridge access failed.", "error");
     }
   }, [addToast]);
 
@@ -156,9 +167,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           sessionStorage.setItem('ugc_node_unlocked', 'true');
           setIsSovereignLocked(false);
           setIsProcessingAuth(false);
+          addToast("Identity Verified.", "success");
       } catch (err) {
           setIsProcessingAuth(false);
-          addToast("Node signature verification failed.", "error");
+          addToast("Verification failed.", "error");
       }
   }, [addToast]);
 
@@ -171,7 +183,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     await api.logout();
   }, [currentUser]);
 
-  const agentSignup = useCallback(async (credentials: any) => {
+  const agentSignup = useCallback(async (credentials: AgentSignupCredentials) => {
     setIsProcessingAuth(true);
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
@@ -266,7 +278,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const sendPasswordReset = useCallback(async (email: string) => {
     try {
         await api.sendPasswordReset(email);
-        addToast(`State recovery dispatched.`, 'success');
+        addToast(`Recovery dispatched.`, 'success');
     } catch (error: any) {
         addToast(error.message, "error");
     }
@@ -277,9 +289,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
         const { isCompletingProfile, ...userData } = updatedData;
         await api.updateUser(currentUser.id, userData);
-        if (!isCompletingProfile) addToast('Protocol state synced.', 'success');
+        if (!isCompletingProfile) addToast('Identity updated.', 'success');
     } catch (error: any) {
-        addToast('State sync failure.', 'error');
+        addToast('Update failed.', 'error');
     }
   }, [currentUser, addToast]);
 
