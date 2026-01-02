@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -70,14 +69,7 @@ const App: React.FC = () => {
   const [chatTarget, setChatTarget] = useState<Conversation | 'main' | null>(null);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const [isRadarOpen, setIsRadarOpen] = useState(false);
-  const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
   const [forceView, setForceView] = useState<string | null>(null);
-
-  useEffect(() => {
-      const params = new URLSearchParams(window.location.search);
-      const joinId = params.get('join');
-      if (joinId) setActiveMeetingId(joinId);
-  }, []);
 
   useEffect(() => {
     if (currentUser && !firebaseUser?.isAnonymous) {
@@ -100,11 +92,13 @@ const App: React.FC = () => {
   const renderMainContent = () => {
     if (isBooting) return null;
     
+    // 1. Handle Sovereign PIN Locks
     if (isSovereignLocked || (cryptoService.hasVault() && !sessionStorage.getItem('ugc_node_unlocked'))) {
         if (isRecovering) return <div className="flex-1 flex flex-col justify-center items-center px-4 min-h-screen bg-black"><RecoveryProtocol onBack={() => setIsRecovering(false)} onComplete={handleSecurityRecoveryComplete} /></div>;
         return <div className="flex-1 flex flex-col justify-center items-center px-4 min-h-screen bg-black"><PinVaultLogin onUnlock={unlockSovereignSession} onReset={() => setIsRecovering(true)} /></div>;
     }
 
+    // 2. Main Authenticated Interface
     if (currentUser) {
         if (chatTarget) return <ChatsPage user={currentUser} initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null} onClose={() => setChatTarget(null)} onViewProfile={handleViewProfile} onNewMessageClick={() => {}} onNewGroupClick={() => {}} />;
         if (viewingProfileId) return <div className="main-container py-10"><PublicProfile userId={viewingProfileId} currentUser={currentUser} onBack={() => setViewingProfileId(null)} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(currentUser, target); setViewingProfileId(null); setChatTarget(convo); } }} onViewProfile={(id) => setViewingProfileId(id)} isAdminView={currentUser.role === 'admin'} /></div>;
@@ -116,7 +110,8 @@ const App: React.FC = () => {
         return <MemberDashboard user={currentUser as MemberUser} onUpdateUser={updateUser} unreadCount={unreadNotificationCount} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={handleViewProfile} forcedView={forceView} clearForcedView={() => setForceView(null)} />;
     }
     
-    if (isLoadingAuth || isProcessingAuth) {
+    // 3. Flawless Synchronization State (No Error Screens)
+    if (isLoadingAuth || isProcessingAuth || firebaseUser) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-black p-10 text-center animate-fade-in">
                 <div className="relative mb-8">
@@ -125,29 +120,10 @@ const App: React.FC = () => {
                         <div className="w-2.5 h-2.5 bg-brand-gold rounded-full animate-ping"></div>
                     </div>
                 </div>
-                <div className="text-[10px] uppercase font-black tracking-[0.5em] text-white/30 font-mono">Synchronizing_Protocol_State</div>
-            </div>
-        );
-    }
-    
-    if (firebaseUser) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-black p-6 text-center animate-fade-in">
-                <div className="module-frame glass-module p-10 sm:p-16 rounded-[4rem] border-red-500/20 shadow-premium max-w-md w-full relative">
-                    <AlertTriangleIcon className="h-16 w-16 text-brand-gold mx-auto mb-10 opacity-60" />
-                    <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 leading-none gold-text">Resync Required</h2>
-                    <p className="text-sm text-gray-400 leading-loose uppercase font-black tracking-widest opacity-60 mb-10">
-                        Identity authenticated via cloud, but protocol handshake is latent.
-                    </p>
-                    <div className="flex flex-col gap-4">
-                        <button 
-                            onClick={refreshIdentity} 
-                            disabled={isProcessingAuth}
-                            className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-3"
-                        >
-                            {isProcessingAuth ? <LoaderIcon className="h-4 w-4 animate-spin" /> : <><RotateCwIcon className="h-4 w-4" /> Force Re-Anchor</>}
-                        </button>
-                        <button onClick={confirmLogout} className="w-full py-4 text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-widest transition-colors">Abort Session</button>
+                <div className="space-y-4">
+                    <div className="text-[10px] uppercase font-black tracking-[0.5em] text-white/30 font-mono">Synchronizing_Protocol_State</div>
+                    <div className="w-48 h-1 bg-white/5 mx-auto rounded-full overflow-hidden">
+                        <div className="h-full bg-brand-gold/40 animate-scan-move"></div>
                     </div>
                 </div>
             </div>

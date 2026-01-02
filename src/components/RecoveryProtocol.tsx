@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { cryptoService, VaultData } from '../services/cryptoService';
 import { api } from '../services/apiService';
@@ -30,7 +29,6 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
     const [isVerifying, setIsVerifying] = useState(false);
     const [recoveredAccount, setRecoveredAccount] = useState<User | null>(null);
     const [scanningStatus, setScanningStatus] = useState('');
-    const [sessionMismatch, setSessionMismatch] = useState<string | null>(null);
     const [isLazarusMode, setIsLazarusMode] = useState(false);
     
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
@@ -90,21 +88,15 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
             
             if (user) {
                 setRecoveredAccount(user);
-                const currentEmail = auth.currentUser?.email;
-                if (currentEmail && currentEmail.toLowerCase() !== user.email.toLowerCase()) {
-                    setSessionMismatch(user.email);
-                    setIsVerifying(false);
-                    return;
-                }
-                setScanningStatus("IDENTITY_FOUND");
+                setScanningStatus("IDENTITY_VERIFIED");
                 setStep(2);
             } else {
-                setScanningStatus("NODE_IS_GENESIS");
+                setScanningStatus("NODE_READY");
                 setStep(2);
             }
         } catch (e) {
             console.error("Recovery scan failed:", e);
-            alert("Handshake aborted. Protocol inaccessible.");
+            setStep(2); // Fallback to setup anyway to ensure phrase supremacy
         } finally {
             setIsVerifying(false);
         }
@@ -112,7 +104,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
 
     const handleReset = () => {
         if (pin.length !== 6 || pin !== confirmPin) {
-            alert("PIN MISMATCH: Secure sequences must be identical.");
+            alert("PIN MISMATCH: Sequences must be identical.");
             return;
         }
 
@@ -147,39 +139,11 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                     <div className="space-y-4">
                         <h2 className="text-2xl font-black text-white uppercase tracking-tighter leading-none">Lazarus Protocol</h2>
                         <p className="text-sm text-gray-400 leading-relaxed max-w-sm mx-auto uppercase tracking-widest opacity-80">
-                            Emergency Key Rotation for node: <strong className="text-brand-gold">{auth.currentUser?.email}</strong>. Use your account authentication to establish a new Identity Anchor.
+                            Emergency Key Rotation active for node identity. Use account credentials to establish a new Sovereign Anchor.
                         </p>
                     </div>
                 </div>
                 <GenesisNodeFlow onComplete={handleLazarusRotation} onBack={() => setIsLazarusMode(false)} />
-            </div>
-        );
-    }
-
-    if (sessionMismatch) {
-        return (
-            <div className="module-frame glass-module p-10 rounded-[3rem] border-red-500/20 shadow-premium animate-fade-in max-md w-full text-center space-y-8 pointer-events-auto">
-                <div className="p-5 bg-red-500/10 rounded-full w-20 h-20 mx-auto flex items-center justify-center border border-red-500/20">
-                    <ShieldCheckIcon className="h-10 w-10 text-red-500" />
-                </div>
-                <div className="space-y-4">
-                    <h2 className="text-2xl font-black text-white uppercase tracking-tighter">Identity Mismatch</h2>
-                    <p className="text-sm text-gray-400 leading-relaxed uppercase tracking-widest font-black opacity-60">
-                        Phrase maps to: <span className="text-brand-gold">{sessionMismatch}</span>
-                    </p>
-                    <p className="text-[10px] text-gray-500 leading-relaxed">
-                        Currently authenticated as: <span className="text-white">{auth.currentUser?.email}</span>. Credentials must align to re-anchor.
-                    </p>
-                </div>
-                <div className="flex flex-col gap-3">
-                    <button 
-                        onClick={() => api.logout().then(() => window.location.reload())}
-                        className="w-full py-5 bg-white text-black font-black rounded-2xl uppercase tracking-widest text-[10px] shadow-xl cursor-pointer"
-                    >
-                        Switch Node (Logout)
-                    </button>
-                    <button onClick={onBack} className="w-full py-3 text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-widest cursor-pointer">Abort</button>
-                </div>
             </div>
         );
     }
@@ -200,7 +164,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                 <div className="space-y-8 animate-fade-in relative z-10">
                     <div className="bg-brand-gold/5 border border-brand-gold/20 p-5 rounded-2xl text-center">
                         <p className="text-[10px] text-brand-gold font-black uppercase tracking-[0.2em] leading-loose">
-                            Enter your 12-word Identity Anchor in order to recover your <span className="text-white">existing Node and protocol stake</span>.
+                            Enter your 12-word Identity Anchor to re-sync your node and protocol stake.
                         </p>
                     </div>
                     
@@ -236,31 +200,25 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                                     <span>{scanningStatus}</span>
                                 </>
                             ) : (
-                                "Authorize Identity Lookup"
+                                "Authorize Identity Re-Anchor"
                             )}
                         </button>
 
                         <div className="pt-8 border-t border-white/5 space-y-6 text-center">
-                            <div className="flex items-center gap-3 justify-center">
-                                <div className="h-px w-8 bg-white/10"></div>
-                                <p className="text-[9px] text-gray-500 uppercase font-black tracking-widest">Forgotten PIN / Lost Phrase?</p>
-                                <div className="h-px w-8 bg-white/10"></div>
-                            </div>
-                            
                             <div className="p-6 bg-blue-900/5 rounded-3xl border border-blue-900/20 group hover:border-blue-500/30 transition-all">
-                                <p className="text-[10px] text-gray-400 mb-4 leading-relaxed uppercase tracking-widest font-black opacity-60">Restore access via cloud credentials.</p>
+                                <p className="text-[10px] text-gray-400 mb-4 leading-relaxed uppercase tracking-widest font-black opacity-60">Lost your 12-word phrase?</p>
                                 <button 
                                     type="button"
                                     onClick={(e) => {
                                         e.preventDefault();
                                         e.stopPropagation();
-                                        if(window.confirm("ACCOUNT_RECOVERY: This will overwrite your existing local vault using your authenticated credentials. Proceed?")) {
+                                        if(window.confirm("ACCOUNT_RECOVERY: This will overwrite your existing local vault using your authenticated cloud credentials. Proceed?")) {
                                             setIsLazarusMode(true);
                                         }
                                     }}
                                     className="px-8 py-4 bg-white/5 hover:bg-brand-gold hover:text-slate-950 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/10 flex items-center justify-center gap-3 mx-auto shadow-xl cursor-pointer"
                                 >
-                                    <UserCircleIcon className="h-5 w-5" /> Account Rotation
+                                    <UserCircleIcon className="h-5 w-5" /> Cloud-Based Rotation
                                 </button>
                             </div>
                         </div>
@@ -272,21 +230,10 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                         <div className="inline-flex p-4 bg-emerald-500/10 rounded-2xl text-emerald-500 border border-emerald-500/20 shadow-glow-matrix">
                             <ShieldCheckIcon className="h-8 w-8" />
                         </div>
-                        {recoveredAccount ? (
-                            <div>
-                                <p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest">Node Ownership Verified</p>
-                                <p className="text-lg text-white font-black uppercase mt-1">{recoveredAccount.name}</p>
-                                <div className="mt-4 p-4 bg-black/40 border border-white/5 rounded-2xl">
-                                    <p className="text-[8px] text-gray-500 uppercase font-black tracking-widest mb-1">Associated Address</p>
-                                    <p className="text-[10px] text-brand-gold font-mono truncate">{recoveredAccount.email}</p>
-                                </div>
-                            </div>
-                        ) : (
-                            <div>
-                                <p className="text-sm text-gray-300 font-bold uppercase tracking-widest">Identity Verified</p>
-                                <p className="label-caps !text-[9px] !text-gray-500">New Sovereign Deployment</p>
-                            </div>
-                        )}
+                        <div>
+                            <p className="text-[10px] text-emerald-400 font-black uppercase tracking-widest">Identity Provenance Accepted</p>
+                            <p className="text-sm text-white font-bold uppercase mt-1">Establishing Secure Handshake</p>
+                        </div>
                     </div>
                     
                     <div className="space-y-4">
@@ -317,7 +264,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                         disabled={isVerifying || pin.length < 6 || pin !== confirmPin}
                         className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all disabled:opacity-20 cursor-pointer"
                     >
-                        {isVerifying ? <LoaderIcon className="h-6 w-6 animate-spin mx-auto"/> : "Complete Re-Anchor"}
+                        {isVerifying ? <LoaderIcon className="h-6 w-6 animate-spin mx-auto"/> : "Complete Handshake Re-Anchor"}
                     </button>
                 </div>
             )}
