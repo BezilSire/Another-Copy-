@@ -109,7 +109,7 @@ export const api = {
         return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as User;
     },
     updateUser: async (uid: string, data: Partial<User>) => {
-        // Law: All major identity updates (like public key anchoring) get backed up to the sovereign ledger
+        // Sovereignty Law: Dispatch identity state to ledger mirror if anchoring
         if (data.publicKey || data.isProfileComplete) {
             try {
                 await sovereignService.dispatchIdentity(uid, { ...data, updatedAt: Date.now() });
@@ -139,7 +139,7 @@ export const api = {
     requestCommissionPayout: (a: Agent, name: string, phone: string, amount: number) => addDoc(payoutsCollection, { userId: a.id, userName: a.name, type: 'referral', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp() }),
 
     processUbtTransaction: async (transaction: UbtTransaction) => {
-        // Law 1: Anchoring to Sovereign Ledger (GitHub/IPFS)
+        // Law 1: Anchoring to Sovereign Ledger (GitHub Mirror)
         let ledgerUrl = "";
         try {
             const githubUrl = await sovereignService.dispatchTransaction(transaction);
@@ -148,12 +148,12 @@ export const api = {
             throw new Error("SOVEREIGN_HANDSHAKE_FAILED: Could not commit to global ledger. Transaction aborted for safety.");
         }
 
-        // Law 2: Database Mirroring
+        // Law 2: Cloud State Reconciliation
         return runTransaction(db, async (t) => {
             const econRef = doc(globalsCollection, 'economy');
             const floatRef = doc(vaultsCollection, 'FLOAT');
-            const isFloatSender = transaction.senderId === 'FLOAT';
-            const senderRef = isFloatSender ? floatRef : doc(usersCollection, transaction.senderId);
+            const isFloatSender = ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(transaction.senderId);
+            const senderRef = isFloatSender ? doc(vaultsCollection, transaction.senderId) : doc(usersCollection, transaction.senderId);
             const receiverRef = doc(usersCollection, transaction.receiverId);
             
             const [econSnap, senderSnap] = await Promise.all([t.get(econRef), t.get(senderRef)]);
@@ -172,6 +172,14 @@ export const api = {
                 ledger_url: ledgerUrl 
             });
         }); 
+    },
+
+    getUserLedger: async (uid: string) => {
+        const q1 = query(ledgerCollection, where('senderId', '==', uid));
+        const q2 = query(ledgerCollection, where('receiverId', '==', uid));
+        const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+        const res = [...s1.docs, ...s2.docs].map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
+        return Array.from(new Map(res.map(i => [i.id, i])).values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     },
 
     applyForExecutive: async (candidateData: Omit<Candidate, 'id' | 'voteCount' | 'votes' | 'createdAt' | 'status'>) => {
@@ -467,13 +475,6 @@ export const api = {
     getPublicLedger: async (l: number = 200) => {
         const s = await getDocs(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)));
         return s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
-    },
-    getUserLedger: async (uid: string) => {
-        const q1 = query(ledgerCollection, where('senderId', '==', uid));
-        const q2 = query(ledgerCollection, where('receiverId', '==', uid));
-        const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-        const res = [...s1.docs, ...s2.docs].map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
-        return Array.from(new Map(res.map(i => [i.id, i])).values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     },
     vouchForCitizen: (transaction: UbtTransaction) => runTransaction(db, async (t) => {
         const receiverRef = doc(usersCollection, transaction.receiverId);

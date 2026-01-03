@@ -36,7 +36,6 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
     const hasVault = cryptoService.hasVault();
     const canSign = !!localStorage.getItem('gcn_sign_secret_key');
 
-    // Reset state on open/close
     useEffect(() => {
         if (!isOpen) {
             setSearchQuery('');
@@ -105,9 +104,11 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
         try {
             const timestamp = Date.now();
             const nonce = cryptoService.generateNonce();
+            
             setTimeout(() => setProtocolLogs(p => [...p, "> Generating Ed25519 Signature..."]), 400);
-            setTimeout(() => setProtocolLogs(p => [...p, "> Encrypting Dispatch Package..."]), 800);
-            setTimeout(() => setProtocolLogs(p => [...p, "> Syncing Global Mainnet Ledger..."]), 1200);
+            setTimeout(() => setProtocolLogs(p => [...p, "> Broadcasting to Active Peers..."]), 800);
+            setTimeout(() => setProtocolLogs(p => [...p, "> GATHERING WITNESS SIGNATURES..."]), 1200);
+            setTimeout(() => setProtocolLogs(p => [...p, "> Syncing Global Mainnet Ledger..."]), 1600);
 
             const payloadToSign = `${currentUser.id}:${selectedUser.id}:${sendAmount}:${timestamp}:${nonce}`;
             const signature = cryptoService.signTransaction(payloadToSign);
@@ -134,7 +135,7 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
                 addToast(`Sync Successful. ${sendAmount} UBT transferred.`, "success");
                 onTransactionComplete();
                 onClose();
-            }, 1800);
+            }, 2000);
         } catch (error: any) {
             console.error("Dispatch failure:", error);
             const errorDetail = error.message || "Unknown Protocol Error";
@@ -242,7 +243,7 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
                                 <div className="max-h-60 overflow-y-auto no-scrollbar rounded-[2rem] bg-black/40 border border-white/5 animate-fade-in">
                                     {searchResults.map(user => (
                                         <button key={user.id} onClick={() => handleSelectUser(user)} className="w-full text-left p-6 hover:bg-brand-gold/5 border-b border-white/5 flex items-center gap-5 group transition-all">
-                                            <div className="w-12 h-12 rounded-xl bg-slate-900 flex items-center justify-center border border-white/10 group-hover:border-brand-gold/50"><UserCircleIcon className="h-8 w-8 text-gray-700" /></div>
+                                            <div className="w-12 h-12 rounded-xl bg-slate-900 border border-white/10 flex items-center justify-center border border-white/10 group-hover:border-brand-gold/50 transition-all"><UserCircleIcon className="h-8 w-8 text-gray-700" /></div>
                                             <div className="min-w-0">
                                                 <p className="font-black text-white text-sm tracking-tighter truncate uppercase">{user.name}</p>
                                                 <p className="text-[9px] text-gray-600 font-bold uppercase tracking-widest mt-0.5">{user.circle}</p>

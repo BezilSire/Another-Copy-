@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { User, UbtTransaction } from '../types';
 import { api } from '../services/apiService';
@@ -15,7 +16,6 @@ export const ProtocolReconciliation: React.FC<{ user: User, onClose: () => void 
 
     const addLog = (msg: string) => setLogs(prev => [...prev, `> ${msg}`]);
 
-    // Auto-scroll logs
     useEffect(() => {
         if (scrollRef.current) {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -28,7 +28,7 @@ export const ProtocolReconciliation: React.FC<{ user: User, onClose: () => void 
             addLog("FETCHING GLOBAL MAINNET EVENT STREAM...");
             
             try {
-                const ledger = await api.getUserLedger(user.id); 
+                const ledger = await api.getPublicLedger(200); 
                 addLog(`BUFFERED ${ledger.length} RELEVANT BLOCKS.`);
                 
                 let runningBalance = Number(user.initialUbtStake || 0);
@@ -37,6 +37,7 @@ export const ProtocolReconciliation: React.FC<{ user: User, onClose: () => void 
                 addLog(`ANCHORED GENESIS STATE: ${runningBalance.toFixed(4)} UBT.`);
 
                 for (const tx of ledger) {
+                    // Authority bypass logic for bootstrap
                     const isAuthorityBlock = ['GENESIS', 'FLOAT', 'SYSTEM', 'REDEMPTION'].includes(tx.senderId) || 
                                            tx.type?.includes('BRIDGE') || 
                                            tx.type === 'SYSTEM_MINT';
@@ -60,6 +61,7 @@ export const ProtocolReconciliation: React.FC<{ user: User, onClose: () => void 
                         addLog(`!! CRITICAL: Signature Breach in Block ${tx.id.substring(0,8)}`);
                     }
                     
+                    // Throttle for visual progress
                     if (verifiedCount % 5 === 0) await new Promise(r => setTimeout(r, 10));
                 }
 
@@ -88,7 +90,6 @@ export const ProtocolReconciliation: React.FC<{ user: User, onClose: () => void 
 
     return (
         <div className="fixed inset-0 z-[100] bg-black flex flex-col font-mono overflow-hidden">
-            {/* COMPACT TOP HEADER */}
             <div className="p-4 sm:p-6 border-b border-white/5 bg-slate-900/50 backdrop-blur-xl flex justify-between items-center">
                 <div>
                     <h2 className="text-sm font-black text-brand-gold uppercase tracking-[0.3em]">Identity Audit</h2>
@@ -97,7 +98,6 @@ export const ProtocolReconciliation: React.FC<{ user: User, onClose: () => void 
                 <button onClick={onClose} className="p-2 bg-white/5 hover:bg-white/10 rounded-full text-gray-400 transition-all">✕</button>
             </div>
 
-            {/* RESULTS VIEW - FIXED AT TOP */}
             <div className="p-4 sm:p-6 space-y-4 bg-black">
                 <div className="grid grid-cols-2 gap-4">
                     <div className="p-4 bg-slate-900 rounded-2xl border border-white/5 relative overflow-hidden">
@@ -119,11 +119,10 @@ export const ProtocolReconciliation: React.FC<{ user: User, onClose: () => void 
                     disabled={isAuditRunning}
                     className={`w-full py-4 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] transition-all active:scale-95 shadow-lg ${isAuditRunning ? 'bg-white/5 text-gray-700' : isIntegrityValid === false ? 'bg-red-600 text-white shadow-red-900/40' : 'bg-brand-gold text-slate-950 shadow-glow-gold'}`}
                 >
-                    {isAuditRunning ? 'Scanning Global Ledger...' : isIntegrityValid === false ? 'Contact Root Authority' : 'Re-Authorize Identity'}
+                    {isAuditRunning ? 'Scanning Global Ledger...' : isIntegrityValid === false ? 'Contact Root Authority' : 'Authorized Return'}
                 </button>
             </div>
 
-            {/* DIAGNOSTIC STREAM - FILLS REMAINING SPACE */}
             <div className="flex-1 bg-black border-t border-white/5 flex flex-col min-h-0">
                 <div className="px-6 py-2 border-b border-white/5 flex justify-between items-center">
                     <span className="text-[7px] font-black text-gray-600 uppercase tracking-[0.4em]">Live Diagnostic Trace</span>
@@ -147,7 +146,6 @@ export const ProtocolReconciliation: React.FC<{ user: User, onClose: () => void 
                 </div>
             </div>
 
-            {/* FOOTER DOCS */}
             <div className="p-4 bg-slate-900 border-t border-white/5 flex justify-between items-center">
                  <p className="text-[7px] text-gray-700 uppercase tracking-[0.6em] font-black">Mainnet Beta &bull; Node_Local</p>
                  {!isAuditRunning && isIntegrityValid && (
