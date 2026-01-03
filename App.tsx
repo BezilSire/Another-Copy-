@@ -140,7 +140,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-black selection:bg-brand-gold/30">
+    <div className={`flex flex-col min-h-screen selection:bg-brand-gold/30 ${isExplorer ? 'bg-slate-50' : 'bg-black'}`}>
       {isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
       {!isBooting && (
           <div className="flex-1 flex flex-col animate-fade-in">
