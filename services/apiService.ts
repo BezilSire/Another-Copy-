@@ -1,3 +1,4 @@
+
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -41,6 +42,7 @@ import {
 } from 'firebase/database';
 import { auth, db, rtdb } from './firebase';
 import { generateWelcomeMessage } from './geminiService';
+import { sovereignService } from './sovereignService';
 import { 
     User, Agent, Member, NewMember, MemberUser, Post,
     Conversation, Message, Notification, Activity,
@@ -106,7 +108,17 @@ export const api = {
         if (snapshot.empty) return null;
         return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as User;
     },
-    updateUser: (uid: string, data: Partial<User>) => updateDoc(doc(db, 'users', uid), data),
+    updateUser: async (uid: string, data: Partial<User>) => {
+        // Law: All major identity updates (like public key anchoring) get backed up to the sovereign ledger
+        if (data.publicKey || data.isProfileComplete) {
+            try {
+                await sovereignService.dispatchIdentity(uid, { ...data, updatedAt: Date.now() });
+            } catch (e) {
+                console.warn("SOVEREIGN_SYNC_DELAYED: Identity anchored to cloud only for now.");
+            }
+        }
+        return setDoc(doc(db, 'users', uid), data, { merge: true });
+    },
     
     getUsersByUids: async (uids: string[]): Promise<User[]> => {
         if (uids.length === 0) return [];
@@ -127,6 +139,16 @@ export const api = {
     requestCommissionPayout: (a: Agent, name: string, phone: string, amount: number) => addDoc(payoutsCollection, { userId: a.id, userName: a.name, type: 'referral', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp() }),
 
     processUbtTransaction: async (transaction: UbtTransaction) => {
+        // Law 1: Anchoring to Sovereign Ledger (GitHub/IPFS)
+        let ledgerUrl = "";
+        try {
+            const githubUrl = await sovereignService.dispatchTransaction(transaction);
+            if (githubUrl) ledgerUrl = githubUrl;
+        } catch (e) {
+            throw new Error("SOVEREIGN_HANDSHAKE_FAILED: Could not commit to global ledger. Transaction aborted for safety.");
+        }
+
+        // Law 2: Database Mirroring
         return runTransaction(db, async (t) => {
             const econRef = doc(globalsCollection, 'economy');
             const floatRef = doc(vaultsCollection, 'FLOAT');
@@ -138,10 +160,17 @@ export const api = {
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
             const balKey = isFloatSender ? 'balance' : 'ubtBalance';
             const senderBal = senderSnap.data()?.[balKey] || 0;
+            
             if (senderBal < transaction.amount) throw new Error("INSUFFICIENT_LIQUIDITY");
+            
             t.update(senderRef, { [balKey]: increment(-transaction.amount) });
             t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
-            t.set(doc(ledgerCollection, transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+            t.set(doc(ledgerCollection, transaction.id), { 
+                ...transaction, 
+                priceAtSync: currentPrice, 
+                serverTimestamp: serverTimestamp(),
+                ledger_url: ledgerUrl 
+            });
         }); 
     },
 
@@ -246,6 +275,11 @@ export const api = {
     joinMeeting: async (id: string): Promise<Meeting | null> => {
         const s = await getDoc(doc(meetingsCollection, id));
         return s.exists() ? { id: s.id, ...s.data() } as Meeting : null;
+    },
+    getHostActiveMeetings: async (uid: string): Promise<Meeting[]> => {
+        const q = query(meetingsCollection, where('hostId', '==', uid), where('expiresAt', '>', Timestamp.now()));
+        const s = await getDocs(q);
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as Meeting));
     },
     updateMeetingSignal: (id: string, data: Partial<Meeting>) => updateDoc(doc(meetingsCollection, id), data),
     updateParticipantStatus: (id: string, uid: string, status: ParticipantStatus | null) => updateDoc(doc(meetingsCollection, id), { [`participants.${uid}`]: status }),

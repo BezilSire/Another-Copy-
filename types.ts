@@ -291,7 +291,6 @@ export interface TensionPoint {
 }
 
 // --- SOCIAL LEDGER ---
-// Fix: Added missing Post interface to support community dispatch features across the network.
 export interface Post {
   id: string;
   authorId: string;
@@ -326,6 +325,8 @@ export interface UbtTransaction {
     type?: 'P2P_HANDSHAKE' | 'VOUCH_ANCHOR' | 'REDEMPTION' | 'SYSTEM_MINT' | 'VAULT_SYNC' | 'FIAT_BRIDGE' | 'INTENT_PRIME' | 'SIMULATION_MINT' | 'credit' | 'debit';
     protocol_mode: ProtocolMode; 
     reason?: string;
+    sovereign_id?: string; // GitHub/IPFS block ID
+    ledger_url?: string; // Link to public block
 }
 
 export type Transaction = UbtTransaction;
