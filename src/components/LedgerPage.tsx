@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/apiService';
 import { LoaderIcon } from './icons/LoaderIcon';
@@ -6,43 +7,48 @@ import { SearchIcon } from './icons/SearchIcon';
 import { formatTimeAgo } from '../utils';
 import { TreasuryVault, UbtTransaction, GlobalEconomy, PublicUserProfile } from '../types';
 import { useAuth } from '../contexts/AuthContext';
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 
 type ExplorerView = 'ledger' | 'account' | 'transaction';
 
 export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', value: string } }> = ({ initialTarget }) => {
     const { currentUser } = useAuth();
     
-    // Explorer State
     const [view, setView] = useState<ExplorerView>(initialTarget?.type === 'address' ? 'account' : initialTarget?.type === 'tx' ? 'transaction' : 'ledger');
     const [targetValue, setTargetValue] = useState<string>(initialTarget?.value || '');
     const [accountData, setAccountData] = useState<PublicUserProfile | null>(null);
     
-    // Data State
     const [transactions, setTransactions] = useState<UbtTransaction[]>([]);
     const [economy, setEconomy] = useState<GlobalEconomy | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Load Base Data
+    const isCleanProtocol = (tx: UbtTransaction): boolean => {
+        const isSim = tx.type === 'SIMULATION_MINT' || tx.id.startsWith('sim-');
+        return !isSim;
+    };
+
     useEffect(() => {
         let isMounted = true;
-        const loadBaseData = async () => {
-            setIsLoading(true);
-            try {
-                const [txs, econ] = await Promise.all([
-                    api.getPublicLedger(500),
-                    new Promise<GlobalEconomy | null>((resolve) => api.listenForGlobalEconomy(resolve, () => resolve(null)))
-                ]);
-                if (isMounted) {
-                    setTransactions(txs);
-                    setEconomy(econ as GlobalEconomy);
-                }
-            } finally {
-                if (isMounted) setIsLoading(false);
+        
+        // Economy listener
+        const unsubEcon = api.listenForGlobalEconomy((econ) => {
+            if (isMounted) setEconomy(econ);
+        });
+
+        // Global Ledger real-time listener
+        const unsubLedger = api.listenForPublicLedger((txs) => {
+            if (isMounted) {
+                setTransactions(txs.filter(isCleanProtocol));
+                setIsLoading(false);
             }
+        }, 500);
+
+        return () => { 
+            isMounted = false; 
+            unsubEcon(); 
+            unsubLedger();
         };
-        loadBaseData();
-        return () => { isMounted = false; };
     }, []);
 
     const navigateAccount = (address: string) => {
@@ -121,7 +127,10 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                                     </div>
                                 </td>
                                 <td className="px-8 py-6">
-                                    <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20">Finalized</span>
+                                    <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20 flex items-center gap-2">
+                                        <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></div>
+                                        Finalized
+                                    </span>
                                 </td>
                             </tr>
                         ))}
@@ -160,8 +169,8 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                 </div>
 
                 <div className="flex items-center gap-10 overflow-x-auto no-scrollbar whitespace-nowrap pt-4">
-                    <HudStat label="Equilibrium Price" value={`$${(economy?.ubt_to_usd_rate || 0).toFixed(6)}`} color="text-brand-gold" />
-                    <HudStat label="Sync Frequency" value="8s avg" color="text-gray-400" />
+                    <HudStat label="Equilibrium Price" value={`$${(economy?.ubt_to_usd_rate || 0.001).toFixed(6)}`} color="text-brand-gold" />
+                    <HudStat label="Sync Frequency" value="Real-time" color="text-emerald-500" />
                     <HudStat label="Ledger Depth" value={`#${transactions.length}`} color="text-gray-400" />
                     <div className="flex items-center gap-2 ml-auto">
                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>

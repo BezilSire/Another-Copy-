@@ -109,7 +109,6 @@ export const api = {
         return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as User;
     },
     updateUser: async (uid: string, data: Partial<User>) => {
-        // Sovereignty Law: Dispatch identity state to ledger mirror if anchoring
         if (data.publicKey || data.isProfileComplete) {
             try {
                 await sovereignService.dispatchIdentity(uid, { ...data, updatedAt: Date.now() });
@@ -139,7 +138,6 @@ export const api = {
     requestCommissionPayout: (a: Agent, name: string, phone: string, amount: number) => addDoc(payoutsCollection, { userId: a.id, userName: a.name, type: 'referral', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp() }),
 
     processUbtTransaction: async (transaction: UbtTransaction) => {
-        // Law 1: Anchoring to Sovereign Ledger (GitHub Mirror)
         let ledgerUrl = "";
         try {
             const githubUrl = await sovereignService.dispatchTransaction(transaction);
@@ -148,10 +146,8 @@ export const api = {
             throw new Error("SOVEREIGN_HANDSHAKE_FAILED: Could not commit to global ledger. Transaction aborted for safety.");
         }
 
-        // Law 2: Cloud State Reconciliation
         return runTransaction(db, async (t) => {
             const econRef = doc(globalsCollection, 'economy');
-            const floatRef = doc(vaultsCollection, 'FLOAT');
             const isFloatSender = ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(transaction.senderId);
             const senderRef = isFloatSender ? doc(vaultsCollection, transaction.senderId) : doc(usersCollection, transaction.senderId);
             const receiverRef = doc(usersCollection, transaction.receiverId);
@@ -333,6 +329,7 @@ export const api = {
     listenForPostsByAuthor: (authorId: string, cb: (posts: Post[]) => void, err?: any): Unsubscribe => onSnapshot(query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), err),
     listenForComments: (parentId: string, cb: (comments: Comment[]) => void, coll: 'posts' | 'proposals', err?: any): Unsubscribe => onSnapshot(query(collection(db, coll, parentId, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), err),
     listenForMultiSigProposals: (cb: (p: MultiSigProposal[]) => void): Unsubscribe => onSnapshot(query(multisigCollection, where('status', '==', 'pending')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as MultiSigProposal))), console.error),
+    listenForPublicLedger: (cb: (txs: UbtTransaction[]) => void, l: number = 200): Unsubscribe => onSnapshot(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction))), console.error),
 
     initializeTreasury: async (admin: Admin) => {
         const batch = writeBatch(db);

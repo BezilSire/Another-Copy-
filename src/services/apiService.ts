@@ -1,4 +1,3 @@
-
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -107,7 +106,6 @@ export const api = {
         if (snapshot.empty) return null;
         return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as User;
     },
-    // Fix: Using setDoc with merge: true to ensure resiliency if the document doesn't exist yet
     updateUser: (uid: string, data: Partial<User>) => setDoc(doc(db, 'users', uid), data, { merge: true }),
     
     getUsersByUids: async (uids: string[]): Promise<User[]> => {
@@ -145,6 +143,15 @@ export const api = {
             t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
             t.set(doc(ledgerCollection, transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         }); 
+    },
+
+    // Added getUserLedger to fix missing method error
+    getUserLedger: async (uid: string) => {
+        const q1 = query(ledgerCollection, where('senderId', '==', uid));
+        const q2 = query(ledgerCollection, where('receiverId', '==', uid));
+        const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+        const res = [...s1.docs, ...s2.docs].map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
+        return Array.from(new Map(res.map(i => [i.id, i])).values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     },
 
     applyForExecutive: async (candidateData: Omit<Candidate, 'id' | 'voteCount' | 'votes' | 'createdAt' | 'status'>) => {
@@ -225,6 +232,7 @@ export const api = {
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile)).filter(u => u.id !== currentUser.id);
     },
+    // Added resolveNodeIdentity to fix missing method error
     resolveNodeIdentity: async (identifier: string): Promise<PublicUserProfile | null> => {
         const userDoc = await getDoc(doc(usersCollection, identifier));
         if (userDoc.exists()) return { id: userDoc.id, ...userDoc.data() } as PublicUserProfile;
@@ -298,6 +306,8 @@ export const api = {
     listenForPostsByAuthor: (authorId: string, cb: (posts: Post[]) => void, err?: any): Unsubscribe => onSnapshot(query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), err),
     listenForComments: (parentId: string, cb: (comments: Comment[]) => void, coll: 'posts' | 'proposals', err?: any): Unsubscribe => onSnapshot(query(collection(db, coll, parentId, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), err),
     listenForMultiSigProposals: (cb: (p: MultiSigProposal[]) => void): Unsubscribe => onSnapshot(query(multisigCollection, where('status', '==', 'pending')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as MultiSigProposal))), console.error),
+    // Added listenForPublicLedger to fix missing method error
+    listenForPublicLedger: (cb: (txs: UbtTransaction[]) => void, l: number = 200): Unsubscribe => onSnapshot(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction))), console.error),
 
     initializeTreasury: async (admin: Admin) => {
         const batch = writeBatch(db);
@@ -441,13 +451,6 @@ export const api = {
         const s = await getDocs(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)));
         return s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
     },
-    getUserLedger: async (uid: string) => {
-        const q1 = query(ledgerCollection, where('senderId', '==', uid));
-        const q2 = query(ledgerCollection, where('receiverId', '==', uid));
-        const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-        const res = [...s1.docs, ...s2.docs].map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
-        return Array.from(new Map(res.map(i => [i.id, i])).values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
-    },
     vouchForCitizen: (transaction: UbtTransaction) => runTransaction(db, async (t) => {
         const receiverRef = doc(usersCollection, transaction.receiverId);
         const econRef = doc(globalsCollection, 'economy');
@@ -469,6 +472,7 @@ export const api = {
                 [vote === 'claimant' ? 'votesForClaimant' : 'votesForRespondent']: increment(1) 
             });
         }),
+    // Added processAdminHandshake to fix missing method error
     processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
         return runTransaction(db, async (t) => {
             const econRef = doc(globalsCollection, 'economy');
