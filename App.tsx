@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -16,6 +17,7 @@ import { LogoIcon } from './components/icons/LogoIcon';
 import { LoaderIcon } from './components/icons/LoaderIcon';
 import { cryptoService } from './services/cryptoService';
 import { RadarModal } from './components/RadarModal';
+import { LedgerPage } from './components/LedgerPage';
 
 const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [logs, setLogs] = useState<string[]>([]);
@@ -43,6 +45,9 @@ const App: React.FC = () => {
   const [isRadarOpen, setIsRadarOpen] = useState(false);
   const [forceView, setForceView] = useState<string | null>(null);
   
+  // Rule: Check if we are in Explorer Mode for ubuntium-scan.org
+  const isExplorer = process.env.SITE_MODE === 'EXPLORER';
+
   // Rule: Check session bypass on first mount
   const [hasSkippedProfile, setHasSkippedProfile] = useState(() => sessionStorage.getItem('ugc_skip_anchor') === 'true');
 
@@ -72,6 +77,11 @@ const App: React.FC = () => {
   
   const renderMainContent = () => {
     if (isBooting) return null;
+
+    // Protocol: Explorer Site Entry Point
+    if (isExplorer) {
+        return <LedgerPage />;
+    }
     
     // 1. Dashboard Ingress: Prioritize showing features as soon as we have any valid user state
     if (currentUser || firebaseUser) {
@@ -134,7 +144,7 @@ const App: React.FC = () => {
       {isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
       {!isBooting && (
           <div className="flex-1 flex flex-col animate-fade-in">
-            { (currentUser || firebaseUser) && !firebaseUser?.isAnonymous && (
+            { (currentUser || firebaseUser) && !firebaseUser?.isAnonymous && !isExplorer && (
                 <Header 
                     user={currentUser || { name: 'Citizen', role: 'member' } as any} 
                     onLogout={() => setIsLogoutConfirmOpen(true)} 
