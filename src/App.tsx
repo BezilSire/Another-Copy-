@@ -18,6 +18,7 @@ import { cryptoService } from './services/cryptoService';
 import { RadarModal } from './components/RadarModal';
 import { VideoMeeting } from './components/VideoMeeting';
 import { GuestMeetingPage } from './components/GuestMeetingPage';
+import { LedgerPage } from './components/LedgerPage';
 
 const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [logs, setLogs] = useState<string[]>([]);
@@ -37,7 +38,11 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 
 const App: React.FC = () => {
   const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser } = useAuth();
-  const [isBooting, setIsBooting] = useState(false); // Disabled per request
+  
+  // Rule: Detect Explorer Mode immediately to bypass all Auth delays
+  const isExplorer = process.env.SITE_MODE === 'EXPLORER';
+
+  const [isBooting, setIsBooting] = useState(!isExplorer); 
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<Conversation | 'main' | null>(null);
@@ -47,11 +52,6 @@ const App: React.FC = () => {
   const [forceView, setForceView] = useState<string | null>(null);
   
   const [hasSkippedProfile, setHasSkippedProfile] = useState(() => sessionStorage.getItem('ugc_skip_anchor') === 'true');
-
-  const handleSkipProfile = () => {
-      sessionStorage.setItem('ugc_skip_anchor', 'true');
-      setHasSkippedProfile(true);
-  };
 
   useEffect(() => {
       const params = new URLSearchParams(window.location.search);
@@ -72,12 +72,23 @@ const App: React.FC = () => {
       setIsLogoutConfirmOpen(false); 
       window.location.reload(); 
   };
+
+  const handleSkipProfile = () => {
+      sessionStorage.setItem('ugc_skip_anchor', 'true');
+      setHasSkippedProfile(true);
+  };
+  
   const handleOpenChat = () => setChatTarget('main');
   const handleOpenMeet = () => setForceView('meeting');
   const handleOpenVote = () => setForceView('governance');
   const handleViewProfile = (userId: string | null) => { setChatTarget(null); setViewingProfileId(userId); };
   
   const renderMainContent = () => {
+    // Protocol: Explorer Site Entry Point - Return immediately
+    if (isExplorer) {
+        return <LedgerPage />;
+    }
+
     if (isBooting) return null;
     
     if (firebaseUser?.isAnonymous) {
@@ -145,7 +156,7 @@ const App: React.FC = () => {
       {isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
       {!isBooting && (
           <div className="flex-1 flex flex-col animate-fade-in">
-            { (currentUser || firebaseUser) && !firebaseUser?.isAnonymous && (
+            { (currentUser || firebaseUser) && !firebaseUser?.isAnonymous && !isExplorer && (
                 <Header 
                     user={currentUser || { name: 'Citizen', role: 'member' } as any} 
                     onLogout={() => setIsLogoutConfirmOpen(true)} 

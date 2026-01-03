@@ -19,6 +19,8 @@ service cloud.firestore {
 
     // --- IDENTITY & WALLETS ---
     match /users/{userId} {
+      // Allow public GET for the Explorer to resolve names in the ledger
+      allow get: if true; 
       allow read: if isSignedIn(); 
       allow list: if isAdmin();
       allow create: if isMember() && request.auth.uid == userId;
@@ -31,7 +33,7 @@ service cloud.firestore {
 
     // --- GOVERNANCE ---
     match /candidates/{candidateId} {
-      allow read, list: if isSignedIn();
+      allow read, list: if true; // Public can see who is running
       allow create: if isMember();
       allow update: if isMember() && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes', 'voteCount', 'status']));
       allow delete: if isAdmin() || (isMember() && resource.data.userId == request.auth.uid);
@@ -39,13 +41,13 @@ service cloud.firestore {
 
     // --- TREASURY & LEDGER ---
     match /treasury_vaults/{vaultId} {
-      allow read: if true; // Public can see vault balances (Transparency Protocol)
+      allow read: if true; // Public transparency
       allow list: if true;
       allow update: if isAdmin() || (isMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance']));
       allow create, delete: if isAdmin();
     }
     match /ledger/{docId} {
-      allow read, list: if true; // CRITICAL: Public read for External Explorer
+      allow read, list: if true; // Public read for External Explorer
       allow create: if isMember();
       allow update, delete: if isAdmin();
     }
@@ -85,7 +87,7 @@ service cloud.firestore {
 
     // --- MEETINGS ---
     match /meetings/{meetingId} {
-      allow read: if true; // Public can join validated meetings
+      allow read: if true; 
       allow create: if isMember();
       allow update: if isSignedIn();
       allow delete: if isAdmin() || (isSignedIn() && resource.data.hostId == request.auth.uid);
