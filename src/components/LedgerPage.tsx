@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/apiService';
 import { LoaderIcon } from './icons/LoaderIcon';
@@ -23,6 +22,8 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
 
+    const isExplorerSite = process.env.SITE_MODE === 'EXPLORER';
+
     const isCleanProtocol = (tx: UbtTransaction): boolean => {
         const isSim = tx.type === 'SIMULATION_MINT' || tx.id.startsWith('sim-');
         return !isSim;
@@ -31,12 +32,12 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     useEffect(() => {
         let isMounted = true;
         
-        // Economy listener
+        // Economy real-time metrics
         const unsubEcon = api.listenForGlobalEconomy((econ) => {
             if (isMounted) setEconomy(econ);
         });
 
-        // Global Ledger real-time listener
+        // Global Ledger real-time stream
         const unsubLedger = api.listenForPublicLedger((txs) => {
             if (isMounted) {
                 setTransactions(txs.filter(isCleanProtocol));
@@ -50,6 +51,14 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
             unsubLedger();
         };
     }, []);
+
+    useEffect(() => {
+        if (view === 'account' && targetValue) {
+            api.resolveNodeIdentity(targetValue).then(res => {
+                setAccountData(res);
+            });
+        }
+    }, [view, targetValue]);
 
     const navigateAccount = (address: string) => {
         setTargetValue(address);
@@ -88,52 +97,54 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     };
 
     const ExplorerTable = () => (
-        <div className="bg-slate-900/60 rounded-[3rem] border border-white/5 overflow-hidden shadow-2xl backdrop-blur-3xl">
+        <div className="bg-slate-900/60 rounded-[3rem] border border-white/10 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,1)] backdrop-blur-3xl">
             <div className="overflow-x-auto no-scrollbar">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-white/5 text-[9px] font-black text-gray-500 uppercase tracking-[0.3em] border-b border-white/5">
+                        <tr className="bg-white/5 text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] border-b border-white/5">
                             <th className="px-8 py-6">Block Signature</th>
-                            <th className="px-8 py-6">Identity Origin</th>
-                            <th className="px-8 py-6">Identity Target</th>
+                            <th className="px-8 py-6">Origin</th>
+                            <th className="px-8 py-6">Target</th>
                             <th className="px-8 py-6">Asset Volume</th>
-                            <th className="px-8 py-6">Status</th>
+                            <th className="px-8 py-6">Verification</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5 font-mono">
                         {isLoading ? (
                             <tr><td colSpan={5} className="py-20 text-center"><LoaderIcon className="h-8 w-8 animate-spin mx-auto text-brand-gold opacity-50"/></td></tr>
-                        ) : filteredTransactions.map((tx) => (
+                        ) : filteredTransactions.length > 0 ? filteredTransactions.map((tx) => (
                             <tr key={tx.id} className="hover:bg-brand-gold/[0.02] transition-colors group">
                                 <td className="px-8 py-6">
-                                    <button onClick={() => navigateTx(tx.id)} className="text-brand-gold hover:text-white text-[10px] font-black transition-all">
-                                        {tx.id.substring(0, 12).toUpperCase()}
+                                    <button onClick={() => navigateTx(tx.id)} className="text-brand-gold hover:text-white text-[11px] font-black transition-all">
+                                        {tx.id.substring(0, 14).toUpperCase()}
                                     </button>
                                 </td>
                                 <td className="px-8 py-6">
-                                    <button onClick={() => navigateAccount(tx.senderId)} className="text-gray-300 hover:text-brand-gold text-[10px] truncate max-w-[120px] block">
+                                    <button onClick={() => navigateAccount(tx.senderId)} className="text-gray-400 hover:text-brand-gold text-[10px] truncate max-w-[120px] block">
                                         {tx.senderId}
                                     </button>
                                 </td>
                                 <td className="px-8 py-6">
-                                    <button onClick={() => navigateAccount(tx.receiverId)} className="text-gray-300 hover:text-brand-gold text-[10px] truncate max-w-[120px] block">
+                                    <button onClick={() => navigateAccount(tx.receiverId)} className="text-gray-400 hover:text-brand-gold text-[10px] truncate max-w-[120px] block">
                                         {tx.receiverId}
                                     </button>
                                 </td>
                                 <td className="px-8 py-6">
                                     <div className="flex flex-col">
                                         <span className="text-sm font-black text-white">{tx.amount.toLocaleString()} <span className="text-[9px] text-gray-700">UBT</span></span>
-                                        <span className="text-[9px] text-emerald-500/80 font-black">≈ ${ubtToUsd(tx.amount, tx.priceAtSync)} USD</span>
+                                        <span className="text-[9px] text-emerald-500/80 font-black">≈ ${ubtToUsd(tx.amount, tx.priceAtSync)}</span>
                                     </div>
                                 </td>
                                 <td className="px-8 py-6">
-                                    <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-2 py-1 rounded-lg border border-emerald-500/20 flex items-center gap-2">
+                                    <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest bg-emerald-500/10 px-3 py-1.5 rounded-xl border border-emerald-500/20 flex items-center gap-2">
                                         <div className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse"></div>
                                         Finalized
                                     </span>
                                 </td>
                             </tr>
-                        ))}
+                        )) : (
+                            <tr><td colSpan={5} className="py-20 text-center text-gray-600 text-xs uppercase tracking-widest">No active blocks indexed</td></tr>
+                        )}
                     </tbody>
                 </table>
             </div>
@@ -141,7 +152,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     );
 
     return (
-        <div className="min-h-screen bg-black text-white font-sans pb-32 px-4">
+        <div className="min-h-screen bg-black text-white font-sans pb-32 px-4 selection:bg-brand-gold/30">
             <div className="max-w-7xl mx-auto space-y-12 py-12">
                 <div className="flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10">
                     <button onClick={() => { setView('ledger'); setAccountData(null); }} className="flex items-center gap-6 group">
@@ -149,8 +160,8 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                             <GlobeIcon className="h-8 w-8" />
                         </div>
                         <div className="text-left">
-                            <h1 className="text-4xl font-black tracking-tighter uppercase gold-text leading-none">Global Explorer</h1>
-                            <p className="label-caps !text-[10px] !text-gray-500 !tracking-[0.4em] mt-3">Immutable Common Ledger</p>
+                            <h1 className="text-4xl font-black tracking-tighter uppercase gold-text leading-none">Global Ledger</h1>
+                            <p className="label-caps !text-[10px] !text-gray-500 !tracking-[0.4em] mt-3">Immutable Network State</p>
                         </div>
                     </button>
                     
@@ -162,24 +173,31 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="Search Node Identifier / Handshake Signature..."
+                            placeholder="Enter Handshake Hash / Node Identifier..."
                             className="w-full bg-slate-950 border border-white/10 rounded-3xl py-6 pl-16 pr-6 text-sm font-bold text-white focus:ring-1 focus:ring-brand-gold/30 transition-all placeholder-gray-800 uppercase data-mono"
                         />
                     </form>
+                    
+                    {isExplorerSite && (
+                        <button onClick={() => window.location.href = 'https://global-commons.app'} className="px-8 py-4 bg-white text-black font-black rounded-2xl text-[10px] uppercase tracking-widest hover:bg-brand-gold transition-all">
+                            Portal Login
+                        </button>
+                    )}
                 </div>
 
-                <div className="flex items-center gap-10 overflow-x-auto no-scrollbar whitespace-nowrap pt-4">
-                    <HudStat label="Equilibrium Price" value={`$${(economy?.ubt_to_usd_rate || 0.001).toFixed(6)}`} color="text-brand-gold" />
-                    <HudStat label="Sync Frequency" value="Real-time" color="text-emerald-500" />
-                    <HudStat label="Ledger Depth" value={`#${transactions.length}`} color="text-gray-400" />
+                <div className="flex items-center gap-10 overflow-x-auto no-scrollbar whitespace-nowrap pt-4 border-y border-white/5 py-8">
+                    <HudStat label="Protocol Equilibrium" value={`$${(economy?.ubt_to_usd_rate || 0.001).toFixed(6)}`} color="text-brand-gold" />
+                    <HudStat label="Mainnet Pulse" value="Active" color="text-emerald-500" />
+                    <HudStat label="Ledger Height" value={`#${transactions.length}`} color="text-white" />
+                    <HudStat label="Node Distribution" value="Global" color="text-blue-400" />
                     <div className="flex items-center gap-2 ml-auto">
-                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-glow-matrix"></div>
                         <span className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Protocol Synchronized</span>
                     </div>
                 </div>
 
-                <div className="flex items-center gap-4 mb-10">
-                    <h3 className="text-xl font-black text-white uppercase tracking-tight">Mainnet Event Stream</h3>
+                <div className="flex items-center gap-4 mb-6">
+                    <h3 className="text-xl font-black text-white uppercase tracking-tight">Handshake Event Stream</h3>
                     <div className="h-px flex-1 bg-white/5"></div>
                 </div>
 
@@ -191,7 +209,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
 
 const HudStat = ({ label, value, color }: { label: string, value: string, color: string }) => (
     <div className="flex items-center gap-3">
-        <span className="label-caps !text-[8px] text-gray-600">{label}</span>
+        <span className="label-caps !text-[9px] text-gray-500 !tracking-widest">{label}</span>
         <span className={`${color} text-sm font-black font-mono tracking-tighter`}>{value}</span>
     </div>
 );

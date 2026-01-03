@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -37,18 +36,18 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 
 const App: React.FC = () => {
   const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser } = useAuth();
-  const [isBooting, setIsBooting] = useState(true);
+  
+  // Rule: Check if we are in Explorer Mode for external domain
+  const isExplorer = process.env.SITE_MODE === 'EXPLORER';
+  
+  const [isBooting, setIsBooting] = useState(false); // Disabled by default per user request
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<Conversation | 'main' | null>(null);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const [isRadarOpen, setIsRadarOpen] = useState(false);
   const [forceView, setForceView] = useState<string | null>(null);
-  
-  // Rule: Check if we are in Explorer Mode for ubuntium-scan.org
-  const isExplorer = process.env.SITE_MODE === 'EXPLORER';
 
-  // Rule: Check session bypass on first mount
   const [hasSkippedProfile, setHasSkippedProfile] = useState(() => sessionStorage.getItem('ugc_skip_anchor') === 'true');
 
   const handleSkipProfile = () => {
@@ -76,14 +75,13 @@ const App: React.FC = () => {
   const handleViewProfile = (userId: string | null) => { setChatTarget(null); setViewingProfileId(userId); };
   
   const renderMainContent = () => {
-    if (isBooting) return null;
-
-    // Protocol: Explorer Site Entry Point
+    // Protocol: Explorer Site Entry Point - No Auth Pulsing required
     if (isExplorer) {
         return <LedgerPage />;
     }
     
-    // 1. Dashboard Ingress: Prioritize showing features as soon as we have any valid user state
+    if (isBooting) return null;
+    
     if (currentUser || firebaseUser) {
         const userToRender = currentUser || ({ 
             id: firebaseUser?.uid, 
@@ -97,7 +95,6 @@ const App: React.FC = () => {
         if (chatTarget) return <ChatsPage user={userToRender} initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null} onClose={() => setChatTarget(null)} onViewProfile={handleViewProfile} onNewMessageClick={() => {}} onNewGroupClick={() => {}} />;
         if (viewingProfileId) return <div className="main-container py-10"><PublicProfile userId={viewingProfileId} currentUser={userToRender} onBack={() => setViewingProfileId(null)} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(userToRender, target); setViewingProfileId(null); setChatTarget(convo); } }} onViewProfile={(id) => setViewingProfileId(id)} isAdminView={userToRender.role === 'admin'} /></div>;
         
-        // Identity Anchor Logic: Render if incomplete AND not skipped
         if (!userToRender.isProfileComplete && !firebaseUser?.isAnonymous && !hasSkippedProfile) {
             return (
                 <div className="main-container py-12">
@@ -115,7 +112,6 @@ const App: React.FC = () => {
         return <MemberDashboard user={userToRender as MemberUser} onUpdateUser={updateUser} unreadCount={unreadNotificationCount} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={handleViewProfile} forcedView={forceView} clearForcedView={() => setForceView(null)} />;
     }
     
-    // 2. Initial Auth Pulse: Only show when checking Firebase state for the first time
     if (isLoadingAuth || isProcessingAuth) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen bg-black p-10 text-center animate-fade-in">
@@ -135,14 +131,13 @@ const App: React.FC = () => {
         );
     }
 
-    // 3. Handshake Required
     return <AuthPage />;
   };
 
   return (
-    <div className={`flex flex-col min-h-screen selection:bg-brand-gold/30 ${isExplorer ? 'bg-slate-50' : 'bg-black'}`}>
-      {isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
-      {!isBooting && (
+    <div className={`flex flex-col min-h-screen selection:bg-brand-gold/30 ${isExplorer ? 'bg-black' : 'bg-black'}`}>
+      {!isExplorer && isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
+      {(isExplorer || !isBooting) && (
           <div className="flex-1 flex flex-col animate-fade-in">
             { (currentUser || firebaseUser) && !firebaseUser?.isAnonymous && !isExplorer && (
                 <Header 

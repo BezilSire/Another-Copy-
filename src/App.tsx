@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -38,7 +37,7 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 
 const App: React.FC = () => {
   const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser } = useAuth();
-  const [isBooting, setIsBooting] = useState(true);
+  const [isBooting, setIsBooting] = useState(false); // Disabled per request
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<Conversation | 'main' | null>(null);
@@ -47,7 +46,6 @@ const App: React.FC = () => {
   const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
   const [forceView, setForceView] = useState<string | null>(null);
   
-  // Rule: Use sessionStorage to make the skip persistent across refreshes in a session
   const [hasSkippedProfile, setHasSkippedProfile] = useState(() => sessionStorage.getItem('ugc_skip_anchor') === 'true');
 
   const handleSkipProfile = () => {
@@ -103,7 +101,6 @@ const App: React.FC = () => {
         if (chatTarget) return <ChatsPage user={userToRender} initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null} onClose={() => setChatTarget(null)} onViewProfile={handleViewProfile} onNewMessageClick={() => {}} onNewGroupClick={() => {}} />;
         if (viewingProfileId) return <div className="main-container py-10"><PublicProfile userId={viewingProfileId} currentUser={userToRender} onBack={() => setViewingProfileId(null)} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(userToRender, target); setViewingProfileId(null); setChatTarget(convo); } }} onViewProfile={(id) => setViewingProfileId(id)} isAdminView={userToRender.role === 'admin'} /></div>;
         
-        // Identity Anchor Block: Allow bypass if skipped
         if (!userToRender.isProfileComplete && !firebaseUser?.isAnonymous && !hasSkippedProfile) {
             return (
                 <div className="main-container py-12">
