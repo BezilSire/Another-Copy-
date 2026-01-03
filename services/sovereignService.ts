@@ -27,7 +27,7 @@ export const sovereignService = {
             let sha: string | null = null;
             try {
                 const checkRes = await fetch(url, {
-                    headers: { "Authorization": `token ${TOKEN}` }
+                    headers: { "Authorization": `Bearer ${TOKEN}` }
                 });
                 if (checkRes.ok) {
                     const existing = await checkRes.json();
@@ -38,7 +38,7 @@ export const sovereignService = {
             const res = await fetch(url, {
                 method: "PUT",
                 headers: {
-                    "Authorization": `token ${TOKEN}`,
+                    "Authorization": `Bearer ${TOKEN}`,
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
