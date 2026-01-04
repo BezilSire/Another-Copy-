@@ -53,31 +53,27 @@ export const sovereignService = {
     },
 
     dispatchTransaction: async (tx: any): Promise<string | null> => {
-        // Use original timestamp for historical accuracy
         const path = `ledger/tx-${tx.timestamp || Date.now()}-${tx.id}.json`;
         return await sovereignService.commitBlock(path, tx, `Block Dispatch: ${tx.id}`);
     },
 
     /**
-     * LEGACY BRIDGE PROTOCOL
-     * Modified: 
-     * 1. Filters out junk blocks (10k UBT simulation noise)
-     * 2. Resolves receiverId -> receiverPublicKey for permanent transparency
+     * SOVEREIGN RECONCILIATION
+     * Modified to kill Firebase UIDs on the ledger.
      */
     syncLegacyToGitHub: async (onProgress: (log: string) => void) => {
-        onProgress("> INITIALIZING_SOVEREIGN_CLEANSE...");
+        onProgress("> INITIALIZING_IDENTITY_STAMPING...");
         const firebaseTxs = await api.getPublicLedger(1000);
         
-        // STRICT FILTER: Expunge simulation/test blocks (10,000 UBT mints)
+        // Filter noise (10k UBT blocks)
         const realTxs = firebaseTxs.filter(tx => {
             const isSimulation = tx.type === 'SIMULATION_MINT' || tx.type === 'SYSTEM_MINT';
             const isTestAmount = tx.amount === 10000;
             return !isSimulation && !isTestAmount;
         });
         
-        onProgress(`> CLEANSED_HISTORY: ${realTxs.length} LEGITIMATE BLOCKS IDENTIFIED.`);
+        onProgress(`> IDENTIFIED ${realTxs.length} LEGITIMATE BLOCKS.`);
 
-        // Get existing blocks on GitHub to avoid duplicates
         const listUrl = `${GITHUB_API}/repos/${REPO}/contents/ledger`;
         const listRes = await fetch(listUrl);
         const existingFiles = listRes.ok ? await listRes.json() : [];
@@ -89,38 +85,35 @@ export const sovereignService = {
         let count = 0;
         for (const tx of realTxs) {
             if (!existingIds.has(tx.id)) {
-                onProgress(`> RESOLVING_IDENTITY: ${tx.receiverId.substring(0,8)}...`);
-                
-                // CRITICAL: IDENTITY STAMPING
-                // We resolve the internal DB ID to the UBT Public Key before pushing to the public record
+                // IDENTITY RESOLUTION: Converting Database ID to Cryptographic ID
                 let enrichedTx = { ...tx };
                 try {
                     const receiverProfile = await api.getPublicUserProfile(tx.receiverId);
                     if (receiverProfile?.publicKey) {
                         enrichedTx.receiverPublicKey = receiverProfile.publicKey;
-                        onProgress(`> STAMPED_ADDRESS: ${receiverProfile.publicKey.substring(0,12)}...`);
                     } else if (['FLOAT', 'GENESIS', 'SYSTEM'].includes(tx.receiverId)) {
                         enrichedTx.receiverPublicKey = `SYSTEM_NODE:${tx.receiverId}`;
+                    } else {
+                        // Fallback for nodes that were ousted before key generation
+                        enrichedTx.receiverPublicKey = `LEGACY_NODE:${tx.receiverId.substring(0,8)}`;
                     }
-                } catch (e) {
-                    console.warn("Identity resolution skipped for", tx.id);
-                }
+                    
+                    const senderProfile = await api.getPublicUserProfile(tx.senderId);
+                    if (senderProfile?.publicKey) {
+                        enrichedTx.senderPublicKey = senderProfile.publicKey;
+                    }
+                } catch (e) {}
 
-                onProgress(`> ANCHORING_BLOCK: ${tx.id.substring(0,8)}...`);
+                onProgress(`> ANCHORING_CRYPTO_BLOCK: ${tx.id.substring(0,8)}...`);
                 await sovereignService.dispatchTransaction(enrichedTx);
                 count++;
-                // Slight delay for GitHub API stability
-                await new Promise(r => setTimeout(r, 200));
+                await new Promise(r => setTimeout(r, 100));
             }
         }
-        onProgress(`> RECONCILIATION_COMPLETE. ${count} BLOCKS VERIFIED & ANCHORED.`);
+        onProgress(`> SOVEREIGN_SYNC_COMPLETE. ${count} BLOCKS VERIFIED.`);
     },
 
-    /**
-     * PUBLIC DISCOVERY PROTOCOL
-     * Priorities: receiverPublicKey over receiverId
-     */
-    fetchPublicLedger: async (limitCount: number = 100): Promise<any[]> => {
+    fetchPublicLedger: async (limitCount: number = 200): Promise<any[]> => {
         try {
             const listUrl = `${GITHUB_API}/repos/${REPO}/contents/ledger`;
             const listRes = await fetch(listUrl, { cache: 'no-store' });
