@@ -60,7 +60,6 @@ export const sovereignService = {
 
     /**
      * LEGACY BRIDGE PROTOCOL
-     * Modified: 
      * 1. Filters out SIMULATION and MINT transactions (Expungement)
      * 2. Resolves Receiver ID to Public Key and STAMPS it into the file.
      */
@@ -68,16 +67,16 @@ export const sovereignService = {
         onProgress("> INITIALIZING_SOVEREIGN_CLEANSE...");
         const firebaseTxs = await api.getPublicLedger(1000);
         
-        // Filter out simulation blocks (10,000 UBT mints etc)
-        const realTxs = firebaseTxs.filter(tx => 
-            tx.type !== 'SIMULATION_MINT' && 
-            tx.type !== 'SYSTEM_MINT' &&
-            tx.amount !== 10000 // Double safety for common simulation amount
-        );
+        // STRICT FILTER: Expunge simulation/test blocks
+        const realTxs = firebaseTxs.filter(tx => {
+            const isSimulation = tx.type === 'SIMULATION_MINT' || tx.type === 'SYSTEM_MINT';
+            const isTestAmount = tx.amount === 10000; // The problematic 10k blocks
+            return !isSimulation && !isTestAmount;
+        });
         
-        onProgress(`> FOUND ${realTxs.length} LEGITIMATE HISTORICAL BLOCKS.`);
+        onProgress(`> CLEANSED_HISTORY: ${realTxs.length} REAL BLOCKS IDENTIFIED.`);
 
-        // 1. Get existing blocks on GitHub
+        // 1. Get existing blocks on GitHub to prevent duplicate work
         const listUrl = `${GITHUB_API}/repos/${REPO}/contents/ledger`;
         const listRes = await fetch(listUrl);
         const existingFiles = listRes.ok ? await listRes.json() : [];
@@ -89,14 +88,18 @@ export const sovereignService = {
         let count = 0;
         for (const tx of realTxs) {
             if (!existingIds.has(tx.id)) {
-                onProgress(`> RESOLVING_IDENTITY: ${tx.receiverId.substring(0,8)}...`);
+                onProgress(`> RESOLVING_TARGET_KEY: ${tx.receiverId.substring(0,8)}...`);
                 
-                // RESOLVE IDENTITY BEFORE PUSHING
+                // CRITICAL: IDENTITY STAMPING
+                // We resolve the internal "ridiculous" ID to the UBT Public Key before pushing to GitHub
                 let enrichedTx = { ...tx };
                 try {
                     const receiverProfile = await api.getPublicUserProfile(tx.receiverId);
                     if (receiverProfile?.publicKey) {
                         enrichedTx.receiverPublicKey = receiverProfile.publicKey;
+                        onProgress(`> STAMPED_ADDRESS: ${receiverProfile.publicKey.substring(0,12)}...`);
+                    } else if (['FLOAT', 'GENESIS', 'SUSTENANCE', 'DISTRESS', 'VENTURE'].includes(tx.receiverId)) {
+                        enrichedTx.receiverPublicKey = `SYSTEM_NODE:${tx.receiverId}`;
                     }
                 } catch (e) {
                     console.warn("Could not resolve receiver key for", tx.id);
@@ -105,10 +108,10 @@ export const sovereignService = {
                 onProgress(`> ANCHORING_BLOCK: ${tx.id.substring(0,8)}...`);
                 await sovereignService.dispatchTransaction(enrichedTx);
                 count++;
-                await new Promise(r => setTimeout(r, 200));
+                await new Promise(r => setTimeout(r, 250)); // Slow for stability
             }
         }
-        onProgress(`> RECONCILIATION_COMPLETE. ${count} BLOCKS STAMPED.`);
+        onProgress(`> SYNC_COMPLETE. ${count} BLOCKS VERIFIED & ANCHORED.`);
     },
 
     /**

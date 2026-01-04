@@ -23,9 +23,16 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     const syncWithGitHub = async () => {
         setIsLoading(true);
         try {
-            // Fetch more for balance calculation accuracy in public view
-            const data = await sovereignService.fetchPublicLedger(100);
-            setTransactions(data);
+            // Fetch blocks from GitHub
+            const data = await sovereignService.fetchPublicLedger(200);
+            
+            // UI Filter: Even if junk blocks are on GitHub, we hide them from the Explorer view
+            const cleansedData = data.filter(tx => 
+                tx.type !== 'SIMULATION_MINT' && 
+                tx.amount !== 10000
+            );
+
+            setTransactions(cleansedData);
         } catch (e) {
             console.error("Sync Error:", e);
         } finally {
@@ -84,17 +91,22 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
             'DISTRESS': 'EMERGENCY_VAULT',
             'SYSTEM': 'PROTOCOL_ORACLE'
         };
-        if (systemNodes[id]) return systemNodes[id];
         
-        // PRIORITIZE PUBLIC KEY
+        // 1. Check for system node IDs
+        if (systemNodes[id]) return systemNodes[id];
+        if (pubKey && pubKey.startsWith('SYSTEM_NODE:')) return systemNodes[pubKey.split(':')[1]] || pubKey;
+        
+        // 2. Use Public Key if available
         const address = pubKey || id;
         if (address.length < 15) return address.toUpperCase();
+        
+        // 3. Format UBT Address for display
         return address.substring(0, 8) + '...' + address.substring(address.length - 4);
     };
 
     return (
         <div className="min-h-screen bg-[#F8FAFC] text-[#1E293B] font-sans pb-40">
-            {/* SOLSCAN HEADER */}
+            {/* EXPLORER HEADER */}
             <header className="bg-[#111827] text-white py-4 px-6 sticky top-0 z-[100] shadow-xl border-b border-white/5">
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
                     <button onClick={() => { setView('ledger'); setSelectedTx(null); }} className="flex items-center gap-3 group">
@@ -135,7 +147,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                     <StatBox label="BLOCK HEIGHT" value={transactions.length > 0 ? `#${transactions.length}` : "SYNCING..."} color="text-blue-600" />
                     <StatBox label="TOTAL SUPPLY" value="15,000,000 UBT" color="text-[#0F172A]" />
                     <StatBox label="SYNC STATUS" value={isLoading ? "UPDATING..." : "LIVE"} color="text-green-600" />
-                    <StatBox label="PROTOCOL" value="V5.2.1-MAIN" />
+                    <StatBox label="PROTOCOL" value="V5.2.2-MAIN" />
                 </div>
 
                 {/* MAIN CONTENT AREA */}
@@ -163,7 +175,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
 
                         <div className="bg-white rounded-[2rem] border border-[#E2E8F0] shadow-sm overflow-hidden">
                             <div className="bg-[#F8FAFD] px-8 py-5 border-b border-[#E2E8F0]">
-                                <h3 className="text-xs font-black text-[#64748B] uppercase tracking-[0.2em]">Temporal Node History</h3>
+                                <h3 className="text-xs font-black text-[#64748B] uppercase tracking-[0.2em]">Sovereign History</h3>
                             </div>
                             <TxTable txs={accountViewData.history} navigateAccount={navigateAccount} navigateTx={navigateTx} resolveDisplayName={resolveDisplayName} />
                         </div>
@@ -177,21 +189,21 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                         <DetailRow label="Consensus" value="GitHub Verified" isBadge />
                         <DetailRow label="Temporal Marker" value={new Date(selectedTx.timestamp).toLocaleString()} />
                         <DetailRow label="Quantum Volume" value={`${selectedTx.amount} UBT`} isStrong />
-                        <DetailRow label="Origin Node" value={selectedTx.senderPublicKey || selectedTx.senderId} isMono isLink onClick={() => navigateAccount(selectedTx.senderPublicKey || selectedTx.senderId)} />
-                        <DetailRow label="Target Node" value={selectedTx.receiverPublicKey || selectedTx.receiverId} isMono isLink onClick={() => navigateAccount(selectedTx.receiverPublicKey || selectedTx.receiverId)} />
+                        <DetailRow label="Origin Address" value={selectedTx.senderPublicKey || selectedTx.senderId} isMono isLink onClick={() => navigateAccount(selectedTx.senderPublicKey || selectedTx.senderId)} />
+                        <DetailRow label="Target Address" value={selectedTx.receiverPublicKey || selectedTx.receiverId} isMono isLink onClick={() => navigateAccount(selectedTx.receiverPublicKey || selectedTx.receiverId)} />
                         <DetailRow label="Proof Hash" value={selectedTx.hash} isMono isSmall />
                     </div>
                 ) : (
                     <div className="bg-white rounded-[2rem] border border-[#E2E8F0] shadow-sm overflow-hidden animate-fade-in">
                         <div className="bg-[#F8FAFD] px-8 py-5 border-b border-[#E2E8F0]">
-                            <h3 className="text-xs font-black text-[#64748B] uppercase tracking-[0.2em]">Latest Global Dispatches</h3>
+                            <h3 className="text-xs font-black text-[#64748B] uppercase tracking-[0.2em]">Latest Global Handshakes</h3>
                         </div>
                         <TxTable txs={transactions} navigateAccount={navigateAccount} navigateTx={navigateTx} resolveDisplayName={resolveDisplayName} />
                     </div>
                 )}
                 
                 <p className="text-center text-[10px] text-gray-400 font-black uppercase tracking-widest">
-                    The Ubuntium Mycelium Layer is a trustless, account-based view of the physical GitHub Ledger.
+                    This view resolves physical GitHub blocks into readable peer-to-peer addresses.
                 </p>
             </main>
         </div>
@@ -204,8 +216,8 @@ const TxTable = ({ txs, navigateAccount, navigateTx, resolveDisplayName }: any) 
             <thead>
                 <tr className="text-[10px] font-black text-[#94A3B8] uppercase border-b border-[#E2E8F0]">
                     <th className="px-10 py-6">Block</th>
-                    <th className="px-10 py-6">Origin Node</th>
-                    <th className="px-10 py-6">Target Node</th>
+                    <th className="px-10 py-6">From (Origin Node)</th>
+                    <th className="px-10 py-6">To (Target Node)</th>
                     <th className="px-10 py-6">Volume</th>
                     <th className="px-10 py-6">Age</th>
                 </tr>

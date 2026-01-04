@@ -141,10 +141,15 @@ export const api = {
             
             if (senderBal < transaction.amount) throw new Error("INSUFFICIENT_LIQUIDITY");
 
-            // ENRICH TRANSACTION WITH RECEIVER PUBLIC KEY FOR GITHUB SYNC
+            // ENRICH TRANSACTION WITH TARGET ADDRESS BEFORE LEDGERING
             let finalTx = { ...transaction };
-            if (receiverSnap.exists() && receiverSnap.data()?.publicKey) {
-                finalTx.receiverPublicKey = receiverSnap.data()?.publicKey;
+            if (receiverSnap.exists()) {
+                const rData = receiverSnap.data();
+                if (rData?.publicKey) {
+                    finalTx.receiverPublicKey = rData.publicKey;
+                }
+            } else if (['FLOAT', 'GENESIS', 'SYSTEM', 'SUSTENANCE', 'DISTRESS', 'VENTURE'].includes(transaction.receiverId)) {
+                finalTx.receiverPublicKey = `SYSTEM_NODE:${transaction.receiverId}`;
             }
 
             t.update(senderRef, { [balKey]: increment(-transaction.amount) });
@@ -220,7 +225,6 @@ export const api = {
 
         const txId = `bridge-${Date.now().toString(36)}`;
         
-        // ENRICH FOR DECENTRALIZED VIEW
         let receiverKey = "PROVISIONING";
         if (receiverSnap.exists() && receiverSnap.data()?.publicKey) {
             receiverKey = receiverSnap.data()?.publicKey;
@@ -324,7 +328,7 @@ export const api = {
     listenForPayoutRequests: (admin: User, cb: (r: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(payoutsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
     listenForPendingPurchases: (cb: (p: PendingUbtPurchase[]) => void, err?: any): Unsubscribe => onSnapshot(query(pendingPurchasesCollection, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), err),
     listenForUserVentures: (uid: string, cb: (v: any[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('ownerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), err),
-    listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(query(payoutsCollection, where('userId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
+    listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(payoutsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
     listenForReferredUsers: (uid: string, cb: (u: PublicUserProfile[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('referrerId', '==', uid)), s => cb(s.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile))), err),
     listenForProposals: (cb: (p: Proposal[]) => void, err?: any): Unsubscribe => onSnapshot(query(proposalsCollection, orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Proposal))), err),
     listenToResources: (circle: string, cb: (r: CitizenResource[]) => void): Unsubscribe => onSnapshot(circle === 'ANY' ? resourcesCollection : query(resourcesCollection, where('circle', '==', circle)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource)))),
@@ -349,7 +353,7 @@ export const api = {
         for (const v of vaults) {
             batch.set(doc(vaultsCollection, v.id), { ...v, publicKey: `UBT-VAULT-${v.id}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`, isLocked: false });
         }
-        const txId = `mint-${Date.now().toString(36)}`;
+        const txId = `genesis-mint-root`;
         batch.set(doc(ledgerCollection, txId), { id: txId, senderId: 'SYSTEM', receiverId: 'GENESIS', amount: 15000000, timestamp: Date.now(), type: 'SYSTEM_MINT', protocol_mode: 'MAINNET', senderPublicKey: 'ROOT_PROTOCOL', serverTimestamp: serverTimestamp() });
         await batch.commit();
     },
