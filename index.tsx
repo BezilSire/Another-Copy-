@@ -19,16 +19,15 @@ if (!rootElement) {
 }
 
 /**
- * AGGRESSIVE ROUTING PROTOCOL
+ * SOVEREIGN ROUTING PROTOCOL
  * Detects if we are on the public explorer domain or standard app domain.
- * Bypasses Auth dependency entirely for the explorer.
  */
 const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
 const isExplorer = 
-    process.env.SITE_MODE === 'EXPLORER' || 
     hostname.includes('scan') || 
     hostname.includes('ledger') || 
-    hostname.includes('another-copy'); // Detection for the specific provided Vercel URL
+    hostname.includes('another-copy') || 
+    process.env.SITE_MODE === 'EXPLORER';
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
