@@ -1,29 +1,23 @@
-
 /**
  * Ubuntium Sovereign Sync Engine
- * Handles the "Unkillable" ledger layer on GitHub and IPFS.
+ * Handles the "Unkillable" ledger layer on GitHub.
  */
 
 const GITHUB_API = "https://api.github.com";
-const REPO = process.env.GITHUB_REPO || "BezilSire/ubuntium-ledger";
+const REPO = "BezilSire/ubuntium-ledger";
 const TOKEN = process.env.GITHUB_TOKEN;
 
 export const sovereignService = {
     /**
-     * Commits a block (transaction or identity update) to the GitHub repo.
-     * Every block is stored as a unique JSON file to prevent merge conflicts.
+     * Commits a block to GitHub.
      */
     commitBlock: async (path: string, data: any, message: string): Promise<string | null> => {
-        if (!TOKEN || !REPO) {
-            console.warn("SOVEREIGN_ENGINE: Access keys missing. Ledger sync bypass active.");
-            return null;
-        }
+        if (!TOKEN || !REPO) return null;
 
         try {
             const content = btoa(JSON.stringify(data, null, 2));
             const url = `${GITHUB_API}/repos/${REPO}/contents/${path}`;
 
-            // Check if file already exists (unlikely given hashes, but safe)
             let sha: string | null = null;
             try {
                 const checkRes = await fetch(url, {
@@ -48,34 +42,50 @@ export const sovereignService = {
                 })
             });
 
-            if (!res.ok) {
-                const err = await res.json();
-                throw new Error(err.message || "GitHub API Error");
-            }
-
+            if (!res.ok) return null;
             const json = await res.json();
-            console.log(`LEDGER_SYNC: Block anchored at ${json.content.path}`);
             return json.content.html_url;
-
         } catch (error) {
-            console.error("SOVEREIGN_ENGINE_FAIL:", error);
-            throw error;
+            return null;
         }
     },
 
-    /**
-     * Dispatch a financial transaction to the sovereign layer.
-     */
     dispatchTransaction: async (tx: any): Promise<string | null> => {
-        const path = `ledger/tx-${tx.id}.json`;
+        // Use timestamp in filename for easy chronological sorting on GitHub
+        const path = `ledger/tx-${Date.now()}-${tx.id}.json`;
         return await sovereignService.commitBlock(path, tx, `Asset Dispatch: ${tx.id}`);
     },
 
     /**
-     * Backup an identity anchor to the sovereign layer.
+     * PUBLIC DISCOVERY PROTOCOL
+     * Fetches transactions directly from GitHub without needing a Firebase session.
      */
-    dispatchIdentity: async (userId: string, data: any): Promise<string | null> => {
-        const path = `citizens/node-${userId}.json`;
-        return await sovereignService.commitBlock(path, data, `Identity Anchor: ${userId}`);
+    fetchPublicLedger: async (limitCount: number = 32): Promise<any[]> => {
+        try {
+            // 1. List directory contents
+            const listUrl = `${GITHUB_API}/repos/${REPO}/contents/ledger`;
+            const listRes = await fetch(listUrl);
+            if (!listRes.ok) return [];
+            
+            const files = await listRes.json();
+            if (!Array.isArray(files)) return [];
+
+            // 2. Sort by name (chronological tx-TIMESTAMP-ID.json) and take latest
+            const latestFiles = files
+                .filter(f => f.name.startsWith('tx-'))
+                .sort((a, b) => b.name.localeCompare(a.name))
+                .slice(0, limitCount);
+
+            // 3. Fetch file contents in parallel
+            const txPromises = latestFiles.map(async (file) => {
+                const contentRes = await fetch(file.download_url);
+                return await contentRes.json();
+            });
+
+            return await Promise.all(txPromises);
+        } catch (e) {
+            console.error("GitHub Ledger Discovery Failed:", e);
+            return [];
+        }
     }
 };
