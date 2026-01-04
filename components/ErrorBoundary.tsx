@@ -1,22 +1,22 @@
-import React from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
 
 interface Props {
-  children?: React.ReactNode;
+  children?: ReactNode;
 }
 
 interface State {
   hasError: boolean;
   error: Error | null;
-  errorInfo: React.ErrorInfo | null;
+  errorInfo: ErrorInfo | null;
 }
 
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-// Fix: Explicitly use React.Component to ensure proper inheritance visibility for the compiler, resolving errors where setState and props were not recognized.
-export class ErrorBoundary extends React.Component<Props, State> {
+// Fix: Use named import Component to ensure proper inheritance visibility for the compiler.
+export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,
@@ -32,8 +32,8 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return { hasError: true, error, errorInfo: null };
   }
 
-  // Fix: By inheriting explicitly from React.Component, this.setState is correctly typed and accessible within the component lifecycle.
-  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  // Fix: Explicitly use this.setState from the inherited Component class.
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error, errorInfo);
     this.setState({ 
       hasError: true,
@@ -77,7 +77,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    // Fix: Accessing children from this.props now works as expected since ErrorBoundary correctly inherits from React.Component.
+    // Fix: Access children from this.props now that inheritance is properly recognized.
     return this.props.children;
   }
 }

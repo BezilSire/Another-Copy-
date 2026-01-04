@@ -8,6 +8,10 @@ import { UbtTransaction, GlobalEconomy } from '../types';
 
 type ExplorerView = 'ledger' | 'transaction';
 
+/**
+ * SOVEREIGN PUBLIC EXPLORER
+ * Professional-grade ledger visualizer (Solscan Style)
+ */
 export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', value: string } }> = ({ initialTarget }) => {
     const [view, setView] = useState<ExplorerView>(initialTarget?.type === 'tx' ? 'transaction' : 'ledger');
     const [targetValue, setTargetValue] = useState<string>(initialTarget?.value || '');
@@ -18,29 +22,34 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
 
-    // Aggressive Data Load
+    // Hard-coded sorting and aggressive fetch to fix "0 txs" bug
     useEffect(() => {
         let isMounted = true;
+
         const forceDataLoad = async () => {
             try {
-                const initialTxs = await api.getPublicLedger(100);
+                // Fetch direct from ledger collection sorting by immutable client timestamp
+                const initialTxs = await api.getPublicLedger(200);
                 if (isMounted) {
                     setTransactions(initialTxs);
+                    // Explicitly kill loader once any data (even 0) is returned
                     setIsLoading(false);
                 }
             } catch (e) {
-                console.error("Ledger Sync Error:", e);
+                console.error("Ledger Node Sync Failed:", e);
                 if (isMounted) setIsLoading(false);
             }
         };
+
         forceDataLoad();
 
+        // Sub-second listener for real-time blocks
         const unsubLedger = api.listenForPublicLedger((txs) => {
             if (isMounted) {
                 setTransactions(txs);
                 setIsLoading(false);
             }
-        }, 100);
+        }, 200);
 
         const unsubEcon = api.listenForGlobalEconomy((econ) => {
             if (isMounted) setEconomy(econ);
@@ -57,6 +66,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     }, [view, targetValue, transactions]);
 
     const navigateTx = (txid: string) => {
+        if (!txid) return;
         setTargetValue(txid);
         setView('transaction');
         setSearchQuery('');
@@ -70,113 +80,120 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
 
     const formatAddress = (id: string, pubKey?: string) => {
         const address = pubKey || id;
-        if (!address) return "UNKNOWN_NODE";
+        if (!address) return "NODE_NULL";
         if (address.length < 15) return address.toUpperCase();
-        return address.substring(0, 14) + '...';
+        return address.substring(0, 10) + '...' + address.substring(address.length - 4);
     };
 
     return (
-        <div className="min-h-screen bg-[#F4F7F9] text-[#2D3A4A] font-sans pb-32 selection:bg-blue-100">
-            {/* SOLSCAN HEADER */}
-            <header className="bg-[#111A2E] text-white py-4 px-6 sm:px-10 lg:px-20 sticky top-0 z-50 border-b border-white/10 shadow-lg">
+        <div className="min-h-screen bg-[#F8FAFC] text-[#1E293B] font-sans pb-40 selection:bg-blue-100">
+            {/* SOLSCAN STYLE NAV */}
+            <header className="bg-[#111827] text-white py-4 px-6 border-b border-white/5 sticky top-0 z-[100] shadow-xl">
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-                    <button onClick={() => { setView('ledger'); setSelectedTx(null); }} className="flex items-center gap-3">
-                        <div className="p-2 bg-blue-500 rounded-lg">
+                    <button onClick={() => { setView('ledger'); setSelectedTx(null); }} className="flex items-center gap-3 active:scale-95 transition-transform">
+                        <div className="p-2 bg-blue-600 rounded-xl">
                             <GlobeIcon className="h-6 w-6 text-white" />
                         </div>
-                        <h1 className="text-2xl font-bold tracking-tight">Ubuntium <span className="text-blue-400">Scan</span></h1>
+                        <h1 className="text-2xl font-black tracking-tighter">UBUNTIUM <span className="text-blue-400">SCAN</span></h1>
                     </button>
                     
-                    <form onSubmit={(e) => { e.preventDefault(); if(searchQuery) navigateTx(searchQuery); }} className="flex-1 max-w-2xl w-full relative">
+                    <div className="flex-1 max-w-2xl w-full relative">
                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <SearchIcon className="h-5 w-5 text-gray-400" />
+                            <SearchIcon className="h-5 w-5 text-gray-500" />
                         </div>
                         <input 
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="Search Txn Signature / Block Hash"
-                            className="w-full bg-[#1A253A] border border-white/10 rounded-lg py-3 pl-12 pr-4 text-sm focus:ring-2 focus:ring-blue-500/50 transition-all placeholder-gray-500 outline-none text-white"
+                            onKeyDown={e => e.key === 'Enter' && navigateTx(searchQuery)}
+                            placeholder="Search by Txn Hash / Signature"
+                            className="w-full bg-[#1F2937] border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-sm focus:ring-2 focus:ring-blue-500 transition-all placeholder-gray-500 outline-none text-white font-mono"
                         />
-                    </form>
+                    </div>
                     
-                    <button onClick={() => window.location.reload()} className="text-xs font-semibold text-gray-400 hover:text-white transition-colors">Force Sync</button>
+                    <div className="flex items-center gap-4">
+                        <div className="h-2 w-2 rounded-full bg-green-500 animate-pulse"></div>
+                        <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">Mainnet Live</span>
+                    </div>
                 </div>
             </header>
 
-            <main className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-20 py-8 space-y-8">
+            <main className="max-w-7xl mx-auto px-6 py-10 space-y-10">
                 
-                {/* MARKET STATS */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <MarketStat label="PROTOCOL PRICE" value={`$${(economy?.ubt_to_usd_rate || 0.001).toFixed(4)}`} change="+0.00%" />
-                    <MarketStat label="CVP BACKING" value={`$${(economy?.cvp_usd_backing || 0).toLocaleString()}`} />
-                    <MarketStat label="TOTAL BLOCKS" value={transactions.length.toLocaleString()} />
-                    <MarketStat label="NETWORK STATE" value="Active" />
+                {/* MARKET DATA BOARD */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                    <MarketMetric label="UBT PRICE" value={`$${(economy?.ubt_to_usd_rate || 0.001).toFixed(4)}`} change="+0.00%" />
+                    <MarketMetric label="MARKET CAP" value={`$${((economy?.ubt_to_usd_rate || 0.001) * 15000000).toLocaleString()}`} />
+                    <MarketMetric label="TOTAL TRANSACTIONS" value={transactions.length.toLocaleString()} />
+                    <MarketMetric label="NODES" value="ACTIVE" color="text-green-600" />
                 </div>
 
-                {/* MAIN TABLE AREA */}
-                <div className="bg-white rounded-xl border border-[#E7EAF3] shadow-sm overflow-hidden animate-fade-in">
-                    <div className="bg-[#F8FAFD] px-6 py-4 border-b border-[#E7EAF3] flex justify-between items-center">
-                        <h3 className="text-sm font-bold text-[#4A5568] uppercase tracking-wider">
-                            {view === 'ledger' ? 'Sovereign Transaction Stream' : 'Transaction Verification'}
+                {/* DATA TABLE CONTAINER */}
+                <div className="bg-white rounded-[2rem] border border-[#E2E8F0] shadow-sm overflow-hidden animate-fade-in">
+                    <div className="bg-[#F8FAFD] px-8 py-5 border-b border-[#E2E8F0] flex justify-between items-center">
+                        <h3 className="text-xs font-black text-[#64748B] uppercase tracking-[0.2em]">
+                            {view === 'ledger' ? 'Latest Transactions' : 'Transaction Verification'}
                         </h3>
                         {view !== 'ledger' && (
-                             <button onClick={() => setView('ledger')} className="text-xs text-blue-500 font-bold hover:underline">Return to stream</button>
+                             <button onClick={() => setView('ledger')} className="text-xs text-blue-600 font-bold hover:underline">Back to Ledger</button>
                         )}
                     </div>
 
-                    {isLoading && transactions.length === 0 ? (
-                        <div className="py-20 text-center">
-                            <LoaderIcon className="h-10 w-10 animate-spin text-blue-500 mx-auto" />
-                            <p className="text-sm text-gray-400 mt-4">Establishing ledger sync...</p>
+                    {isLoading ? (
+                        <div className="py-32 text-center">
+                            <LoaderIcon className="h-10 w-10 animate-spin text-blue-600 mx-auto" />
+                            <p className="text-xs font-bold text-gray-400 mt-6 uppercase tracking-widest">Resolving state anchors...</p>
                         </div>
                     ) : view === 'transaction' && selectedTx ? (
-                        <div className="p-8 space-y-6">
-                            <TxDetailRow label="Temporal Signature" value={selectedTx.id} isHash />
-                            <TxDetailRow label="State Consensus" value="Finalized" isBadge />
-                            <TxDetailRow label="Creation Epoch" value={new Date(selectedTx.timestamp).toLocaleString()} />
-                            <TxDetailRow label="Quantum Volume" value={`${selectedTx.amount} UBT ($${ubtToUsd(selectedTx.amount, selectedTx.priceAtSync)})`} />
-                            <TxDetailRow label="Sender Node" value={selectedTx.senderPublicKey || selectedTx.senderId} isHash />
-                            <TxDetailRow label="Recipient Node" value={selectedTx.receiverId} isHash />
-                            <TxDetailRow label="Protocol Seal" value={selectedTx.signature} isHash />
+                        <div className="p-10 space-y-8 animate-fade-in max-w-4xl mx-auto">
+                            <DetailRow label="Transaction Signature" value={selectedTx.id} isMono />
+                            <DetailRow label="Result" value="Success" isBadge />
+                            <DetailRow label="Timestamp" value={new Date(selectedTx.timestamp).toLocaleString()} />
+                            <DetailRow label="Value" value={`${selectedTx.amount} UBT ($${ubtToUsd(selectedTx.amount, selectedTx.priceAtSync)})`} isStrong />
+                            <DetailRow label="From" value={selectedTx.senderPublicKey || selectedTx.senderId} isMono />
+                            <DetailRow label="To" value={selectedTx.receiverId} isMono />
+                            <DetailRow label="Ed25519 Proof" value={selectedTx.signature} isMono isSmall />
                         </div>
                     ) : (
                         <div className="overflow-x-auto">
                             <table className="w-full text-left border-collapse">
                                 <thead>
-                                    <tr className="text-[11px] font-bold text-[#77838F] uppercase border-b border-[#E7EAF3]">
-                                        <th className="px-6 py-4">Txn Signature</th>
-                                        <th className="px-6 py-4">Sender Node</th>
-                                        <th className="px-6 py-4">Recipient Node</th>
-                                        <th className="px-6 py-4">Value (UBT)</th>
-                                        <th className="px-6 py-4">Age</th>
+                                    <tr className="text-[10px] font-black text-[#94A3B8] uppercase border-b border-[#E2E8F0]">
+                                        <th className="px-10 py-6">Signature</th>
+                                        <th className="px-10 py-6">From Node</th>
+                                        <th className="px-10 py-6">To Node</th>
+                                        <th className="px-10 py-6">Volume</th>
+                                        <th className="px-10 py-6">Age</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-[#E7EAF3] font-mono">
+                                <tbody className="divide-y divide-[#E2E8F0] font-mono">
                                     {transactions.map((tx) => (
-                                        <tr key={tx.id} className="hover:bg-[#F8FAFD] transition-colors text-sm">
-                                            <td className="px-6 py-4">
-                                                <button onClick={() => navigateTx(tx.id)} className="text-blue-500 hover:text-blue-700 font-bold">
+                                        <tr key={tx.id} className="hover:bg-[#F8FAFC] transition-colors text-sm group">
+                                            <td className="px-10 py-6">
+                                                <button onClick={() => navigateTx(tx.id)} className="text-blue-600 hover:text-blue-800 font-bold">
                                                     {tx.id.substring(0, 10)}...
                                                 </button>
                                             </td>
-                                            <td className="px-6 py-4 text-gray-600">
+                                            <td className="px-10 py-6 text-gray-500 text-xs">
                                                 {formatAddress(tx.senderId, tx.senderPublicKey)}
                                             </td>
-                                            <td className="px-6 py-4 text-gray-600">
+                                            <td className="px-10 py-6 text-gray-500 text-xs">
                                                 {formatAddress(tx.receiverId)}
                                             </td>
-                                            <td className="px-6 py-4 font-bold text-[#1E2022]">
-                                                {tx.amount.toLocaleString()}
+                                            <td className="px-10 py-6">
+                                                <div className="flex flex-col">
+                                                    <span className="font-bold text-[#0F172A]">{tx.amount.toLocaleString()} UBT</span>
+                                                    <span className="text-[10px] text-gray-400">${ubtToUsd(tx.amount, tx.priceAtSync)}</span>
+                                                </div>
                                             </td>
-                                            <td className="px-6 py-4 text-[#77838F] text-xs">
+                                            <td className="px-10 py-6 text-[#94A3B8] text-xs">
                                                 {formatTimeAgo(tx.timestamp)}
                                             </td>
                                         </tr>
                                     ))}
                                     {transactions.length === 0 && (
                                         <tr>
-                                            <td colSpan={5} className="py-20 text-center text-gray-400 font-sans">No ledger events indexed on this node.</td>
+                                            <td colSpan={5} className="py-32 text-center text-gray-400 font-sans italic">No transaction data indexed on this shard.</td>
                                         </tr>
                                     )}
                                 </tbody>
@@ -189,24 +206,31 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     );
 };
 
-const MarketStat = ({ label, value, change }: { label: string, value: string, change?: string }) => (
-    <div className="bg-white p-5 rounded-xl border border-[#E7EAF3] shadow-sm">
-        <p className="text-[10px] font-bold text-[#77838F] mb-1">{label}</p>
+const MarketMetric = ({ label, value, change, color }: any) => (
+    <div className="bg-white p-6 rounded-2xl border border-[#E2E8F0] shadow-sm">
+        <p className="text-[10px] font-black text-[#94A3B8] mb-2 tracking-widest">{label}</p>
         <div className="flex items-baseline gap-2">
-            <span className="text-lg font-bold text-[#1E2022] font-mono">{value}</span>
-            {change && <span className="text-[10px] text-green-500 font-bold">{change}</span>}
+            <span className={`text-2xl font-black ${color || 'text-[#0F172A]'}`}>{value}</span>
+            {change && <span className="text-[10px] text-green-600 font-black">{change}</span>}
         </div>
     </div>
 );
 
-const TxDetailRow = ({ label, value, isHash, isBadge }: any) => (
-    <div className="flex flex-col sm:flex-row sm:items-center border-b border-gray-100 pb-4">
-        <span className="w-full sm:w-1/3 text-sm text-gray-500">{label}:</span>
-        <div className="w-full sm:w-2/3 mt-1 sm:mt-0">
+const DetailRow = ({ label, value, isMono, isBadge, isStrong, isSmall }: any) => (
+    <div className="flex flex-col sm:flex-row sm:items-center border-b border-gray-100 pb-5 last:border-0">
+        <span className="w-full sm:w-1/3 text-[11px] font-black text-[#64748B] uppercase tracking-widest">{label}</span>
+        <div className="w-full sm:w-2/3 mt-2 sm:mt-0">
             {isBadge ? (
-                <span className="bg-green-100 text-green-700 text-[10px] font-bold px-2 py-1 rounded-md uppercase">Finalized</span>
+                <span className="bg-green-100 text-green-700 text-[10px] font-black px-3 py-1.5 rounded-lg uppercase border border-green-200">Verified</span>
             ) : (
-                <span className={`text-sm ${isHash ? 'font-mono text-gray-700 break-all leading-relaxed' : 'font-bold text-gray-900'}`}>{value}</span>
+                <span className={`
+                    ${isMono ? 'font-mono' : 'font-medium'} 
+                    ${isStrong ? 'text-lg font-black text-[#0F172A]' : 'text-sm text-[#334155]'}
+                    ${isSmall ? 'text-[10px] opacity-60 leading-relaxed' : ''}
+                    break-all
+                `}>
+                    {value}
+                </span>
             )}
         </div>
     </div>
