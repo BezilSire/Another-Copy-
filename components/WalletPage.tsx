@@ -3,24 +3,26 @@ import { User, UbtTransaction, GlobalEconomy, UserVault } from '../types';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
 import { LoaderIcon } from './icons/LoaderIcon';
-import { formatTimeAgo, safeDate } from '../utils';
+import { formatTimeAgo } from '../utils';
 import { ArrowUpRightIcon } from './icons/ArrowUpRightIcon';
 import { ArrowDownLeftIcon } from './icons/ArrowDownLeftIcon';
 import { QrCodeIcon } from './icons/QrCodeIcon';
-import { UBTScan } from './UBTScan';
 import { ClipboardIcon } from './icons/ClipboardIcon';
 import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
 import { SendIcon } from './icons/SendIcon';
 import { SendUbtModal } from './SendUbtModal';
 import { LockIcon } from './icons/LockIcon';
 import { TrendingUpIcon } from './icons/TrendingUpIcon';
+/* Added missing import for ShieldCheckIcon */
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import { ProtocolReconciliation } from './ProtocolReconciliation';
 import { IdentityVault } from './IdentityVault';
 import { DatabaseIcon } from './icons/DatabaseIcon';
 import { IntentLab } from './IntentLab';
-import { SparkleIcon } from './icons/SparkleIcon';
 import { InfoIcon } from './icons/InfoIcon';
+import { FileTextIcon } from './icons/FileTextIcon';
+import { GlobeIcon } from './icons/GlobeIcon';
 
 export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
     const [transactions, setTransactions] = useState<UbtTransaction[]>([]);
@@ -31,6 +33,7 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
     const [isScanOpen, setIsScanOpen] = useState(false);
     const [isAuditOpen, setIsAuditOpen] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
+    const [copiedTxId, setCopiedTxId] = useState<string | null>(null);
     const { addToast } = useToast();
 
     useEffect(() => {
@@ -51,6 +54,20 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
             setTimeout(() => setIsCopied(false), 2000);
             addToast("Node Anchor Copied.", "info");
         });
+    };
+
+    const handleCopyTxHash = (hash: string) => {
+        navigator.clipboard.writeText(hash).then(() => {
+            setCopiedTxId(hash);
+            setTimeout(() => setCopiedTxId(null), 2000);
+            addToast("Transaction Hash Copied.", "success");
+        });
+    };
+
+    const handleViewOnExplorer = (txId: string) => {
+        // Logic: Redirect to Ledger page with the specific hash
+        // In a real environment, this might be a separate URL like global-commons.app/ledger?tx=...
+        window.location.href = `${window.location.origin}/ledger?tx=${txId}`;
     };
 
     const hotBalance = user.ubtBalance || 0;
@@ -93,7 +110,6 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                             </div>
                         </div>
 
-                        {/* Public Anchor - Standard Prominent Look */}
                         <div 
                             onClick={handleCopyAddress}
                             className="w-full lg:w-96 bg-black border border-white/10 p-6 rounded-[1.5rem] flex flex-col gap-3 shadow-inner hover:border-brand-gold/40 transition-all group cursor-pointer"
@@ -110,7 +126,6 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                         </div>
                     </div>
 
-                    {/* ACTION SIGNATURES - Scaled Down for Standard Mobile Practice */}
                     <div className="grid grid-cols-2 gap-4">
                         <button 
                             onClick={() => setIsSendOpen(true)}
@@ -137,7 +152,7 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                             onClick={() => setActiveTab('ledger')}
                             className={`px-8 py-3 rounded-[1.5rem] text-[9px] font-black uppercase tracking-[0.3em] transition-all ${activeTab === 'ledger' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-white hover:opacity-80'}`}
                         >
-                            History
+                            Ledger
                         </button>
                         <button 
                             onClick={() => setActiveTab('lab')}
@@ -169,33 +184,69 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
 
                 <div className="min-h-[400px]">
                     {activeTab === 'ledger' && (
-                        <div className="space-y-3 animate-fade-in">
-                            <div className="bg-slate-950/40 p-6 rounded-[2rem] border border-white/5 mb-6">
+                        <div className="space-y-4 animate-fade-in">
+                            <div className="bg-slate-950/40 p-6 rounded-[2rem] border border-white/5 mb-2">
                                 <p className="text-[10px] text-white font-black uppercase tracking-widest leading-loose">
-                                    The Ledger is an immutable temporal record of every asset movement. Every block is cryptographically signed by the dispatching node.
+                                    Sovereign Evidence Protocol: Every asset displacement generates a unique hash, verifiable on the public spectrum.
                                 </p>
                             </div>
                             {transactions.length > 0 ? transactions.map(tx => (
-                                <div key={tx.id} className="bg-slate-900/40 p-6 rounded-[2rem] border border-white/5 hover:border-brand-gold/10 transition-all flex items-center justify-between group">
-                                    <div className="flex items-center gap-6">
-                                        <div className={`p-4 rounded-2xl ${tx.senderId === user.id ? 'bg-red-500/5 text-red-500' : 'bg-emerald-500/5 text-emerald-500'} border border-white/5`}>
-                                            {tx.senderId === user.id ? <ArrowUpRightIcon className="h-5 w-5" /> : <ArrowDownLeftIcon className="h-5 w-5" />}
-                                        </div>
-                                        <div>
-                                            <p className="text-xs font-black text-white uppercase tracking-widest leading-none mb-2">
-                                                {tx.type === 'FIAT_BRIDGE' ? 'Bridge Settlement' : tx.type === 'SUSTENANCE' ? 'Dividend Drop' : tx.senderId === user.id ? 'Asset Dispatch' : 'Asset Ingress'}
-                                            </p>
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-[9px] font-black text-white uppercase tracking-widest">{formatTimeAgo(tx.timestamp)}</span>
-                                                <span className="text-[9px] font-black text-emerald-500/40 uppercase font-mono">Finalized</span>
+                                <div key={tx.id} className="bg-slate-900/40 p-6 rounded-[2rem] border border-white/5 hover:border-brand-gold/10 transition-all flex flex-col gap-6 group relative overflow-hidden">
+                                    <div className="flex items-center justify-between relative z-10">
+                                        <div className="flex items-center gap-6">
+                                            <div className={`p-4 rounded-2xl ${tx.senderId === user.id ? 'bg-red-500/5 text-red-500' : 'bg-emerald-500/5 text-emerald-500'} border border-white/5`}>
+                                                {tx.senderId === user.id ? <ArrowUpRightIcon className="h-5 w-5" /> : <ArrowDownLeftIcon className="h-5 w-5" />}
+                                            </div>
+                                            <div>
+                                                <p className="text-xs font-black text-white uppercase tracking-widest leading-none mb-2">
+                                                    {tx.type === 'FIAT_BRIDGE' ? 'Bridge Settlement' : tx.type === 'SUSTENANCE' ? 'Dividend Drop' : tx.senderId === user.id ? 'Asset Dispatch' : 'Asset Ingress'}
+                                                </p>
+                                                <div className="flex items-center gap-3">
+                                                    <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">{formatTimeAgo(tx.timestamp)}</span>
+                                                    <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-500/10 rounded border border-emerald-500/20">
+                                                        <ShieldCheckIcon className="h-2.5 w-2.5 text-emerald-500" />
+                                                        <span className="text-[8px] font-black text-emerald-500 uppercase tracking-widest">Verified</span>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
+                                        <div className="text-right">
+                                            <p className={`text-xl font-black font-mono tracking-tighter ${tx.senderId === user.id ? 'text-gray-400' : 'text-emerald-500'}`}>
+                                                {tx.senderId === user.id ? '-' : '+'} {tx.amount.toLocaleString()}
+                                            </p>
+                                            <p className="text-[10px] font-black text-gray-600 font-mono tracking-widest mt-1">≈ ${(tx.amount * currentPrice).toFixed(4)} USD</p>
+                                        </div>
                                     </div>
-                                    <div className="text-right">
-                                        <p className={`text-xl font-black font-mono tracking-tighter ${tx.senderId === user.id ? 'text-gray-400' : 'text-emerald-500'}`}>
-                                            {tx.senderId === user.id ? '-' : '+'} {tx.amount.toLocaleString()}
-                                        </p>
-                                        <p className="text-[10px] font-black text-white font-mono tracking-widest mt-1">≈ ${(tx.amount * currentPrice).toFixed(4)} USD</p>
+
+                                    {/* Sovereign Evidence UI */}
+                                    <div className="flex flex-col sm:flex-row items-center gap-3 pt-4 border-t border-white/5 relative z-10">
+                                        <div className="flex-1 bg-black/40 px-4 py-2.5 rounded-xl border border-white/5 flex items-center justify-between group/hash">
+                                            <p className="data-mono text-[9px] text-gray-600 font-bold uppercase tracking-tighter truncate max-w-[200px] sm:max-w-md">
+                                                HASH: <span className="text-brand-gold/60">{tx.hash || tx.id}</span>
+                                            </p>
+                                            <button 
+                                                onClick={() => handleCopyTxHash(tx.hash || tx.id)}
+                                                className="text-gray-700 hover:text-brand-gold transition-colors ml-4"
+                                            >
+                                                {copiedTxId === (tx.hash || tx.id) ? <ClipboardCheckIcon className="h-3.5 w-3.5 text-emerald-500"/> : <ClipboardIcon className="h-3.5 w-3.5"/>}
+                                            </button>
+                                        </div>
+                                        <div className="flex gap-2 w-full sm:w-auto">
+                                            <button 
+                                                onClick={() => handleViewOnExplorer(tx.id)}
+                                                className="flex-1 sm:flex-none px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-white transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <GlobeIcon className="h-3.5 w-3.5 text-brand-gold" />
+                                                Explorer
+                                            </button>
+                                            <button 
+                                                onClick={() => handleViewOnExplorer(tx.id)}
+                                                className="flex-1 sm:flex-none px-4 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-[9px] font-black uppercase tracking-widest text-white transition-all flex items-center justify-center gap-2"
+                                            >
+                                                <FileTextIcon className="h-3.5 w-3.5" />
+                                                Receipt
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             )) : (
@@ -254,7 +305,6 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
             </div>
 
             {isSendOpen && <SendUbtModal isOpen={isSendOpen} onClose={() => setIsSendOpen(false)} currentUser={user} onTransactionComplete={() => {}} />}
-            {isScanOpen && <UBTScan currentUser={user} onTransactionComplete={() => {}} onClose={() => setIsScanOpen(false)} />}
             {isAuditOpen && <ProtocolReconciliation user={user} onClose={() => setIsAuditOpen(false)} />}
         </div>
     );

@@ -1,335 +1,327 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
+import { api } from '../services/apiService';
 import { sovereignService } from '../services/sovereignService';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
 import { SearchIcon } from './icons/SearchIcon';
 import { formatTimeAgo } from '../utils';
-import { UbtTransaction } from '../types';
+import { UbtTransaction, GlobalEconomy, PublicUserProfile } from '../types';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
-import { UserCircleIcon } from './icons/UserCircleIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
-import { CheckCircleIcon } from './icons/CheckCircleIcon';
+import { ClipboardIcon } from './icons/ClipboardIcon';
+import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
 
 type ExplorerView = 'ledger' | 'account' | 'transaction';
 
 export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', value: string } }> = ({ initialTarget }) => {
-    const [view, setView] = useState<ExplorerView>(initialTarget?.type === 'address' ? 'account' : initialTarget?.type === 'tx' ? 'transaction' : 'ledger');
-    const [targetValue, setTargetValue] = useState<string>(initialTarget?.value || '');
+    const [view, setView] = useState<ExplorerView>('ledger');
+    const [targetValue, setTargetValue] = useState<string>('');
+    const [accountData, setAccountData] = useState<PublicUserProfile | null>(null);
     const [selectedTx, setSelectedTx] = useState<UbtTransaction | null>(null);
     
     const [transactions, setTransactions] = useState<UbtTransaction[]>([]);
+    const [economy, setEconomy] = useState<GlobalEconomy | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [namesMap, setNamesMap] = useState<Record<string, string>>({});
+    const [isCopied, setIsCopied] = useState(false);
 
-    const syncWithGitHub = async () => {
-        setIsLoading(true);
-        try {
-            const data = await sovereignService.fetchPublicLedger(400);
-            
-            // Clean simulation noise
-            const cleansedData = data.filter(tx => 
-                tx.type !== 'SIMULATION_MINT' && 
-                tx.amount !== 10000
-            );
+    const isExplorerSite = process.env.SITE_MODE === 'EXPLORER';
 
-            setTransactions(cleansedData);
-        } catch (e) {
-            console.error("Ledger Sync Error:", e);
-        } finally {
-            setIsLoading(false);
+    // Deep Linking Protocol
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        const txHash = params.get('tx');
+        const addr = params.get('address');
+
+        if (txHash) {
+            setTargetValue(txHash);
+            setView('transaction');
+        } else if (addr) {
+            setTargetValue(addr);
+            setView('account');
+        } else if (initialTarget) {
+            setTargetValue(initialTarget.value);
+            setView(initialTarget.type === 'address' ? 'account' : 'transaction');
         }
-    };
+    }, [initialTarget]);
 
     useEffect(() => {
-        syncWithGitHub();
-        const interval = setInterval(syncWithGitHub, 60000);
-        return () => clearInterval(interval);
+        let isMounted = true;
+        
+        const unsubLedger = api.listenForPublicLedger((txs) => {
+            if (isMounted) {
+                setTransactions(txs);
+                setIsLoading(false);
+                
+                const uniqueIds = Array.from(new Set(txs.flatMap(t => [t.senderId, t.receiverId])));
+                uniqueIds.forEach(id => {
+                    if (!namesMap[id] && id.length > 10) {
+                        api.resolveNodeIdentity(id).then(res => {
+                            if (res && isMounted) setNamesMap(prev => ({ ...prev, [id]: res.name }));
+                        });
+                    }
+                });
+            }
+        }, 100);
+
+        const unsubEcon = api.listenForGlobalEconomy((econ) => {
+            if (isMounted) setEconomy(econ);
+        });
+
+        return () => { isMounted = false; unsubLedger(); unsubEcon(); };
     }, []);
 
-    // Account Detail Logic - Aggregates history and balance from the buffered chain
-    const accountViewData = useMemo(() => {
-        if (view !== 'account' || !targetValue) return null;
-        
-        const history = transactions.filter(t => 
-            t.senderId === targetValue || 
-            t.receiverId === targetValue ||
-            t.senderPublicKey === targetValue ||
-            t.receiverPublicKey === targetValue
-        );
-
-        const balance = history.reduce((acc, t) => {
-            const isReceiver = t.receiverId === targetValue || t.receiverPublicKey === targetValue;
-            return isReceiver ? acc + t.amount : acc - t.amount;
-        }, 0);
-
-        return { balance, history };
+    useEffect(() => {
+        if (view === 'account' && targetValue) {
+            api.resolveNodeIdentity(targetValue).then(setAccountData);
+        }
+        if (view === 'transaction' && targetValue) {
+            // Find in local pool first, if not, wait for full chain sync
+            const found = transactions.find(t => t.id === targetValue || t.hash === targetValue);
+            if (found) setSelectedTx(found);
+        }
     }, [view, targetValue, transactions]);
 
     const navigateAccount = (address: string) => {
         setTargetValue(address);
         setView('account');
         setSearchQuery('');
+        const url = new URL(window.location.href);
+        url.searchParams.set('address', address);
+        url.searchParams.delete('tx');
+        window.history.pushState({}, '', url);
         window.scrollTo(0, 0);
     };
 
     const navigateTx = (txid: string) => {
-        const found = transactions.find(t => t.id === txid);
-        if (found) {
-            setSelectedTx(found);
-            setView('transaction');
-            setSearchQuery('');
-            window.scrollTo(0, 0);
-        }
+        setTargetValue(txid);
+        setView('transaction');
+        setSearchQuery('');
+        const url = new URL(window.location.href);
+        url.searchParams.set('tx', txid);
+        url.searchParams.delete('address');
+        window.history.pushState({}, '', url);
+        window.scrollTo(0, 0);
     };
 
-    const resolveDisplayAddress = (id: string, pubKey?: string) => {
+    const filteredTransactions = useMemo(() => {
+        if (view === 'ledger') return transactions;
+        if (view === 'account') {
+            return transactions.filter(tx => 
+                tx.senderId === targetValue || 
+                tx.receiverId === targetValue || 
+                tx.senderPublicKey === targetValue ||
+                tx.receiverPublicKey === targetValue ||
+                (accountData && (tx.senderId === accountData.id || tx.receiverId === accountData.id))
+            );
+        }
+        return transactions;
+    }, [transactions, view, targetValue, accountData]);
+
+    const handleCopy = (text: string) => {
+        navigator.clipboard.writeText(text).then(() => {
+            setIsCopied(true);
+            setTimeout(() => setIsCopied(false), 2000);
+        });
+    };
+
+    const ubtToUsd = (amt: number, txPrice?: number) => {
+        const price = txPrice || economy?.ubt_to_usd_rate || 0.001;
+        return (amt * price).toFixed(4);
+    };
+
+    const resolveName = (id: string) => {
         const systemNodes: Record<string, string> = {
-            'GENESIS': 'Genesis Root',
-            'FLOAT': 'Liquidity Float',
-            'SUSTENANCE': 'Reserve Node',
-            'DISTRESS': 'Emergency Vault',
-            'SYSTEM': 'Protocol Oracle'
+            'GENESIS': 'GENESIS_ROOT',
+            'FLOAT': 'LIQUIDITY_FLOAT',
+            'SYSTEM': 'PROTOCOL_ORACLE',
+            'SUSTENANCE': 'SUSTENANCE_RESERVE',
+            'DISTRESS': 'EMERGENCY_FUND',
+            'VENTURE': 'LAUNCHPAD_TREASURY'
         };
-        
-        if (systemNodes[id]) return systemNodes[id];
-        
-        // If it's a raw pubKey or a prefixed system node from the sync engine
-        const address = pubKey || id;
-        if (address.startsWith('SYSTEM_NODE:')) return systemNodes[address.split(':')[1]] || address;
-        if (address.startsWith('LEGACY_NODE:')) return address;
-
-        // If it's a real UBT address
-        if (address.startsWith('UBT-')) {
-            return address.substring(0, 6) + '...' + address.substring(address.length - 4);
-        }
-        
-        // Mask raw Firebase UIDs
-        if (address.length > 20 && !address.includes('-')) {
-            return `Legacy_${address.substring(0, 6)}`;
-        }
-
-        return address;
-    };
-
-    const getActionLabel = (type?: string) => {
-        switch(type) {
-            case 'VOUCH_ANCHOR': return 'Vouch Anchor';
-            case 'FIAT_BRIDGE': return 'Bridge Ingress';
-            case 'SYSTEM_MINT': return 'Genesis Mint';
-            case 'VAULT_SYNC': return 'Vault Sync';
-            case 'REDEMPTION': return 'Asset Egress';
-            default: return 'Asset Dispatch';
-        }
+        return systemNodes[id] || namesMap[id] || id.substring(0, 12).toUpperCase();
     };
 
     return (
-        <div className="min-h-screen bg-white text-slate-900 font-sans pb-40">
-            {/* SOLSCAN HEADER - ICONIC LIGHT THEME */}
-            <header className="bg-white border-b border-slate-200 py-4 px-6 sticky top-0 z-[100] shadow-sm">
-                <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-                    <button onClick={() => { setView('ledger'); setSelectedTx(null); }} className="flex items-center gap-3 group">
-                        <div className="p-2 bg-blue-600 rounded-lg group-hover:scale-110 transition-transform">
-                            <GlobeIcon className="h-6 w-6 text-white" />
+        <div className="min-h-screen bg-black text-white font-sans pb-32">
+            <div className="bg-slate-950 border-b border-white/5 py-10 px-6 sm:px-10 lg:px-20 shadow-2xl relative overflow-hidden">
+                <div className="absolute inset-0 blueprint-grid opacity-[0.03] pointer-events-none"></div>
+                <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10 relative z-10">
+                    <button onClick={() => { setView('ledger'); setAccountData(null); window.history.pushState({}, '', window.location.pathname); }} className="flex items-center gap-6 group text-left">
+                        <div className="p-4 bg-brand-gold rounded-[1.5rem] text-slate-950 shadow-glow-gold group-hover:scale-105 transition-all">
+                            <GlobeIcon className="h-8 w-8" />
                         </div>
-                        <h1 className="text-xl font-bold tracking-tight text-slate-900">UBUNTIUM<span className="text-blue-600">SCAN</span></h1>
+                        <div>
+                            <h1 className="text-4xl font-black tracking-tighter uppercase gold-text leading-none">Ubuntium Scan</h1>
+                            <p className="label-caps !text-[10px] !text-gray-500 !tracking-[0.4em] mt-3">Live Network State v5.2</p>
+                        </div>
                     </button>
                     
-                    <div className="flex-1 max-w-2xl w-full relative">
-                        <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
-                            <SearchIcon className="h-4 w-4 text-slate-400" />
+                    <form onSubmit={(e) => { e.preventDefault(); navigateTx(searchQuery); }} className="flex-1 max-w-2xl w-full relative">
+                        <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
+                            <SearchIcon className="h-6 w-6 text-gray-700" />
                         </div>
                         <input 
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            onKeyDown={e => e.key === 'Enter' && (searchQuery.startsWith('UBT') ? navigateAccount(searchQuery) : navigateTx(searchQuery))}
-                            placeholder="Address / Transaction Hash / Block"
-                            className="w-full bg-slate-50 border border-slate-200 rounded-lg py-2.5 pl-11 pr-4 text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500 transition-all placeholder-slate-400 outline-none text-slate-900 font-mono !p-2.5 !border-slate-200"
+                            placeholder="Enter TX Hash / Node Address..."
+                            className="w-full bg-slate-950 border border-white/10 rounded-3xl py-6 pl-16 pr-6 text-sm font-black text-white focus:ring-1 focus:ring-brand-gold/30 transition-all placeholder-gray-800 uppercase data-mono"
                         />
-                    </div>
-                    
-                    <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2 px-3 py-1 bg-blue-50 border border-blue-100 rounded-full">
-                            <div className="h-1.5 w-1.5 rounded-full bg-blue-500 animate-pulse"></div>
-                            <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700">Mainnet-Beta</span>
-                        </div>
-                    </div>
+                    </form>
                 </div>
-            </header>
+            </div>
 
-            <main className="max-w-7xl mx-auto px-6 py-8 space-y-8 animate-fade-in">
-                
-                {/* EXPLORER STATS */}
-                {view === 'ledger' && (
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-                        <StatBox label="LEDGER HEIGHT" value={transactions.length > 0 ? `#${transactions.length}` : "..."} />
-                        <StatBox label="CIRCULATING EQUITY" value="15,000,000 UBT" />
-                        <StatBox label="BLOCK CONSOLIDATION" value="100%" />
-                        <StatBox label="NETWORK STATUS" value="OPERATIONAL" isSuccess />
-                    </div>
-                )}
-
-                {/* VIEW CONTROLLER */}
-                {view === 'account' && accountViewData ? (
-                    <div className="space-y-6">
-                         <button onClick={() => setView('ledger')} className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors">
-                            <ArrowLeftIcon className="h-3 w-3" /> Back to Global Feed
-                        </button>
-                        
-                        <div className="bg-slate-50 rounded-2xl border border-slate-200 p-8 flex flex-col md:flex-row justify-between items-center gap-8 shadow-sm">
-                            <div className="flex items-center gap-5">
-                                <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm">
-                                    <UserCircleIcon className="h-10 w-10 text-slate-400" />
-                                </div>
-                                <div className="min-w-0">
-                                    <h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Account Node Address</h2>
-                                    <p className="text-xl font-bold font-mono text-slate-900 break-all">{targetValue}</p>
-                                </div>
-                            </div>
-                            <div className="text-center md:text-right">
-                                <h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">Ledger Aggregated Balance</h2>
-                                <p className="text-3xl font-bold text-blue-600 font-mono">{accountViewData.balance.toLocaleString()} <span className="text-lg">UBT</span></p>
-                            </div>
-                        </div>
-
-                        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                            <div className="bg-slate-50 px-6 py-4 border-b border-slate-200">
-                                <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Historical Displacement History</h3>
-                            </div>
-                            <TxTable txs={accountViewData.history} navigateAccount={navigateAccount} navigateTx={navigateTx} resolveDisplayAddress={resolveDisplayAddress} getActionLabel={getActionLabel} />
-                        </div>
+            <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-20 py-12 space-y-12">
+                {isLoading ? (
+                    <div className="py-40 text-center">
+                        <LoaderIcon className="h-12 w-12 animate-spin text-brand-gold mx-auto opacity-30" />
+                        <p className="text-[10px] font-black text-gray-500 mt-8 uppercase tracking-[0.6em]">Syncing_Physical_Ledger...</p>
                     </div>
                 ) : view === 'transaction' && selectedTx ? (
-                    <div className="p-8 bg-white rounded-2xl border border-slate-200 space-y-8 max-w-4xl mx-auto shadow-sm">
-                        <button onClick={() => setView('ledger')} className="flex items-center gap-2 text-xs font-bold text-slate-500 hover:text-blue-600 transition-colors">
-                            <ArrowLeftIcon className="h-3 w-3" /> Back
+                    <div className="max-w-3xl mx-auto animate-fade-in space-y-8">
+                         <button onClick={() => setView('ledger')} className="inline-flex items-center text-[10px] font-black text-brand-gold uppercase tracking-[0.4em] hover:text-white transition-colors">
+                            <ArrowLeftIcon className="h-4 w-4 mr-2" /> Global Stream
                         </button>
-                        <h2 className="text-xl font-bold text-slate-900 border-b border-slate-100 pb-4">Transaction Details</h2>
-                        <div className="space-y-1">
-                            <DetailRow label="Signature (Hash)" value={selectedTx.id} isMono />
-                            <DetailRow label="Consensus Status" value="Success" isStatus />
-                            <DetailRow label="Temporal Marker" value={new Date(selectedTx.timestamp).toLocaleString()} />
-                            <DetailRow label="Action Type" value={getActionLabel(selectedTx.type)} />
-                            <DetailRow label="Value Transferred" value={`${selectedTx.amount} UBT`} isStrong />
-                            <DetailRow label="Originating Node" value={selectedTx.senderPublicKey || selectedTx.senderId} isMono isLink onClick={() => navigateAccount(selectedTx.senderPublicKey || selectedTx.senderId)} />
-                            <DetailRow label="Target Destination" value={selectedTx.receiverPublicKey || selectedTx.receiverId} isMono isLink onClick={() => navigateAccount(selectedTx.receiverPublicKey || selectedTx.receiverId)} />
-                            <DetailRow label="Integrity Signature" value={selectedTx.signature} isMono isSmall />
-                        </div>
-                    </div>
-                ) : (
-                    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                        <div className="bg-slate-50 px-6 py-4 border-b border-slate-200 flex justify-between items-center">
-                            <h3 className="text-xs font-bold text-slate-600 uppercase tracking-wider">Live Displacement Stream</h3>
-                            <div className="flex items-center gap-2">
-                                <span className="text-[10px] text-slate-400 font-bold uppercase animate-pulse">Syncing...</span>
+
+                        <div className="module-frame glass-module p-10 rounded-[3.5rem] border-emerald-500/20 shadow-glow-matrix relative overflow-hidden">
+                            <div className="absolute top-0 right-0 p-8 opacity-10">
+                                <ShieldCheckIcon className="h-24 w-24 text-emerald-500" />
+                            </div>
+                            
+                            <div className="mb-12 flex justify-between items-start">
+                                <div>
+                                    <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 rounded-lg text-[9px] font-black uppercase tracking-widest">Sovereign Evidence Protocol</span>
+                                    <h2 className="text-3xl font-black text-white uppercase tracking-tighter mt-4 leading-none">Immutable Receipt</h2>
+                                </div>
+                                <button onClick={() => handleCopy(window.location.href)} className="p-3 bg-white/5 rounded-xl text-gray-400 hover:text-white border border-white/10 transition-all flex items-center gap-2">
+                                    {isCopied ? <ClipboardCheckIcon className="h-4 w-4 text-emerald-500"/> : <ClipboardIcon className="h-4 w-4"/>}
+                                    <span className="text-[9px] font-black uppercase tracking-widest hidden sm:block">Share Proof</span>
+                                </button>
+                            </div>
+
+                            <div className="space-y-8 data-mono">
+                                <ReceiptRow label="TXID_SIGNATURE" value={selectedTx.id} />
+                                <ReceiptRow label="CRYPTOGRAPHIC_HASH" value={selectedTx.hash} />
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-8 pt-8 border-t border-white/5">
+                                    <ReceiptCol label="TEMPORAL_MARKER" value={new Date(selectedTx.timestamp).toLocaleString()} />
+                                    <ReceiptCol label="ACTION_TYPE" value={selectedTx.type || 'P2P_DISPATCH'} />
+                                    <ReceiptCol label="VOLUME" value={`${selectedTx.amount} UBT`} isGold />
+                                    <ReceiptCol label="EST_VALUATION" value={`$${ubtToUsd(selectedTx.amount, selectedTx.priceAtSync)}`} isEmerald />
+                                </div>
+                                
+                                <div className="pt-8 border-t border-white/5 space-y-6">
+                                    <div className="flex flex-col gap-2">
+                                        <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Origin Node</p>
+                                        <button onClick={() => navigateAccount(selectedTx.senderPublicKey || selectedTx.senderId)} className="text-left text-xs font-bold text-brand-gold hover:text-white break-all">
+                                            {selectedTx.senderPublicKey || selectedTx.senderId}
+                                        </button>
+                                    </div>
+                                    <div className="flex flex-col gap-2">
+                                        <p className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Destination Node</p>
+                                        <button onClick={() => navigateAccount(selectedTx.receiverPublicKey || selectedTx.receiverId)} className="text-left text-xs font-bold text-brand-gold hover:text-white break-all">
+                                            {selectedTx.receiverPublicKey || selectedTx.receiverId}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                <div className="bg-black/60 p-6 rounded-2xl border border-white/5 shadow-inner mt-8">
+                                    <p className="text-[8px] text-gray-500 font-black uppercase tracking-[0.4em] mb-4">Integrity Seal (ED25519)</p>
+                                    <p className="text-[10px] text-gray-400 break-all leading-relaxed lowercase">{selectedTx.signature}</p>
+                                </div>
                             </div>
                         </div>
-                        <TxTable txs={transactions} navigateAccount={navigateAccount} navigateTx={navigateTx} resolveDisplayAddress={resolveDisplayAddress} getActionLabel={getActionLabel} />
                     </div>
+                ) : view === 'account' && accountData ? (
+                    <div className="space-y-10 animate-fade-in">
+                         <div className="module-frame glass-module p-10 rounded-[3rem] border-white/5 flex items-center gap-8 shadow-2xl">
+                            <div className="w-20 h-20 bg-slate-900 rounded-3xl border border-white/10 flex items-center justify-center">
+                                <ShieldCheckIcon className="h-10 w-10 text-gray-600" />
+                            </div>
+                            <div>
+                                <h2 className="text-3xl font-black text-white uppercase tracking-tighter leading-none">{accountData.name}</h2>
+                                <p className="label-caps !text-[9px] text-emerald-500 mt-3 font-black tracking-[0.4em]">{accountData.role} Node &bull; {accountData.circle} Circle</p>
+                            </div>
+                         </div>
+                         <ExplorerTable txs={filteredTransactions} onTx={navigateTx} onAccount={navigateAccount} ubtToUsd={ubtToUsd} resolveName={resolveName} />
+                    </div>
+                ) : (
+                    <ExplorerTable txs={filteredTransactions} onTx={navigateTx} onAccount={navigateAccount} ubtToUsd={ubtToUsd} resolveName={resolveName} />
                 )}
-                
-                <footer className="text-center pt-10 pb-20">
-                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]">
-                        Ubuntium Sovereign Network Explorer
-                    </p>
-                    <p className="text-[9px] text-slate-300 mt-2 max-w-lg mx-auto leading-relaxed">
-                        Data is sourced directly from the physical GitHub Ledger. Identity resolution converts internal node identifiers to cryptographic public keys for human-readable transparency.
-                    </p>
-                </footer>
-            </main>
+            </div>
         </div>
     );
 };
 
-const TxTable = ({ txs, navigateAccount, navigateTx, resolveDisplayAddress, getActionLabel }: any) => (
-    <div className="overflow-x-auto">
-        <table className="w-full text-left border-collapse">
-            <thead>
-                <tr className="text-[10px] font-bold text-slate-500 uppercase border-b border-slate-100 bg-slate-50/50">
-                    <th className="px-6 py-5">Signature</th>
-                    <th className="px-6 py-5">Action</th>
-                    <th className="px-6 py-5">Status</th>
-                    <th className="px-6 py-5">From</th>
-                    <th className="px-6 py-5">To</th>
-                    <th className="px-6 py-5 text-right">Value</th>
-                    <th className="px-6 py-5 text-right">Age</th>
-                </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-50 font-mono">
-                {txs.map((tx: any) => (
-                    <tr key={tx.id} className="hover:bg-slate-50/50 transition-colors text-xs group">
-                        <td className="px-6 py-5">
-                            <button onClick={() => navigateTx(tx.id)} className="text-blue-600 hover:text-blue-800 font-bold">
-                                {tx.id.substring(0, 8)}...
-                            </button>
-                        </td>
-                        <td className="px-6 py-5 text-slate-500 font-sans font-medium">
-                            {getActionLabel(tx.type)}
-                        </td>
-                        <td className="px-6 py-5">
-                            <span className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-green-50 text-green-600 font-sans font-bold text-[9px] uppercase border border-green-100">
-                                <CheckCircleIcon className="h-3 w-3" /> Success
-                            </span>
-                        </td>
-                        <td className="px-6 py-5">
-                            <button onClick={() => navigateAccount(tx.senderPublicKey || tx.senderId)} className="text-blue-600 hover:text-blue-800 font-bold">
-                                {resolveDisplayAddress(tx.senderId, tx.senderPublicKey)}
-                            </button>
-                        </td>
-                        <td className="px-6 py-5">
-                            <button onClick={() => navigateAccount(tx.receiverPublicKey || tx.receiverId)} className="text-blue-600 hover:text-blue-800 font-bold">
-                                {resolveDisplayAddress(tx.receiverId, tx.receiverPublicKey)}
-                            </button>
-                        </td>
-                        <td className="px-6 py-5 text-right font-black text-slate-900">
-                            {tx.amount.toLocaleString()} UBT
-                        </td>
-                        <td className="px-6 py-5 text-right text-slate-400 font-sans font-medium">
-                            {formatTimeAgo(tx.timestamp)}
-                        </td>
-                    </tr>
-                ))}
+const ReceiptRow = ({ label, value }: { label: string, value: string }) => (
+    <div className="space-y-2">
+        <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest">{label}</p>
+        <p className="text-sm font-black text-white break-all lowercase opacity-80">{value}</p>
+    </div>
+);
+
+const ReceiptCol = ({ label, value, isGold, isEmerald }: { label: string, value: string, isGold?: boolean, isEmerald?: boolean }) => (
+    <div className="space-y-1">
+        <p className="text-[8px] font-black text-gray-600 uppercase tracking-widest">{label}</p>
+        <p className={`text-lg font-black tracking-tight ${isGold ? 'text-brand-gold' : isEmerald ? 'text-emerald-500' : 'text-white'}`}>{value}</p>
+    </div>
+);
+
+function ExplorerTable({ txs, onTx, onAccount, ubtToUsd, resolveName }: any) {
+    return (
+        <div className="bg-slate-900/60 rounded-[3rem] border border-white/10 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,1)] backdrop-blur-3xl">
+            <div className="overflow-x-auto no-scrollbar">
+                <table className="w-full text-left border-collapse">
+                    <thead>
+                        <tr className="bg-white/5 text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] border-b border-white/5">
+                            <th className="px-10 py-6">Block Signature</th>
+                            <th className="px-10 py-6">Origin</th>
+                            <th className="px-10 py-6">Target</th>
+                            <th className="px-10 py-6">Volume</th>
+                            <th className="px-10 py-6">Temporal</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-white/5 font-mono">
+                        {txs.map((tx: any) => (
+                            <tr key={tx.id} className="hover:bg-brand-gold/[0.02] transition-colors group">
+                                <td className="px-10 py-6">
+                                    <button onClick={() => onTx(tx.id)} className="text-brand-gold hover:text-white text-[11px] font-black transition-all uppercase">
+                                        {tx.id.substring(0, 14)}...
+                                    </button>
+                                </td>
+                                <td className="px-10 py-6">
+                                    <button onClick={() => onAccount(tx.senderPublicKey || tx.senderId)} className="text-gray-400 hover:text-brand-gold text-[10px] truncate max-w-[150px] block font-sans font-bold">
+                                        {resolveName(tx.senderId)}
+                                    </button>
+                                </td>
+                                <td className="px-10 py-6">
+                                    <button onClick={() => onAccount(tx.receiverPublicKey || tx.receiverId)} className="text-gray-400 hover:text-brand-gold text-[10px] truncate max-w-[150px] block font-sans font-bold">
+                                        {resolveName(tx.receiverId)}
+                                    </button>
+                                </td>
+                                <td className="px-10 py-6">
+                                    <div className="flex flex-col">
+                                        <span className="text-sm font-black text-white">{tx.amount.toLocaleString()} <span className="text-[9px] text-gray-700">UBT</span></span>
+                                        <span className="text-[9px] text-emerald-500 font-black">≈ ${ubtToUsd(tx.amount, tx.priceAtSync)}</span>
+                                    </div>
+                                </td>
+                                <td className="px-10 py-6">
+                                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest whitespace-nowrap">
+                                        {formatTimeAgo(tx.timestamp)}
+                                    </span>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
                 {txs.length === 0 && (
-                    <tr>
-                        <td colSpan={7} className="py-24 text-center text-slate-300 font-sans italic">Indexing Ledger State...</td>
-                    </tr>
+                    <div className="py-40 text-center opacity-30">
+                        <p className="label-caps !text-[12px] !tracking-[0.6em]">No Ledger Events Indexed</p>
+                    </div>
                 )}
-            </tbody>
-        </table>
-    </div>
-);
-
-const StatBox = ({ label, value, isSuccess }: any) => (
-    <div className="bg-slate-50 p-6 rounded-xl border border-slate-200">
-        <p className="text-[10px] font-bold text-slate-500 mb-1 tracking-wider">{label}</p>
-        <div className="flex items-center gap-2">
-            <span className={`text-xl font-bold ${isSuccess ? 'text-green-600' : 'text-slate-900'}`}>{value}</span>
-            {isSuccess && <div className="h-2 w-2 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]"></div>}
+            </div>
         </div>
-    </div>
-);
-
-const DetailRow = ({ label, value, isMono, isStatus, isStrong, isSmall, isLink, onClick }: any) => (
-    <div className="flex flex-col sm:flex-row sm:items-center py-5 border-b border-slate-50 last:border-0">
-        <span className="w-full sm:w-1/3 text-[11px] font-bold text-slate-400 uppercase tracking-wider">{label}</span>
-        <div className="w-full sm:w-2/3 mt-1 sm:mt-0">
-            {isStatus ? (
-                <span className="bg-green-50 text-green-600 text-[10px] font-bold px-2 py-1 rounded uppercase border border-green-100 flex items-center gap-1.5 w-fit">
-                    <CheckCircleIcon className="h-3 w-3" />
-                    Verified On-Ledger
-                </span>
-            ) : isLink ? (
-                <button onClick={onClick} className="text-blue-600 hover:text-blue-800 hover:underline font-mono text-sm font-bold text-left break-all">{value}</button>
-            ) : (
-                <span className={`
-                    ${isMono ? 'font-mono' : 'font-semibold'} 
-                    ${isStrong ? 'text-xl font-black text-slate-900' : 'text-sm text-slate-700'}
-                    ${isSmall ? 'text-[10px] opacity-60 leading-relaxed' : ''}
-                    break-all
-                `}>
-                    {value}
-                </span>
-            )}
-        </div>
-    </div>
-);
+    );
+}

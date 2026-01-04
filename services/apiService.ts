@@ -206,36 +206,46 @@ export const api = {
         t.set(doc(ledgerCollection, txId), { id: txId, senderId: from.id, receiverId: to.id, amount: amt, timestamp: Date.now(), reason, type: 'VAULT_SYNC', protocol_mode: 'MAINNET', senderPublicKey: admin.publicKey || "ROOT_AUTH", priceAtSync: econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001, serverTimestamp: serverTimestamp() });
     }),
     
-    approveUbtPurchase: (admin: Admin, p: PendingUbtPurchase, sourceVaultId: string) => runTransaction(db, async t => {
+    approveUbtPurchase: (admin: Admin, p: PendingUbtPurchase, sourceVaultId: string, txData: Partial<UbtTransaction>) => runTransaction(db, async t => {
         const purchaseRef = doc(pendingPurchasesCollection, p.id);
         const userRef = doc(usersCollection, p.userId);
         const sourceRef = doc(vaultsCollection, sourceVaultId);
         const econRef = doc(globalsCollection, 'economy');
         const receiverSnap = await t.get(userRef);
 
+        const econSnap = await t.get(econRef);
+        const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+
         t.update(purchaseRef, { status: 'VERIFIED', verifiedAt: serverTimestamp() });
         t.update(userRef, { ubtBalance: increment(p.amountUbt) });
         t.update(sourceRef, { balance: increment(-p.amountUbt) });
         t.update(econRef, { cvp_usd_backing: increment(p.amountUsd) }); 
 
-        const txId = `bridge-${Date.now().toString(36)}`;
+        const txId = txData.id || `bridge-${Date.now().toString(36)}`;
         
         let receiverKey = "PROVISIONING";
         if (receiverSnap.exists() && receiverSnap.data()?.publicKey) {
             receiverKey = receiverSnap.data()?.publicKey;
         }
 
-        t.set(doc(ledgerCollection, txId), { 
-            id: txId, 
-            senderId: sourceVaultId, 
-            receiverId: p.userId, 
+        const finalTx: UbtTransaction = {
+            id: txId,
+            senderId: sourceVaultId,
+            receiverId: p.userId,
             receiverPublicKey: receiverKey,
-            amount: p.amountUbt, 
-            timestamp: Date.now(), 
-            type: 'FIAT_BRIDGE', 
-            protocol_mode: 'MAINNET', 
-            serverTimestamp: serverTimestamp() 
-        });
+            amount: p.amountUbt,
+            timestamp: txData.timestamp || Date.now(),
+            nonce: txData.nonce || "",
+            signature: txData.signature || "",
+            hash: txData.hash || "",
+            senderPublicKey: admin.publicKey || "",
+            parentHash: 'BRIDGE_ROOT',
+            type: 'FIAT_BRIDGE',
+            protocol_mode: 'MAINNET',
+            priceAtSync: currentPrice
+        };
+
+        t.set(doc(ledgerCollection, txId), { ...finalTx, serverTimestamp: serverTimestamp() });
     }),
     rejectUbtPurchase: (id: string) => updateDoc(doc(pendingPurchasesCollection, id), { status: 'REJECTED' }),
     getPublicUserProfile: async (uid: string): Promise<PublicUserProfile | null> => {
@@ -355,12 +365,12 @@ export const api = {
     toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
     registerResource: (data: Partial<CitizenResource>) => addDoc(resourcesCollection, { ...data, createdAt: serverTimestamp() }),
 
-    // Fixed: Added missing requestPayout method for general users
+    // Fixed: Added requestPayout method for general users
     requestPayout: (u: User, n: string, p: string, a: number) => {
         return addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() });
     },
     
-    // Fixed: Added missing requestCommissionPayout method for agents
+    // Fixed: Added requestCommissionPayout method for agents
     requestCommissionPayout: (a: Agent, name: string, phone: string, amount: number) => {
         return addDoc(payoutsCollection, { userId: a.id, userName: a.name, type: 'referral', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp() });
     },

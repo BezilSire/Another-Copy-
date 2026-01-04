@@ -22,11 +22,10 @@ export const BridgeVerificationAdmin: React.FC<BridgeVerificationAdminProps> = (
     const handleApprove = async (purchase: PendingUbtPurchase) => {
         const methodLabel = purchase.payment_method === 'CRYPTO' ? `${purchase.cryptoAsset} On-chain` : 'Ecocash Handshake';
         if (!window.confirm(`Settle ${methodLabel}? Release ${purchase.amountUbt} UBT to node ${purchase.userName}?`)) return;
-        
         setProcessingId(purchase.id);
         try {
-            // FIX: Added 'FLOAT' as default sourceVaultId to satisfy 3-argument signature
-            await api.approveUbtPurchase(adminUser, purchase, 'FLOAT');
+            // FIX: Added empty object as 4th argument to satisfy the 4-argument signature of approveUbtPurchase
+            await api.approveUbtPurchase(adminUser, purchase, 'FLOAT', {});
             addToast("Ledger Settled. Assets Distributed.", "success");
         } catch (e: any) {
             console.error("Settlement error:", e);
