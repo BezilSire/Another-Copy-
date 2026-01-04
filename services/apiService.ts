@@ -1,3 +1,4 @@
+
 import {
   signInWithEmailAndPassword,
   signOut,
@@ -119,12 +120,6 @@ export const api = {
         }
         return results;
     },
-
-    requestPayout: (u: User, n: string, p: string, a: number) => {
-        return addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() });
-    },
-    
-    requestCommissionPayout: (a: Agent, name: string, phone: string, amount: number) => addDoc(payoutsCollection, { userId: a.id, userName: a.name, type: 'referral', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp() }),
 
     processUbtTransaction: async (transaction: UbtTransaction) => {
         return runTransaction(db, async (t) => {
@@ -328,7 +323,7 @@ export const api = {
     listenForPayoutRequests: (admin: User, cb: (r: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(payoutsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
     listenForPendingPurchases: (cb: (p: PendingUbtPurchase[]) => void, err?: any): Unsubscribe => onSnapshot(query(pendingPurchasesCollection, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), err),
     listenForUserVentures: (uid: string, cb: (v: any[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('ownerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), err),
-    listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(payoutsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
+    listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(query(payoutsCollection, where('userId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
     listenForReferredUsers: (uid: string, cb: (u: PublicUserProfile[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('referrerId', '==', uid)), s => cb(s.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile))), err),
     listenForProposals: (cb: (p: Proposal[]) => void, err?: any): Unsubscribe => onSnapshot(query(proposalsCollection, orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Proposal))), err),
     listenToResources: (circle: string, cb: (r: CitizenResource[]) => void): Unsubscribe => onSnapshot(circle === 'ANY' ? resourcesCollection : query(resourcesCollection, where('circle', '==', circle)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource)))),
@@ -353,12 +348,22 @@ export const api = {
         for (const v of vaults) {
             batch.set(doc(vaultsCollection, v.id), { ...v, publicKey: `UBT-VAULT-${v.id}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`, isLocked: false });
         }
-        const txId = `genesis-mint-root`;
+        const txId = `mint-${Date.now().toString(36)}`;
         batch.set(doc(ledgerCollection, txId), { id: txId, senderId: 'SYSTEM', receiverId: 'GENESIS', amount: 15000000, timestamp: Date.now(), type: 'SYSTEM_MINT', protocol_mode: 'MAINNET', senderPublicKey: 'ROOT_PROTOCOL', serverTimestamp: serverTimestamp() });
         await batch.commit();
     },
     toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
     registerResource: (data: Partial<CitizenResource>) => addDoc(resourcesCollection, { ...data, createdAt: serverTimestamp() }),
+
+    // Fixed: Added missing requestPayout method for general users
+    requestPayout: (u: User, n: string, p: string, a: number) => {
+        return addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() });
+    },
+    
+    // Fixed: Added missing requestCommissionPayout method for agents
+    requestCommissionPayout: (a: Agent, name: string, phone: string, amount: number) => {
+        return addDoc(payoutsCollection, { userId: a.id, userName: a.name, type: 'referral', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp() });
+    },
 
     createPost: async (u: User, content: string, type: Post['types'], award: number, skills: string[] = []) => {
         return addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: skills, commentCount: 0, repostCount: 0, ccapAwarded: award });

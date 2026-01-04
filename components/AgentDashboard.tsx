@@ -1,5 +1,6 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
-import { Agent, Member, NewMember, Broadcast, User, NotificationItem, PublicUserProfile } from '../types';
+import { Agent, Member, NewMember, Broadcast, User, NotificationItem, PublicUserProfile, Activity, Notification } from '../types';
 import { RegisterMemberForm } from './RegisterMemberForm';
 import { MemberList } from './MemberList';
 import { AgentProfile } from './AgentProfile';
@@ -108,7 +109,8 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
 
   const handleNavigate = (item: NotificationItem) => {
        if (item.type === 'NEW_MEMBER' || item.type === 'POST_LIKE' || item.type === 'NEW_POST_PROPOSAL' || item.type === 'NEW_POST_OPPORTUNITY' || item.type === 'NEW_POST_GENERAL' || item.type === 'NEW_POST_OFFER') {
-          const targetId = item.itemType === 'notification' ? item.causerId : item.link;
+          // Fixed: Added logic to distinguish between Notification and Activity using itemType
+          const targetId = item.itemType === 'notification' ? (item as Notification).causerId : (item as Activity).link;
           if (targetId) onViewProfile(targetId);
       } else {
           addToast('Navigation for this notification is not available in this view.', 'info');

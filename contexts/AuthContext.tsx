@@ -69,7 +69,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
                 isProfileComplete: false,
                 hasCompletedInduction: true,
                 createdAt: Timestamp.now(),
-                lastSeen: Timestamp.now()
+                lastSeen: Timestamp.now(),
+                distress_calls_available: 1
             } as any);
         }
     } catch (e) {
@@ -99,7 +100,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         // Immediate Entry Protocol
         if (user.isAnonymous) {
             const guestName = sessionStorage.getItem('ugc_guest_name') || 'Guest Citizen';
-            setCurrentUser({ id: user.uid, name: guestName, role: 'member', status: 'active', circle: 'GLOBAL', isProfileComplete: true } as any);
+            setCurrentUser({ id: user.uid, name: guestName, role: 'member', status: 'active', circle: 'GLOBAL', isProfileComplete: true, distress_calls_available: 0 } as any);
             setIsLoadingAuth(false);
             return;
         }
@@ -194,6 +195,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       const { user } = userCredential;
       const pubKey = cryptoService.getPublicKey() || "";
 
+      /* Fixed: Added required distress_calls_available property */
       const newAgent: Omit<Agent, 'id'> = {
         name: credentials.name,
         email: credentials.email,
@@ -210,6 +212,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         commissionBalance: 0,
         referralEarnings: 0,
         publicKey: pubKey,
+        distress_calls_available: 0,
       };
 
       await setDoc(doc(db, 'users', user.uid), newAgent);

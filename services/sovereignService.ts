@@ -55,28 +55,29 @@ export const sovereignService = {
     dispatchTransaction: async (tx: any): Promise<string | null> => {
         // Use original timestamp for historical accuracy
         const path = `ledger/tx-${tx.timestamp || Date.now()}-${tx.id}.json`;
-        return await sovereignService.commitBlock(path, tx, `Asset Dispatch: ${tx.id}`);
+        return await sovereignService.commitBlock(path, tx, `Block Dispatch: ${tx.id}`);
     },
 
     /**
      * LEGACY BRIDGE PROTOCOL
-     * 1. Filters out SIMULATION and MINT transactions (Expungement)
-     * 2. Resolves Receiver ID to Public Key and STAMPS it into the file.
+     * Modified: 
+     * 1. Filters out junk blocks (10k UBT simulation noise)
+     * 2. Resolves receiverId -> receiverPublicKey for permanent transparency
      */
     syncLegacyToGitHub: async (onProgress: (log: string) => void) => {
         onProgress("> INITIALIZING_SOVEREIGN_CLEANSE...");
         const firebaseTxs = await api.getPublicLedger(1000);
         
-        // STRICT FILTER: Expunge simulation/test blocks
+        // STRICT FILTER: Expunge simulation/test blocks (10,000 UBT mints)
         const realTxs = firebaseTxs.filter(tx => {
             const isSimulation = tx.type === 'SIMULATION_MINT' || tx.type === 'SYSTEM_MINT';
-            const isTestAmount = tx.amount === 10000; // The problematic 10k blocks
+            const isTestAmount = tx.amount === 10000;
             return !isSimulation && !isTestAmount;
         });
         
-        onProgress(`> CLEANSED_HISTORY: ${realTxs.length} REAL BLOCKS IDENTIFIED.`);
+        onProgress(`> CLEANSED_HISTORY: ${realTxs.length} LEGITIMATE BLOCKS IDENTIFIED.`);
 
-        // 1. Get existing blocks on GitHub to prevent duplicate work
+        // Get existing blocks on GitHub to avoid duplicates
         const listUrl = `${GITHUB_API}/repos/${REPO}/contents/ledger`;
         const listRes = await fetch(listUrl);
         const existingFiles = listRes.ok ? await listRes.json() : [];
@@ -88,39 +89,41 @@ export const sovereignService = {
         let count = 0;
         for (const tx of realTxs) {
             if (!existingIds.has(tx.id)) {
-                onProgress(`> RESOLVING_TARGET_KEY: ${tx.receiverId.substring(0,8)}...`);
+                onProgress(`> RESOLVING_IDENTITY: ${tx.receiverId.substring(0,8)}...`);
                 
                 // CRITICAL: IDENTITY STAMPING
-                // We resolve the internal "ridiculous" ID to the UBT Public Key before pushing to GitHub
+                // We resolve the internal DB ID to the UBT Public Key before pushing to the public record
                 let enrichedTx = { ...tx };
                 try {
                     const receiverProfile = await api.getPublicUserProfile(tx.receiverId);
                     if (receiverProfile?.publicKey) {
                         enrichedTx.receiverPublicKey = receiverProfile.publicKey;
                         onProgress(`> STAMPED_ADDRESS: ${receiverProfile.publicKey.substring(0,12)}...`);
-                    } else if (['FLOAT', 'GENESIS', 'SUSTENANCE', 'DISTRESS', 'VENTURE'].includes(tx.receiverId)) {
+                    } else if (['FLOAT', 'GENESIS', 'SYSTEM'].includes(tx.receiverId)) {
                         enrichedTx.receiverPublicKey = `SYSTEM_NODE:${tx.receiverId}`;
                     }
                 } catch (e) {
-                    console.warn("Could not resolve receiver key for", tx.id);
+                    console.warn("Identity resolution skipped for", tx.id);
                 }
 
                 onProgress(`> ANCHORING_BLOCK: ${tx.id.substring(0,8)}...`);
                 await sovereignService.dispatchTransaction(enrichedTx);
                 count++;
-                await new Promise(r => setTimeout(r, 250)); // Slow for stability
+                // Slight delay for GitHub API stability
+                await new Promise(r => setTimeout(r, 200));
             }
         }
-        onProgress(`> SYNC_COMPLETE. ${count} BLOCKS VERIFIED & ANCHORED.`);
+        onProgress(`> RECONCILIATION_COMPLETE. ${count} BLOCKS VERIFIED & ANCHORED.`);
     },
 
     /**
      * PUBLIC DISCOVERY PROTOCOL
+     * Priorities: receiverPublicKey over receiverId
      */
     fetchPublicLedger: async (limitCount: number = 100): Promise<any[]> => {
         try {
             const listUrl = `${GITHUB_API}/repos/${REPO}/contents/ledger`;
-            const listRes = await fetch(listUrl);
+            const listRes = await fetch(listUrl, { cache: 'no-store' });
             if (!listRes.ok) return [];
             
             const files = await listRes.json();

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { User, Notification, Activity, NotificationItem } from '../types';
 import { api } from '../services/apiService';
@@ -92,7 +93,8 @@ export const NotificationsPage: React.FC<NotificationsPageProps> = ({ user, onNa
       api.markNotificationAsRead(user.id, item.id).catch(err => console.error("Failed to mark as read:", err));
     }
     if (onViewProfile && (item.type === 'NEW_MEMBER' || item.type === 'POST_LIKE' || item.type === 'NEW_FOLLOWER')) {
-        const targetId = item.itemType === 'notification' ? item.causerId : item.link;
+        // Fixed: Added logic to distinguish between Notification and Activity using itemType
+        const targetId = item.itemType === 'notification' ? (item as Notification).causerId : (item as Activity).link;
         if (targetId) onViewProfile(targetId);
     } else {
         onNavigate(item);
