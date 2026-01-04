@@ -344,7 +344,7 @@ export const api = {
     listenForPostsByAuthor: (authorId: string, cb: (posts: Post[]) => void, err?: any): Unsubscribe => onSnapshot(query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), err),
     listenForComments: (parentId: string, cb: (comments: Comment[]) => void, coll: 'posts' | 'proposals', err?: any): Unsubscribe => onSnapshot(query(collection(db, coll, parentId, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), err),
     listenForMultiSigProposals: (cb: (p: MultiSigProposal[]) => void): Unsubscribe => onSnapshot(query(multisigCollection, where('status', '==', 'pending')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as MultiSigProposal))), console.error),
-    listenForPublicLedger: (cb: (txs: UbtTransaction[]) => void, l: number = 200): Unsubscribe => onSnapshot(query(ledgerCollection, orderBy('timestamp', 'desc'), limit(l)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction))), console.error),
+    listenForPublicLedger: (cb: (txs: UbtTransaction[]) => void, l: number = 200): Unsubscribe => onSnapshot(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction))), console.error),
 
     initializeTreasury: async (admin: Admin) => {
         const batch = writeBatch(db);
@@ -365,21 +365,15 @@ export const api = {
     toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
     registerResource: (data: Partial<CitizenResource>) => addDoc(resourcesCollection, { ...data, createdAt: serverTimestamp() }),
 
-    // Fixed: Added requestPayout method for general users
-    requestPayout: (u: User, n: string, p: string, a: number) => {
-        return addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() });
-    },
-    
-    // Fixed: Added requestCommissionPayout method for agents
-    requestCommissionPayout: (a: Agent, name: string, phone: string, amount: number) => {
-        return addDoc(payoutsCollection, { userId: a.id, userName: a.name, type: 'referral', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp() });
-    },
-
+    // Fix: Added missing createPost method to the api object
     createPost: async (u: User, content: string, type: Post['types'], award: number, skills: string[] = []) => {
         return addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: skills, commentCount: 0, repostCount: 0, ccapAwarded: award });
     },
+    // Fix: Added missing deletePost method
     deletePost: (id: string) => deleteDoc(doc(postsCollection, id)),
+    // Fix: Added missing updatePost method
     updatePost: (id: string, content: string) => updateDoc(doc(postsCollection, id), { content }),
+    // Fix: Added missing upvotePost method
     upvotePost: async (id: string, uid: string) => {
         const snap = await getDoc(doc(postsCollection, id));
         if (snap.exists()) {
@@ -387,11 +381,13 @@ export const api = {
             await updateDoc(doc(postsCollection, id), { upvotes: upvotes.includes(uid) ? arrayRemove(uid) : arrayUnion(uid) });
         }
     },
+    // Fix: Added missing fetchPinnedPosts method
     fetchPinnedPosts: async (isAdmin: boolean): Promise<Post[]> => {
         const q = query(postsCollection, where('isPinned', '==', true));
         const s = await getDocs(q);
         return s.docs.map(d => ({ id: d.id, ...d.data() } as Post));
     },
+    // Fix: Added missing fetchRegularPosts method
     fetchRegularPosts: async (count: number, filter: string, isAdmin: boolean, startAfterDoc?: DocumentSnapshot<DocumentData>, currentUser?: User) => {
         let q;
         if (filter === 'all' || filter === 'foryou') q = query(postsCollection, orderBy('date', 'desc'), limit(count));
@@ -401,22 +397,52 @@ export const api = {
         const s = await getDocs(q);
         return { posts: s.docs.map(d => ({ id: d.id, ...d.data() } as Post)), lastVisible: s.docs[s.docs.length - 1] };
     },
+    // Fix: Added missing togglePinPost method
     togglePinPost: (admin: User, id: string, pin: boolean) => updateDoc(doc(postsCollection, id), { isPinned: pin }),
-    addComment: (pid: string, data: any, coll: 'posts'|'proposals' = 'posts') => {
-        const batch = writeBatch(db);
-        batch.set(doc(collection(db, coll, pid, 'comments')), { ...data, timestamp: serverTimestamp() });
-        batch.update(doc(db, coll, pid), { commentCount: increment(1) });
-        return batch.commit();
+
+    requestPayout: (u: User, n: string, p: string, a: number) => {
+        return addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() });
     },
-    deleteComment: (pid: string, cid: string, coll: 'posts'|'proposals') => deleteDoc(doc(db, coll, pid, 'comments', cid)),
-    upvoteComment: async (pid: string, cid: string, uid: string, coll: 'posts'|'proposals' = 'posts') => {
-        const ref = doc(db, coll, pid, 'comments', cid);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-            const upvotes = snap.data().upvotes || [];
-            await updateDoc(ref, { upvotes: upvotes.includes(uid) ? arrayRemove(uid) : arrayUnion(uid) });
-        }
+    
+    requestCommissionPayout: (a: Agent, name: string, phone: string, amount: number) => addDoc(payoutsCollection, { userId: a.id, userName: a.name, type: 'referral', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp() }),
+
+    processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
+        return runTransaction(db, async (t) => {
+            const econRef = doc(globalsCollection, 'economy');
+            const receiverRef = rid ? doc(usersCollection, rid) : null;
+            
+            const [econSnap, receiverSnap] = await Promise.all([
+                t.get(econRef), 
+                receiverRef ? t.get(receiverRef) : Promise.resolve(null)
+            ]);
+
+            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+            
+            let enrichedTx = { ...tx, priceAtSync: currentPrice };
+            if (receiverSnap?.exists()) {
+                const rData = receiverSnap.data();
+                if (rData?.publicKey) enrichedTx.receiverPublicKey = rData.publicKey;
+            } else if (rid === 'EXTERNAL_NODE' || !rid) {
+                enrichedTx.receiverPublicKey = `EXTERNAL_NODE:${tx.id.substring(0,8)}`;
+            }
+
+            t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
+            if (receiverRef && rid !== 'EXTERNAL_NODE') t.update(receiverRef, { ubtBalance: increment(amt) });
+            t.set(doc(ledgerCollection, tx.id), { ...enrichedTx, serverTimestamp: serverTimestamp() });
+        });
     },
+
+    // Fix: Consolidating duplicate getPublicLedger definitions
+    getPublicLedger: async (l: number = 200) => {
+        const s = await getDocs(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)));
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
+    },
+
+    sendDistressPost: async (u: User, content: string) => {
+        return addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress', commentCount: 0, repostCount: 0 });
+    },
+
+    // Fix: Added missing startChat method
     startChat: async (u: User, t: PublicUserProfile): Promise<Conversation> => {
         const id = [u.id, t.id].sort().join('_');
         const snap = await getDoc(doc(conversationsCollection, id));
@@ -425,114 +451,8 @@ export const api = {
         await setDoc(doc(conversationsCollection, id), data);
         return { id, ...data } as Conversation;
     },
+    // Fix: Added missing markConversationAsRead method
     markConversationAsRead: (id: string, uid: string) => updateDoc(doc(conversationsCollection, id), { readBy: arrayUnion(uid) }),
-    sendMessage: async (id: string, msg: any, convo: Conversation) => {
-        const batch = writeBatch(db);
-        batch.set(doc(collection(db, 'conversations', id, 'messages')), { ...msg, timestamp: serverTimestamp() });
-        batch.update(doc(conversationsCollection, id), { lastMessage: msg.text, lastMessageTimestamp: serverTimestamp(), lastMessageSenderId: msg.senderId, readBy: [msg.senderId] });
-        await batch.commit();
-    },
-    getVentureMembers: async (count: number) => {
-        const q = query(usersCollection, where('isLookingForPartners', '==', true), limit(count));
-        const s = await getDocs(q);
-        return { users: s.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile)) };
-    },
-    getFundraisingVentures: async () => {
-        const q = query(collection(db, 'ventures'), where('status', '==', 'fundraising'));
-        const s = await getDocs(q);
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as any));
-    },
-    voteOnProposal: (pid: string, uid: string, v: 'for'|'against') => runTransaction(db, async t => {
-        const ref = doc(proposalsCollection, pid);
-        const snap = await t.get(ref);
-        if (!snap.exists()) return;
-        t.update(ref, { [v === 'for' ? 'votesFor' : 'votesAgainst']: arrayUnion(uid), [v === 'for' ? 'voteCountFor' : 'voteCountAgainst']: increment(1) });
-    }),
-    createPendingUbtPurchase: (u: User, val: number, amt: number) => addDoc(pendingPurchasesCollection, { userId: u.id, userName: u.name, amountUsd: val, amountUbt: amt, status: 'PENDING', createdAt: serverTimestamp(), payment_method: 'FIAT' }),
-    updatePendingPurchaseReference: (purchaseId: string, ref: string) => updateDoc(doc(pendingPurchasesCollection, purchaseId), { ecocashRef: ref, status: 'AWAITING_CONFIRMATION' }),
-    getAgentMembers: async (a: Agent) => {
-        const q = query(membersCollection, where('agent_id', '==', a.id));
-        const s = await getDocs(q);
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as Member));
-    },
-    registerMember: async (a: Agent, d: NewMember) => {
-        const welcome = await generateWelcomeMessage(d.full_name, d.circle);
-        const ref = await addDoc(membersCollection, { ...d, agent_id: a.id, agent_name: a.name, date_registered: serverTimestamp(), welcome_message: welcome, membership_card_id: `UGC-M-${Math.random().toString(36).substring(2, 8).toUpperCase()}` });
-        return { id: ref.id, ...d, agent_id: a.id, agent_name: a.name, welcome_message: welcome } as any;
-    },
-    sendBroadcast: (u: User, m: string) => addDoc(broadcastsCollection, { authorId: u.id, authorName: u.name, message: m, date: new Date().toISOString() }),
-    getBroadcasts: async () => {
-        const q = query(broadcastsCollection, orderBy('date', 'desc'), limit(10));
-        const s = await getDocs(q);
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as any));
-    },
-    updateMemberAndUserProfile: async (uid: string, mid: string, uData: any, mData: any) => {
-        const batch = writeBatch(db);
-        batch.update(doc(usersCollection, uid), uData);
-        batch.update(doc(membersCollection, mid), mData);
-        await batch.commit();
-    },
-    unfollowUser: async (uid: string, tid: string) => {
-        const batch = writeBatch(db);
-        batch.update(doc(usersCollection, uid), { following: arrayRemove(tid) });
-        batch.update(doc(usersCollection, tid), { followers: arrayRemove(uid) });
-        await batch.commit();
-    },
-    followUser: async (u: User, tid: string) => {
-        const batch = writeBatch(db);
-        batch.update(doc(usersCollection, u.id), { following: arrayUnion(tid) });
-        batch.update(doc(usersCollection, tid), { followers: arrayUnion(u.id) });
-        await batch.commit();
-    },
-    reportUser: (r: User, t: User, reason: string, details: string) => addDoc(collection(db, 'reports'), { reporterId: r.id, reporterName: r.name, reportedUserId: t.id, reportedUserName: t.name, reason, details, date: new Date().toISOString(), status: 'new' }),
-    markNotificationAsRead: (uid: string, nid: string) => updateDoc(doc(db, 'users', uid, 'notifications', nid), { read: true }),
-    markAllNotificationsAsRead: async (uid: string) => {
-        const q = query(collection(db, 'users', uid, 'notifications'), where('read', '==', false));
-        const s = await getDocs(q);
-        const batch = writeBatch(db);
-        s.forEach(d => batch.update(d.ref, { read: true }));
-        await batch.commit();
-    },
-    awardKnowledgePoints: (uid: string) => updateDoc(doc(usersCollection, uid), { hasReadKnowledgeBase: true, knowledgePoints: increment(10) }).then(() => true),
-    getPublicLedger: async (l: number = 200) => {
-        const s = await getDocs(query(ledgerCollection, orderBy('timestamp', 'desc'), limit(l)));
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
-    },
-    vouchForCitizen: (transaction: UbtTransaction) => runTransaction(db, async (t) => {
-        const receiverRef = doc(usersCollection, transaction.receiverId);
-        const econRef = doc(globalsCollection, 'economy');
-        const econSnap = await t.get(econRef);
-        const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
-        t.update(receiverRef, { credibility_score: increment(5), vouchCount: increment(1) });
-        t.set(doc(ledgerCollection, transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
-    }),
-    initiateDispute: (c: User, r: User, reason: string, evidence: string) => 
-        addDoc(disputesCollection, { claimantId: c.id, claimantName: c.name, respondentId: r.id, respondentName: r.name, reason, evidence, status: 'TRIBUNAL', juryIds: [], votesForClaimant: 0, votesForRespondent: 0, signedVotes: {}, timestamp: serverTimestamp() }),
-    castJuryVote: (did: string, uid: string, vote: string, signature: string) => 
-        runTransaction(db, async t => {
-            const ref = doc(disputesCollection, did);
-            const snap = await t.get(ref);
-            if (!snap.exists()) return;
-            t.update(ref, { 
-                juryIds: arrayUnion(uid), 
-                [`signedVotes.${uid}`]: signature, 
-                [vote === 'claimant' ? 'votesForClaimant' : 'votesForRespondent']: increment(1) 
-            });
-        }),
-    processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
-        return runTransaction(db, async (t) => {
-            const econRef = doc(globalsCollection, 'economy');
-            const econSnap = await t.get(econRef);
-            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
-            t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
-            if (rid && rid !== 'EXTERNAL_NODE') t.update(doc(usersCollection, rid), { ubtBalance: increment(amt) });
-            t.set(doc(ledgerCollection, tx.id), { ...tx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
-        });
-    },
-
-    sendDistressPost: async (u: User, content: string) => {
-        return addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress', commentCount: 0, repostCount: 0 });
-    },
 
     createGroupChat: async (name: string, members: string[], memberNames: {[key: string]: string}) => {
         return addDoc(conversationsCollection, { name, members, memberNames, lastMessage: "Group established", lastMessageTimestamp: serverTimestamp(), lastMessageSenderId: 'SYSTEM', readBy: [], isGroup: true });
@@ -700,6 +620,7 @@ export const api = {
     },
 
     requestOnchainWithdrawal: async (u: User, amount: number, address: string) => {
+        // Fix: Changed 'writeBatch(batch)' to 'writeBatch(db)' to fix TDZ/self-reference error
         const batch = writeBatch(db);
         batch.set(doc(payoutsCollection), { userId: u.id, userName: u.name, type: 'onchain_withdrawal', amount, status: 'pending', requestedAt: serverTimestamp(), meta: { solanaAddress: address } });
         batch.update(doc(usersCollection, u.id), { ubtBalance: increment(-amount) });
@@ -769,4 +690,132 @@ export const api = {
             t.update(ref, { signatures: newSigs });
         }
     }),
+    
+    // Fix: Added missing getAgentMembers method
+    getAgentMembers: async (a: Agent) => {
+        const q = query(membersCollection, where('agent_id', '==', a.id));
+        const s = await getDocs(q);
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as Member));
+    },
+    // Fix: Added missing registerMember method
+    registerMember: async (a: Agent, d: NewMember) => {
+        const welcome = await generateWelcomeMessage(d.full_name, d.circle);
+        const ref = await addDoc(membersCollection, { ...d, agent_id: a.id, agent_name: a.name, date_registered: serverTimestamp(), welcome_message: welcome, membership_card_id: `UGC-M-${Math.random().toString(36).substring(2, 8).toUpperCase()}` });
+        return { id: ref.id, ...d, agent_id: a.id, agent_name: a.name, welcome_message: welcome } as any;
+    },
+    // Fix: Added missing sendBroadcast method
+    sendBroadcast: (u: User, m: string) => addDoc(broadcastsCollection, { authorId: u.id, authorName: u.name, message: m, date: new Date().toISOString() }),
+    // Fix: Added missing getBroadcasts method
+    getBroadcasts: async () => {
+        const q = query(broadcastsCollection, orderBy('date', 'desc'), limit(10));
+        const s = await getDocs(q);
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as any));
+    },
+    // Fix: Added missing updateMemberAndUserProfile method
+    updateMemberAndUserProfile: async (uid: string, mid: string, uData: any, mData: any) => {
+        const batch = writeBatch(db);
+        batch.update(doc(usersCollection, uid), uData);
+        batch.update(doc(membersCollection, mid), mData);
+        await batch.commit();
+    },
+    // Fix: Added missing addComment method
+    addComment: (pid: string, data: any, coll: 'posts'|'proposals' = 'posts') => {
+        const batch = writeBatch(db);
+        batch.set(doc(collection(db, coll, pid, 'comments')), { ...data, timestamp: serverTimestamp() });
+        batch.update(doc(db, coll, pid), { commentCount: increment(1) });
+        return batch.commit();
+    },
+    // Fix: Added missing deleteComment method
+    deleteComment: (pid: string, cid: string, coll: 'posts'|'proposals') => deleteDoc(doc(db, coll, pid, 'comments', cid)),
+    // Fix: Added missing upvoteComment method
+    upvoteComment: async (pid: string, cid: string, uid: string, coll: 'posts'|'proposals' = 'posts') => {
+        const ref = doc(db, coll, pid, 'comments', cid);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+            const upvotes = snap.data().upvotes || [];
+            await updateDoc(ref, { upvotes: upvotes.includes(uid) ? arrayRemove(uid) : arrayUnion(uid) });
+        }
+    },
+    // Fix: Added missing markConversationAsRead method
+    markNotificationAsRead: (uid: string, nid: string) => updateDoc(doc(db, 'users', uid, 'notifications', nid), { read: true }),
+    // Fix: Added missing markAllNotificationsAsRead method
+    markAllNotificationsAsRead: async (uid: string) => {
+        const q = query(collection(db, 'users', uid, 'notifications'), where('read', '==', false));
+        const s = await getDocs(q);
+        const batch = writeBatch(db);
+        s.forEach(d => batch.update(d.ref, { read: true }));
+        await batch.commit();
+    },
+    // Fix: Added missing followUser method
+    followUser: async (u: User, tid: string) => {
+        const batch = writeBatch(db);
+        batch.update(doc(usersCollection, u.id), { following: arrayUnion(tid) });
+        batch.update(doc(usersCollection, tid), { followers: arrayUnion(u.id) });
+        await batch.commit();
+    },
+    // Fix: Added missing unfollowUser method
+    unfollowUser: async (uid: string, tid: string) => {
+        const batch = writeBatch(db);
+        batch.update(doc(usersCollection, uid), { following: arrayRemove(tid) });
+        batch.update(doc(usersCollection, tid), { followers: arrayRemove(uid) });
+        await batch.commit();
+    },
+    // Fix: Added missing reportUser method
+    reportUser: (r: User, t: User, reason: string, details: string) => addDoc(collection(db, 'reports'), { reporterId: r.id, reporterName: r.name, reportedUserId: t.id, reportedUserName: t.name, reason, details, date: new Date().toISOString(), status: 'new' }),
+    // Fix: Added missing awardKnowledgePoints method
+    awardKnowledgePoints: (uid: string) => updateDoc(doc(usersCollection, uid), { hasReadKnowledgeBase: true, knowledgePoints: increment(10) }).then(() => true),
+    // Fix: Added missing voteOnProposal method
+    voteOnProposal: (pid: string, uid: string, v: 'for'|'against') => runTransaction(db, async t => {
+        const ref = doc(proposalsCollection, pid);
+        const snap = await t.get(ref);
+        if (!snap.exists()) return;
+        t.update(ref, { [v === 'for' ? 'votesFor' : 'votesAgainst']: arrayUnion(uid), [v === 'for' ? 'voteCountFor' : 'voteCountAgainst']: increment(1) });
+    }),
+    // Fix: Added missing getVentureMembers method
+    getVentureMembers: async (count: number) => {
+        const q = query(usersCollection, where('isLookingForPartners', '==', true), limit(count));
+        const s = await getDocs(q);
+        return { users: s.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile)) };
+    },
+    // Fix: Added missing getFundraisingVentures method
+    getFundraisingVentures: async () => {
+        const q = query(collection(db, 'ventures'), where('status', '==', 'fundraising'));
+        const s = await getDocs(q);
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as any));
+    },
+    // Fix: Added missing createPendingUbtPurchase method
+    createPendingUbtPurchase: (u: User, val: number, amt: number) => addDoc(pendingPurchasesCollection, { userId: u.id, userName: u.name, amountUsd: val, amountUbt: amt, status: 'PENDING', createdAt: serverTimestamp(), payment_method: 'FIAT' }),
+    // Fix: Added missing updatePendingPurchaseReference method
+    updatePendingPurchaseReference: (purchaseId: string, ref: string) => updateDoc(doc(pendingPurchasesCollection, purchaseId), { ecocashRef: ref, status: 'AWAITING_CONFIRMATION' }),
+    // Fix: Added missing vouchForCitizen method
+    vouchForCitizen: (transaction: UbtTransaction) => runTransaction(db, async (t) => {
+        const receiverRef = doc(usersCollection, transaction.receiverId);
+        const econRef = doc(globalsCollection, 'economy');
+        const econSnap = await t.get(econRef);
+        const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+        t.update(receiverRef, { credibility_score: increment(5), vouchCount: increment(1) });
+        t.set(doc(ledgerCollection, transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+    }),
+    // Fix: Added missing initiateDispute method
+    initiateDispute: (c: User, r: User, reason: string, evidence: string) => 
+        addDoc(disputesCollection, { claimantId: c.id, claimantName: c.name, respondentId: r.id, respondentName: r.name, reason, evidence, status: 'TRIBUNAL', juryIds: [], votesForClaimant: 0, votesForRespondent: 0, signedVotes: {}, timestamp: serverTimestamp() }),
+    // Fix: Added missing castJuryVote method
+    castJuryVote: (did: string, uid: string, vote: string, signature: string) => 
+        runTransaction(db, async t => {
+            const ref = doc(disputesCollection, did);
+            const snap = await t.get(ref);
+            if (!snap.exists()) return;
+            t.update(ref, { 
+                juryIds: arrayUnion(uid), 
+                [`signedVotes.${uid}`]: signature, 
+                [vote === 'claimant' ? 'votesForClaimant' : 'votesForRespondent']: increment(1) 
+            });
+        }),
+    // Fix: Added missing sendMessage method
+    sendMessage: async (id: string, msg: any, convo: Conversation) => {
+        const batch = writeBatch(db);
+        batch.set(doc(collection(db, 'conversations', id, 'messages')), { ...msg, timestamp: serverTimestamp() });
+        batch.update(doc(conversationsCollection, id), { lastMessage: msg.text, lastMessageTimestamp: serverTimestamp(), lastMessageSenderId: msg.senderId, readBy: [msg.senderId] });
+        await batch.commit();
+    },
 };

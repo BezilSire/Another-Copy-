@@ -1,3 +1,4 @@
+
 /**
  * Ubuntium Sovereign Sync Engine
  * Handles the "Unkillable" ledger layer on GitHub.
@@ -59,20 +60,12 @@ export const sovereignService = {
 
     /**
      * SOVEREIGN RECONCILIATION
-     * Modified to kill Firebase UIDs on the ledger.
      */
     syncLegacyToGitHub: async (onProgress: (log: string) => void) => {
-        onProgress("> INITIALIZING_IDENTITY_STAMPING...");
+        onProgress("> INITIALIZING_SOVEREIGN_MIRROR...");
         const firebaseTxs = await api.getPublicLedger(1000);
         
-        // Filter noise (10k UBT blocks)
-        const realTxs = firebaseTxs.filter(tx => {
-            const isSimulation = tx.type === 'SIMULATION_MINT' || tx.type === 'SYSTEM_MINT';
-            const isTestAmount = tx.amount === 10000;
-            return !isSimulation && !isTestAmount;
-        });
-        
-        onProgress(`> IDENTIFIED ${realTxs.length} LEGITIMATE BLOCKS.`);
+        onProgress(`> BUFFERED ${firebaseTxs.length} CANDIDATE BLOCKS.`);
 
         const listUrl = `${GITHUB_API}/repos/${REPO}/contents/ledger`;
         const listRes = await fetch(listUrl);
@@ -83,40 +76,51 @@ export const sovereignService = {
         }));
 
         let count = 0;
-        for (const tx of realTxs) {
+        for (const tx of firebaseTxs) {
             if (!existingIds.has(tx.id)) {
-                // IDENTITY RESOLUTION: Converting Database ID to Cryptographic ID
                 let enrichedTx = { ...tx };
+                
+                // CRITICAL: Identity resolution protocol
+                // Ensure we use UBT- addresses for the public layer
                 try {
-                    const receiverProfile = await api.getPublicUserProfile(tx.receiverId);
-                    if (receiverProfile?.publicKey) {
-                        enrichedTx.receiverPublicKey = receiverProfile.publicKey;
-                    } else if (['FLOAT', 'GENESIS', 'SYSTEM'].includes(tx.receiverId)) {
-                        enrichedTx.receiverPublicKey = `SYSTEM_NODE:${tx.receiverId}`;
-                    } else {
-                        // Fallback for nodes that were ousted before key generation
-                        enrichedTx.receiverPublicKey = `LEGACY_NODE:${tx.receiverId.substring(0,8)}`;
+                    // Force resolve if PK is missing in the ledger doc
+                    if (!enrichedTx.receiverPublicKey && tx.receiverId.length > 10) {
+                        const receiverProfile = await api.getPublicUserProfile(tx.receiverId);
+                        if (receiverProfile?.publicKey) {
+                            enrichedTx.receiverPublicKey = receiverProfile.publicKey;
+                        }
                     }
-                    
-                    const senderProfile = await api.getPublicUserProfile(tx.senderId);
-                    if (senderProfile?.publicKey) {
-                        enrichedTx.senderPublicKey = senderProfile.publicKey;
+                    if (!enrichedTx.senderPublicKey && tx.senderId.length > 10) {
+                        const senderProfile = await api.getPublicUserProfile(tx.senderId);
+                        if (senderProfile?.publicKey) {
+                            enrichedTx.senderPublicKey = senderProfile.publicKey;
+                        }
                     }
+
+                    // System node mapping
+                    const sysNodes = ['FLOAT', 'GENESIS', 'SYSTEM', 'SUSTENANCE', 'DISTRESS', 'VENTURE'];
+                    if (sysNodes.includes(tx.receiverId)) enrichedTx.receiverPublicKey = `${tx.receiverId}_NODE`;
+                    if (sysNodes.includes(tx.senderId)) enrichedTx.senderPublicKey = `${tx.senderId}_NODE`;
+
                 } catch (e) {}
 
-                onProgress(`> ANCHORING_CRYPTO_BLOCK: ${tx.id.substring(0,8)}...`);
+                onProgress(`> ANCHORING_BLOCK: ${tx.id.substring(0,8)}...`);
                 await sovereignService.dispatchTransaction(enrichedTx);
                 count++;
-                await new Promise(r => setTimeout(r, 100));
+                await new Promise(r => setTimeout(r, 50));
             }
         }
-        onProgress(`> SOVEREIGN_SYNC_COMPLETE. ${count} BLOCKS VERIFIED.`);
+        onProgress(`> SYNC_COMPLETE. ${count} NEW BLOCKS ANCHORED.`);
     },
 
     fetchPublicLedger: async (limitCount: number = 200): Promise<any[]> => {
         try {
             const listUrl = `${GITHUB_API}/repos/${REPO}/contents/ledger`;
-            const listRes = await fetch(listUrl, { cache: 'no-store' });
+            const listRes = await fetch(listUrl, { 
+                cache: 'no-store',
+                headers: TOKEN ? { "Authorization": `Bearer ${TOKEN}` } : {} 
+            });
+            
             if (!listRes.ok) return [];
             
             const files = await listRes.json();
@@ -134,6 +138,7 @@ export const sovereignService = {
 
             return await Promise.all(txPromises);
         } catch (e) {
+            console.error("Public Ledger Fetch Failed:", e);
             return [];
         }
     }
