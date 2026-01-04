@@ -42,6 +42,7 @@ import {
 } from 'firebase/database';
 import { auth, db, rtdb } from './firebase';
 import { generateWelcomeMessage } from './geminiService';
+import { sovereignService } from './sovereignService';
 import { 
     User, Agent, Member, NewMember, MemberUser, Post,
     Conversation, Message, Notification, Activity,
@@ -121,28 +122,38 @@ export const api = {
         return results;
     },
 
-    requestPayout: (u: User, n: string, p: string, a: number) => {
-        return addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() });
-    },
-    
-    requestCommissionPayout: (a: Agent, name: string, phone: string, amount: number) => addDoc(payoutsCollection, { userId: a.id, userName: a.name, type: 'referral', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp() }),
-
     processUbtTransaction: async (transaction: UbtTransaction) => {
-        return runTransaction(db, async (t) => {
+        await runTransaction(db, async (t) => {
             const econRef = doc(globalsCollection, 'economy');
             const isFloatSender = ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(transaction.senderId);
             const senderRef = isFloatSender ? doc(vaultsCollection, transaction.senderId) : doc(usersCollection, transaction.senderId);
             const receiverRef = doc(usersCollection, transaction.receiverId);
             
-            const [econSnap, senderSnap] = await Promise.all([t.get(econRef), t.get(senderRef)]);
+            const [econSnap, senderSnap, receiverSnap] = await Promise.all([t.get(econRef), t.get(senderRef), t.get(receiverRef)]);
+            
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
             const balKey = isFloatSender ? 'balance' : 'ubtBalance';
             const senderBal = senderSnap.data()?.[balKey] || 0;
+            
             if (senderBal < transaction.amount) throw new Error("INSUFFICIENT_LIQUIDITY");
+
+            // ENRICH TRANSACTION WITH TARGET ADDRESS BEFORE LEDGERING
+            let finalTx = { ...transaction };
+            if (receiverSnap.exists()) {
+                const rData = receiverSnap.data();
+                if (rData?.publicKey) {
+                    finalTx.receiverPublicKey = rData.publicKey;
+                }
+            } else if (['FLOAT', 'GENESIS', 'SYSTEM', 'SUSTENANCE', 'DISTRESS', 'VENTURE'].includes(transaction.receiverId)) {
+                finalTx.receiverPublicKey = `${transaction.receiverId}_NODE`;
+            }
+
             t.update(senderRef, { [balKey]: increment(-transaction.amount) });
             t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
-            t.set(doc(ledgerCollection, transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+            t.set(doc(ledgerCollection, transaction.id), { ...finalTx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         }); 
+        // Real-time automatic dispatch to GitHub
+        sovereignService.dispatchTransaction(transaction).catch(console.error);
     },
 
     getUserLedger: async (uid: string) => {
@@ -188,28 +199,66 @@ export const api = {
         });
     },
 
-    syncInternalVaults: (admin: Admin, from: TreasuryVault, to: TreasuryVault, amt: number, reason: string) => runTransaction(db, async t => {
-        const fromRef = doc(vaultsCollection, from.id);
-        const toRef = doc(vaultsCollection, to.id);
-        const econSnap = await t.get(doc(globalsCollection, 'economy'));
-        t.update(fromRef, { balance: increment(-amt) });
-        t.update(toRef, { balance: increment(amt) });
+    syncInternalVaults: async (admin: Admin, from: TreasuryVault, to: TreasuryVault, amt: number, reason: string) => {
         const txId = `internal-${Date.now().toString(36)}`;
-        t.set(doc(ledgerCollection, txId), { id: txId, senderId: from.id, receiverId: to.id, amount: amt, timestamp: Date.now(), reason, type: 'VAULT_SYNC', protocol_mode: 'MAINNET', senderPublicKey: admin.publicKey || "ROOT_AUTH", priceAtSync: econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001, serverTimestamp: serverTimestamp() });
-    }),
+        let tx;
+        await runTransaction(db, async t => {
+            const fromRef = doc(vaultsCollection, from.id);
+            const toRef = doc(vaultsCollection, to.id);
+            const econSnap = await t.get(doc(globalsCollection, 'economy'));
+            t.update(fromRef, { balance: increment(-amt) });
+            t.update(toRef, { balance: increment(amt) });
+            tx = { id: txId, senderId: from.id, receiverId: to.id, amount: amt, timestamp: Date.now(), reason, type: 'VAULT_SYNC', protocol_mode: 'MAINNET', senderPublicKey: admin.publicKey || "ROOT_AUTH", priceAtSync: econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001, serverTimestamp: serverTimestamp() };
+            t.set(doc(ledgerCollection, txId), tx);
+        });
+        if (tx) sovereignService.dispatchTransaction(tx).catch(console.error);
+    },
     
-    approveUbtPurchase: (admin: Admin, p: PendingUbtPurchase, sourceVaultId: string) => runTransaction(db, async t => {
-        const purchaseRef = doc(pendingPurchasesCollection, p.id);
-        const userRef = doc(usersCollection, p.userId);
-        const sourceRef = doc(vaultsCollection, sourceVaultId);
-        const econRef = doc(globalsCollection, 'economy');
-        t.update(purchaseRef, { status: 'VERIFIED', verifiedAt: serverTimestamp() });
-        t.update(userRef, { ubtBalance: increment(p.amountUbt) });
-        t.update(sourceRef, { balance: increment(-p.amountUbt) });
-        t.update(econRef, { cvp_usd_backing: increment(p.amountUsd) }); 
-        const txId = `bridge-${Date.now().toString(36)}`;
-        t.set(doc(ledgerCollection, txId), { id: txId, senderId: sourceVaultId, receiverId: p.userId, amount: p.amountUbt, timestamp: Date.now(), type: 'FIAT_BRIDGE', protocol_mode: 'MAINNET', serverTimestamp: serverTimestamp() });
-    }),
+    approveUbtPurchase: async (admin: Admin, p: PendingUbtPurchase, sourceVaultId: string, txData: Partial<UbtTransaction>) => {
+        let finalTx: UbtTransaction | undefined;
+        await runTransaction(db, async t => {
+            const purchaseRef = doc(pendingPurchasesCollection, p.id);
+            const userRef = doc(usersCollection, p.userId);
+            const sourceRef = doc(vaultsCollection, sourceVaultId);
+            const econRef = doc(globalsCollection, 'economy');
+            const receiverSnap = await t.get(userRef);
+
+            const econSnap = await t.get(econRef);
+            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+
+            t.update(purchaseRef, { status: 'VERIFIED', verifiedAt: serverTimestamp() });
+            t.update(userRef, { ubtBalance: increment(p.amountUbt) });
+            t.update(sourceRef, { balance: increment(-p.amountUbt) });
+            t.update(econRef, { cvp_usd_backing: increment(p.amountUsd) }); 
+
+            const txId = txData.id || `bridge-${Date.now().toString(36)}`;
+            
+            let receiverKey = "PROVISIONING";
+            if (receiverSnap.exists() && receiverSnap.data()?.publicKey) {
+                receiverKey = receiverSnap.data()?.publicKey;
+            }
+
+            finalTx = {
+                id: txId,
+                senderId: sourceVaultId,
+                receiverId: p.userId,
+                receiverPublicKey: receiverKey,
+                amount: p.amountUbt,
+                timestamp: txData.timestamp || Date.now(),
+                nonce: txData.nonce || "",
+                signature: txData.signature || "",
+                hash: txData.hash || "",
+                senderPublicKey: admin.publicKey || "",
+                parentHash: 'BRIDGE_ROOT',
+                type: 'FIAT_BRIDGE',
+                protocol_mode: 'MAINNET',
+                priceAtSync: currentPrice
+            };
+
+            t.set(doc(ledgerCollection, txId), { ...finalTx, serverTimestamp: serverTimestamp() });
+        });
+        if (finalTx) sovereignService.dispatchTransaction(finalTx).catch(console.error);
+    },
     rejectUbtPurchase: (id: string) => updateDoc(doc(pendingPurchasesCollection, id), { status: 'REJECTED' }),
     getPublicUserProfile: async (uid: string): Promise<PublicUserProfile | null> => {
         const userDoc = await getDoc(doc(usersCollection, uid));
@@ -322,8 +371,10 @@ export const api = {
             batch.set(doc(vaultsCollection, v.id), { ...v, publicKey: `UBT-VAULT-${v.id}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`, isLocked: false });
         }
         const txId = `mint-${Date.now().toString(36)}`;
-        batch.set(doc(ledgerCollection, txId), { id: txId, senderId: 'SYSTEM', receiverId: 'GENESIS', amount: 15000000, timestamp: Date.now(), type: 'SYSTEM_MINT', protocol_mode: 'MAINNET', senderPublicKey: 'ROOT_PROTOCOL', serverTimestamp: serverTimestamp() });
+        const tx = { id: txId, senderId: 'SYSTEM', receiverId: 'GENESIS', amount: 15000000, timestamp: Date.now(), type: 'SYSTEM_MINT', protocol_mode: 'MAINNET', senderPublicKey: 'ROOT_PROTOCOL', serverTimestamp: serverTimestamp() };
+        batch.set(doc(ledgerCollection, txId), tx);
         await batch.commit();
+        sovereignService.dispatchTransaction(tx).catch(console.error);
     },
     toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
     registerResource: (data: Partial<CitizenResource>) => addDoc(resourcesCollection, { ...data, createdAt: serverTimestamp() }),
@@ -355,21 +406,43 @@ export const api = {
         return { posts: s.docs.map(d => ({ id: d.id, ...d.data() } as Post)), lastVisible: s.docs[s.docs.length - 1] };
     },
     togglePinPost: (admin: User, id: string, pin: boolean) => updateDoc(doc(postsCollection, id), { isPinned: pin }),
-    addComment: (pid: string, data: any, coll: 'posts'|'proposals' = 'posts') => {
-        const batch = writeBatch(db);
-        batch.set(doc(collection(db, coll, pid, 'comments')), { ...data, timestamp: serverTimestamp() });
-        batch.update(doc(db, coll, pid), { commentCount: increment(1) });
-        return batch.commit();
+
+    processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
+        await runTransaction(db, async (t) => {
+            const econRef = doc(globalsCollection, 'economy');
+            const receiverRef = rid ? doc(usersCollection, rid) : null;
+            
+            const [econSnap, receiverSnap] = await Promise.all([
+                t.get(econRef), 
+                receiverRef ? t.get(receiverRef) : Promise.resolve(null)
+            ]);
+
+            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+            
+            let enrichedTx = { ...tx, priceAtSync: currentPrice };
+            if (receiverSnap?.exists()) {
+                const rData = receiverSnap.data();
+                if (rData?.publicKey) enrichedTx.receiverPublicKey = rData.publicKey;
+            } else if (rid === 'EXTERNAL_NODE' || !rid) {
+                enrichedTx.receiverPublicKey = `EXTERNAL_NODE:${tx.id.substring(0,8)}`;
+            }
+
+            t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
+            if (receiverRef && rid !== 'EXTERNAL_NODE') t.update(receiverRef, { ubtBalance: increment(amt) });
+            t.set(doc(ledgerCollection, tx.id), { ...enrichedTx, serverTimestamp: serverTimestamp() });
+        });
+        sovereignService.dispatchTransaction(tx).catch(console.error);
     },
-    deleteComment: (pid: string, cid: string, coll: 'posts'|'proposals') => deleteDoc(doc(db, coll, pid, 'comments', cid)),
-    upvoteComment: async (pid: string, cid: string, uid: string, coll: 'posts'|'proposals' = 'posts') => {
-        const ref = doc(db, coll, pid, 'comments', cid);
-        const snap = await getDoc(ref);
-        if (snap.exists()) {
-            const upvotes = snap.data().upvotes || [];
-            await updateDoc(ref, { upvotes: upvotes.includes(uid) ? arrayRemove(uid) : arrayUnion(uid) });
-        }
+
+    getPublicLedger: async (l: number = 200) => {
+        const s = await getDocs(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)));
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
     },
+
+    sendDistressPost: async (u: User, content: string) => {
+        return addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress', commentCount: 0, repostCount: 0 });
+    },
+
     startChat: async (u: User, t: PublicUserProfile): Promise<Conversation> => {
         const id = [u.id, t.id].sort().join('_');
         const snap = await getDoc(doc(conversationsCollection, id));
@@ -379,113 +452,6 @@ export const api = {
         return { id, ...data } as Conversation;
     },
     markConversationAsRead: (id: string, uid: string) => updateDoc(doc(conversationsCollection, id), { readBy: arrayUnion(uid) }),
-    sendMessage: async (id: string, msg: any, convo: Conversation) => {
-        const batch = writeBatch(db);
-        batch.set(doc(collection(db, 'conversations', id, 'messages')), { ...msg, timestamp: serverTimestamp() });
-        batch.update(doc(conversationsCollection, id), { lastMessage: msg.text, lastMessageTimestamp: serverTimestamp(), lastMessageSenderId: msg.senderId, readBy: [msg.senderId] });
-        await batch.commit();
-    },
-    getVentureMembers: async (count: number) => {
-        const q = query(usersCollection, where('isLookingForPartners', '==', true), limit(count));
-        const s = await getDocs(q);
-        return { users: s.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile)) };
-    },
-    getFundraisingVentures: async () => {
-        const q = query(collection(db, 'ventures'), where('status', '==', 'fundraising'));
-        const s = await getDocs(q);
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as any));
-    },
-    voteOnProposal: (pid: string, uid: string, v: 'for'|'against') => runTransaction(db, async t => {
-        const ref = doc(proposalsCollection, pid);
-        const snap = await t.get(ref);
-        if (!snap.exists()) return;
-        t.update(ref, { [v === 'for' ? 'votesFor' : 'votesAgainst']: arrayUnion(uid), [v === 'for' ? 'voteCountFor' : 'voteCountAgainst']: increment(1) });
-    }),
-    createPendingUbtPurchase: (u: User, val: number, amt: number) => addDoc(pendingPurchasesCollection, { userId: u.id, userName: u.name, amountUsd: val, amountUbt: amt, status: 'PENDING', createdAt: serverTimestamp(), payment_method: 'FIAT' }),
-    updatePendingPurchaseReference: (purchaseId: string, ref: string) => updateDoc(doc(pendingPurchasesCollection, purchaseId), { ecocashRef: ref, status: 'AWAITING_CONFIRMATION' }),
-    getAgentMembers: async (a: Agent) => {
-        const q = query(membersCollection, where('agent_id', '==', a.id));
-        const s = await getDocs(q);
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as Member));
-    },
-    registerMember: async (a: Agent, d: NewMember) => {
-        const welcome = await generateWelcomeMessage(d.full_name, d.circle);
-        const ref = await addDoc(membersCollection, { ...d, agent_id: a.id, agent_name: a.name, date_registered: serverTimestamp(), welcome_message: welcome, membership_card_id: `UGC-M-${Math.random().toString(36).substring(2, 8).toUpperCase()}` });
-        return { id: ref.id, ...d, agent_id: a.id, agent_name: a.name, welcome_message: welcome } as any;
-    },
-    sendBroadcast: (u: User, m: string) => addDoc(broadcastsCollection, { authorId: u.id, authorName: u.name, message: m, date: new Date().toISOString() }),
-    getBroadcasts: async () => {
-        const q = query(broadcastsCollection, orderBy('date', 'desc'), limit(10));
-        const s = await getDocs(q);
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as any));
-    },
-    updateMemberAndUserProfile: async (uid: string, mid: string, uData: any, mData: any) => {
-        const batch = writeBatch(db);
-        batch.update(doc(usersCollection, uid), uData);
-        batch.update(doc(membersCollection, mid), mData);
-        await batch.commit();
-    },
-    unfollowUser: async (uid: string, tid: string) => {
-        const batch = writeBatch(db);
-        batch.update(doc(usersCollection, uid), { following: arrayRemove(tid) });
-        batch.update(doc(usersCollection, tid), { followers: arrayRemove(uid) });
-        await batch.commit();
-    },
-    followUser: async (u: User, tid: string) => {
-        const batch = writeBatch(db);
-        batch.update(doc(usersCollection, u.id), { following: arrayUnion(tid) });
-        batch.update(doc(usersCollection, tid), { followers: arrayUnion(u.id) });
-        await batch.commit();
-    },
-    reportUser: (r: User, t: User, reason: string, details: string) => addDoc(collection(db, 'reports'), { reporterId: r.id, reporterName: r.name, reportedUserId: t.id, reportedUserName: t.name, reason, details, date: new Date().toISOString(), status: 'new' }),
-    markNotificationAsRead: (uid: string, nid: string) => updateDoc(doc(db, 'users', uid, 'notifications', nid), { read: true }),
-    markAllNotificationsAsRead: async (uid: string) => {
-        const q = query(collection(db, 'users', uid, 'notifications'), where('read', '==', false));
-        const s = await getDocs(q);
-        const batch = writeBatch(db);
-        s.forEach(d => batch.update(d.ref, { read: true }));
-        await batch.commit();
-    },
-    awardKnowledgePoints: (uid: string) => updateDoc(doc(usersCollection, uid), { hasReadKnowledgeBase: true, knowledgePoints: increment(10) }).then(() => true),
-    getPublicLedger: async (l: number = 200) => {
-        const s = await getDocs(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)));
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
-    },
-    vouchForCitizen: (transaction: UbtTransaction) => runTransaction(db, async (t) => {
-        const receiverRef = doc(usersCollection, transaction.receiverId);
-        const econRef = doc(globalsCollection, 'economy');
-        const econSnap = await t.get(econRef);
-        const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
-        t.update(receiverRef, { credibility_score: increment(5), vouchCount: increment(1) });
-        t.set(doc(ledgerCollection, transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
-    }),
-    initiateDispute: (c: User, r: User, reason: string, evidence: string) => 
-        addDoc(disputesCollection, { claimantId: c.id, claimantName: c.name, respondentId: r.id, respondentName: r.name, reason, evidence, status: 'TRIBUNAL', juryIds: [], votesForClaimant: 0, votesForRespondent: 0, signedVotes: {}, timestamp: serverTimestamp() }),
-    castJuryVote: (did: string, uid: string, vote: string, signature: string) => 
-        runTransaction(db, async t => {
-            const ref = doc(disputesCollection, did);
-            const snap = await t.get(ref);
-            if (!snap.exists()) return;
-            t.update(ref, { 
-                juryIds: arrayUnion(uid), 
-                [`signedVotes.${uid}`]: signature, 
-                [vote === 'claimant' ? 'votesForClaimant' : 'votesForRespondent']: increment(1) 
-            });
-        }),
-    processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
-        return runTransaction(db, async (t) => {
-            const econRef = doc(globalsCollection, 'economy');
-            const econSnap = await t.get(econRef);
-            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
-            t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
-            if (rid && rid !== 'EXTERNAL_NODE') t.update(doc(usersCollection, rid), { ubtBalance: increment(amt) });
-            t.set(doc(ledgerCollection, tx.id), { ...tx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
-        });
-    },
-
-    sendDistressPost: async (u: User, content: string) => {
-        return addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress', commentCount: 0, repostCount: 0 });
-    },
 
     createGroupChat: async (name: string, members: string[], memberNames: {[key: string]: string}) => {
         return addDoc(conversationsCollection, { name, members, memberNames, lastMessage: "Group established", lastMessageTimestamp: serverTimestamp(), lastMessageSenderId: 'SYSTEM', readBy: [], isGroup: true });
@@ -635,14 +601,17 @@ export const api = {
     },
 
     updateUserUbt: async (admin: Admin, uid: string, amount: number, reason: string) => {
-        return runTransaction(db, async t => {
+        let tx;
+        await runTransaction(db, async t => {
             const userRef = doc(usersCollection, uid);
             const userSnap = await t.get(userRef);
             if (!userSnap.exists()) return;
             t.update(userRef, { ubtBalance: increment(amount) });
             const txId = `admin-${Date.now().toString(36)}`;
-            t.set(doc(ledgerCollection, txId), { id: txId, senderId: 'SYSTEM', receiverId: uid, amount: Math.abs(amount), timestamp: Date.now(), reason, type: amount > 0 ? 'credit' : 'debit', protocol_mode: 'MAINNET', serverTimestamp: serverTimestamp() });
+            tx = { id: txId, senderId: 'SYSTEM', receiverId: uid, amount: Math.abs(amount), timestamp: Date.now(), reason, type: amount > 0 ? 'credit' : 'debit', protocol_mode: 'MAINNET', serverTimestamp: serverTimestamp() };
+            t.set(doc(ledgerCollection, txId), tx);
         });
+        if (tx) sovereignService.dispatchTransaction(tx).catch(console.error);
     },
 
     requestUbtRedemption: async (u: User, amount: number, usd: number, name: string, phone: string) => {
@@ -707,7 +676,7 @@ export const api = {
             t.update(ref, { signatures: newSigs, status: 'executed' });
             
             const txId = `multisig-exec-${Date.now().toString(36)}`;
-            t.set(doc(ledgerCollection, txId), { 
+            const tx = { 
                 id: txId, 
                 senderId: data.fromVaultId, 
                 receiverId: data.toVaultId, 
@@ -717,9 +686,174 @@ export const api = {
                 type: 'VAULT_SYNC', 
                 protocol_mode: 'MAINNET', 
                 serverTimestamp: serverTimestamp() 
-            });
+            };
+            t.set(doc(ledgerCollection, txId), tx);
+            sovereignService.dispatchTransaction(tx).catch(console.error);
         } else {
             t.update(ref, { signatures: newSigs });
         }
+    }),
+    
+    getAgentMembers: async (a: Agent) => {
+        const q = query(membersCollection, where('agent_id', '==', a.id));
+        const s = await getDocs(q);
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as Member));
+    },
+    registerMember: async (a: Agent, d: NewMember) => {
+        const welcome = await generateWelcomeMessage(d.full_name, d.circle);
+        const ref = await addDoc(membersCollection, { ...d, agent_id: a.id, agent_name: a.name, date_registered: serverTimestamp(), welcome_message: welcome, membership_card_id: `UGC-M-${Math.random().toString(36).substring(2, 8).toUpperCase()}` });
+        return { id: ref.id, ...d, agent_id: a.id, agent_name: a.name, welcome_message: welcome } as any;
+    },
+    sendBroadcast: (u: User, m: string) => addDoc(broadcastsCollection, { authorId: u.id, authorName: u.name, message: m, date: new Date().toISOString() }),
+    getBroadcasts: async () => {
+        const q = query(broadcastsCollection, orderBy('date', 'desc'), limit(10));
+        const s = await getDocs(q);
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as any));
+    },
+    updateMemberAndUserProfile: async (uid: string, mid: string, uData: any, mData: any) => {
+        const batch = writeBatch(db);
+        batch.update(doc(usersCollection, uid), uData);
+        batch.update(doc(membersCollection, mid), mData);
+        await batch.commit();
+    },
+    vouchForCitizen: async (transaction: UbtTransaction) => {
+        await runTransaction(db, async (t) => {
+            const receiverRef = doc(usersCollection, transaction.receiverId);
+            const econRef = doc(globalsCollection, 'economy');
+            const econSnap = await t.get(econRef);
+            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+            t.update(receiverRef, { credibility_score: increment(5), vouchCount: increment(1) });
+            t.set(doc(ledgerCollection, transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+        });
+        sovereignService.dispatchTransaction(transaction).catch(console.error);
+    },
+    initiateDispute: (c: User, r: User, reason: string, evidence: string) => 
+        addDoc(disputesCollection, { claimantId: c.id, claimantName: c.name, respondentId: r.id, respondentName: r.name, reason, evidence, status: 'TRIBUNAL', juryIds: [], votesForClaimant: 0, votesForRespondent: 0, signedVotes: {}, timestamp: serverTimestamp() }),
+    castJuryVote: (did: string, uid: string, vote: string, signature: string) => 
+        runTransaction(db, async t => {
+            const ref = doc(disputesCollection, did);
+            const snap = await t.get(ref);
+            if (!snap.exists()) return;
+            t.update(ref, { 
+                juryIds: arrayUnion(uid), 
+                [`signedVotes.${uid}`]: signature, 
+                [vote === 'claimant' ? 'votesForClaimant' : 'votesForRespondent']: increment(1) 
+            });
+        }),
+    markNotificationAsRead: (uid: string, nid: string) => updateDoc(doc(db, 'users', uid, 'notifications', nid), { read: true }),
+    markAllNotificationsAsRead: async (uid: string) => {
+        const q = query(collection(db, 'users', uid, 'notifications'), where('read', '==', false));
+        const s = await getDocs(q);
+        const batch = writeBatch(db);
+        s.forEach(d => batch.update(d.ref, { read: true }));
+        await batch.commit();
+    },
+    awardKnowledgePoints: (uid: string) => updateDoc(doc(usersCollection, uid), { hasReadKnowledgeBase: true, knowledgePoints: increment(10) }).then(() => true),
+    
+    // Additional methods needed for various features
+    requestPayout: (u: User, n: string, p: string, a: number) => {
+        return addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() });
+    },
+    
+    requestCommissionPayout: (a: Agent, name: string, phone: string, amount: number) => addDoc(payoutsCollection, { userId: a.id, userName: a.name, type: 'referral', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp() }),
+
+    addComment: (pid: string, data: any, coll: 'posts' | 'proposals' = 'posts') => {
+        const batch = writeBatch(db);
+        const commentRef = doc(collection(db, coll, pid, 'comments'));
+        batch.set(commentRef, { ...data, timestamp: serverTimestamp() });
+        batch.update(doc(db, coll, pid), { commentCount: increment(1) });
+        return batch.commit();
+    },
+
+    deleteComment: (pid: string, cid: string, coll: 'posts' | 'proposals') => {
+        const batch = writeBatch(db);
+        batch.delete(doc(db, coll, pid, 'comments', cid));
+        batch.update(doc(db, coll, pid), { commentCount: increment(-1) });
+        return batch.commit();
+    },
+
+    upvoteComment: async (pid: string, cid: string, uid: string, coll: 'posts' | 'proposals' = 'posts') => {
+        const ref = doc(db, coll, pid, 'comments', cid);
+        const snap = await getDoc(ref);
+        if (snap.exists()) {
+            const upvotes = snap.data().upvotes || [];
+            await updateDoc(ref, { upvotes: upvotes.includes(uid) ? arrayRemove(uid) : arrayUnion(uid) });
+        }
+    },
+
+    sendMessage: async (id: string, msg: any, convo: Conversation) => {
+        const batch = writeBatch(db);
+        batch.set(doc(collection(db, 'conversations', id, 'messages')), { ...msg, timestamp: serverTimestamp() });
+        batch.update(doc(conversationsCollection, id), { 
+            lastMessage: msg.text, 
+            lastMessageTimestamp: serverTimestamp(), 
+            lastMessageSenderId: msg.senderId, 
+            readBy: [msg.senderId] 
+        });
+        await batch.commit();
+    },
+
+    reportUser: (r: User, t: User, reason: string, details: string) => addDoc(collection(db, 'reports'), { 
+        reporterId: r.id, 
+        reporterName: r.name, 
+        reportedUserId: t.id, 
+        reportedUserName: t.name, 
+        reason, 
+        details, 
+        date: new Date().toISOString(), 
+        status: 'new' 
+    }),
+
+    getVentureMembers: async (count: number) => {
+        const q = query(usersCollection, where('isLookingForPartners', '==', true), limit(count));
+        const s = await getDocs(q);
+        return { users: s.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile)) };
+    },
+
+    unfollowUser: async (uid: string, tid: string) => {
+        const batch = writeBatch(db);
+        batch.update(doc(usersCollection, uid), { following: arrayRemove(tid) });
+        batch.update(doc(usersCollection, tid), { followers: arrayRemove(uid) });
+        await batch.commit();
+    },
+
+    followUser: async (u: User, tid: string) => {
+        const batch = writeBatch(db);
+        batch.update(doc(usersCollection, u.id), { following: arrayUnion(tid) });
+        batch.update(doc(usersCollection, tid), { followers: arrayUnion(u.id) });
+        await batch.commit();
+    },
+
+    voteOnProposal: (pid: string, uid: string, v: 'for' | 'against') => runTransaction(db, async t => {
+        const ref = doc(proposalsCollection, pid);
+        const snap = await t.get(ref);
+        if (!snap.exists()) throw new Error("Proposal expired.");
+        const data = snap.data();
+        if (data?.votesFor?.includes(uid) || data?.votesAgainst?.includes(uid)) throw new Error("Identity already voted.");
+        t.update(ref, { 
+            [v === 'for' ? 'votesFor' : 'votesAgainst']: arrayUnion(uid), 
+            [v === 'for' ? 'voteCountFor' : 'voteCountAgainst']: increment(1) 
+        });
+    }),
+
+    getFundraisingVentures: async () => {
+        const q = query(collection(db, 'ventures'), where('status', '==', 'fundraising'));
+        const s = await getDocs(q);
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as any));
+    },
+
+    createPendingUbtPurchase: (u: User, val: number, amt: number) => addDoc(pendingPurchasesCollection, { 
+        userId: u.id, 
+        userName: u.name, 
+        amountUsd: val, 
+        amountUbt: amt, 
+        status: 'PENDING', 
+        createdAt: serverTimestamp(), 
+        payment_method: 'FIAT' 
+    }),
+
+    updatePendingPurchaseReference: (purchaseId: string, ref: string) => updateDoc(doc(pendingPurchasesCollection, purchaseId), { 
+        ecocashRef: ref, 
+        status: 'AWAITING_CONFIRMATION' 
     }),
 };

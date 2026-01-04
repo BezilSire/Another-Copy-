@@ -10,12 +10,16 @@ const GITHUB_API = "https://api.github.com";
 const REPO = "BezilSire/ubuntium-ledger";
 const TOKEN = process.env.GITHUB_TOKEN;
 
+// SYSTEM BLACKLIST: Signatures that should never be processed or displayed
+const BLACKLISTED_SIGNATURES = ['mint-1766424900145'];
+
 export const sovereignService = {
     /**
      * Commits a block to GitHub.
      */
     commitBlock: async (path: string, data: any, message: string): Promise<string | null> => {
         if (!TOKEN || !REPO) return null;
+        if (BLACKLISTED_SIGNATURES.includes(data.id)) return null;
 
         try {
             const content = btoa(JSON.stringify(data, null, 2));
@@ -54,6 +58,7 @@ export const sovereignService = {
     },
 
     dispatchTransaction: async (tx: any): Promise<string | null> => {
+        if (BLACKLISTED_SIGNATURES.includes(tx.id)) return null;
         const path = `ledger/tx-${tx.timestamp || Date.now()}-${tx.id}.json`;
         return await sovereignService.commitBlock(path, tx, `Block Dispatch: ${tx.id}`);
     },
@@ -77,6 +82,8 @@ export const sovereignService = {
 
         let count = 0;
         for (const tx of firebaseTxs) {
+            if (BLACKLISTED_SIGNATURES.includes(tx.id)) continue;
+            
             if (!existingIds.has(tx.id)) {
                 let enrichedTx = { ...tx };
                 
@@ -136,7 +143,12 @@ export const sovereignService = {
                 return await contentRes.json();
             });
 
-            return await Promise.all(txPromises);
+            const results = await Promise.all(txPromises);
+            
+            // CHRONOLOGY FIX: Ensure strict reverse-chronological order by timestamp
+            return results
+                .filter(tx => !BLACKLISTED_SIGNATURES.includes(tx.id))
+                .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
         } catch (e) {
             console.error("Public Ledger Fetch Failed:", e);
             return [];

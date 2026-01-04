@@ -17,6 +17,8 @@ import { ChevronRightIcon } from './icons/ChevronRightIcon';
 
 type ExplorerView = 'ledger' | 'account' | 'transaction';
 
+const BLACKLISTED_IDS = ['mint-1766424900145'];
+
 export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', value: string } }> = ({ initialTarget }) => {
     const [view, setView] = useState<ExplorerView>('ledger');
     const [targetValue, setTargetValue] = useState<string>('');
@@ -36,7 +38,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
         try {
             // We fetch a significant buffer to calculate accurate tokenomics, but only display in slices
             const data = await sovereignService.fetchPublicLedger(1000);
-            setTransactions(data);
+            setTransactions(data.filter(t => !BLACKLISTED_IDS.includes(t.id)));
         } catch (e) {
             console.error("Sovereign sync failure");
         } finally {
@@ -115,12 +117,16 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
         };
 
         // Replay history from the full set to calculate current balances
-        [...transactions].reverse().forEach(tx => {
-            const amt = Number(tx.amount || 0);
-            if (tx.type === 'SYSTEM_MINT') return;
-            if (vaults[tx.senderId] !== undefined) vaults[tx.senderId] -= amt;
-            if (vaults[tx.receiverId] !== undefined) vaults[tx.receiverId] += amt;
-        });
+        // Must replay from oldest to newest for current state
+        [...transactions]
+            .filter(t => !BLACKLISTED_IDS.includes(t.id))
+            .sort((a, b) => a.timestamp - b.timestamp)
+            .forEach(tx => {
+                const amt = Number(tx.amount || 0);
+                if (tx.type === 'SYSTEM_MINT') return;
+                if (vaults[tx.senderId] !== undefined) vaults[tx.senderId] -= amt;
+                if (vaults[tx.receiverId] !== undefined) vaults[tx.receiverId] += amt;
+            });
 
         const circulating = TOTAL_CAP - vaults.GENESIS;
 
@@ -133,16 +139,19 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     }, [transactions]);
 
     const allFilteredTransactions = useMemo(() => {
-        if (view === 'ledger') return transactions;
+        let list = transactions.filter(t => !BLACKLISTED_IDS.includes(t.id));
+        
         if (view === 'account') {
-            return transactions.filter(tx => 
+            list = list.filter(tx => 
                 tx.senderPublicKey === targetValue || 
                 tx.receiverPublicKey === targetValue ||
                 tx.senderId === targetValue || 
                 tx.receiverId === targetValue
             );
         }
-        return transactions;
+
+        // Most recent first chronology fix
+        return list.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     }, [transactions, view, targetValue]);
 
     // Paginated Slicing
@@ -306,7 +315,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                                 </thead>
                                 <tbody className="divide-y divide-slate-50">
                                     {paginatedTransactions.map((tx) => (
-                                        <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors">
+                                        <tr key={tx.id} className="hover:bg-slate-50/80 transition-colors group">
                                             <td className="px-8 py-5">
                                                 <button onClick={() => navigateTx(tx.id)} className="text-[#2563eb] font-mono text-xs font-bold hover:underline">
                                                     {tx.id.substring(0, 10)}...
