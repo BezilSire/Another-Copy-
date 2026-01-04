@@ -15,8 +15,8 @@ interface State {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-// Fix: Use React.Component explicitly to resolve inheritance check issues in the compiler
-export class ErrorBoundary extends React.Component<Props, State> {
+// Fix: Use Component directly from named import to ensure proper inheritance visibility for the compiler
+export class ErrorBoundary extends Component<Props, State> {
   public state: State = {
     hasError: false,
     error: null,
@@ -32,7 +32,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return { hasError: true, error, errorInfo: null };
   }
 
-  // Fix: By extending React.Component, setState is correctly recognized as an inherited method
+  // Fix: Explicitly using the Component base class ensures setState is recognized in the inheritance chain
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error, errorInfo);
     this.setState({ 
@@ -77,7 +77,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    // Fix: By extending React.Component, props is correctly recognized as an inherited member
+    // Fix: Explicitly using the Component base class ensures the props member is correctly typed and accessible
     return this.props.children;
   }
 }

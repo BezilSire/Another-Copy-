@@ -3,7 +3,7 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ToastProvider } from './contexts/ToastContext';
 import { AuthProvider } from './contexts/AuthContext';
-import { ThemeProvider } from './contexts/ThemeContext'; // Corrected filename path
+import { ThemeProvider } from './contexts/ThemeContext';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { LedgerPage } from './components/LedgerPage';
 import { Buffer } from 'buffer';
@@ -18,14 +18,23 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
-const isExplorer = process.env.SITE_MODE === 'EXPLORER';
+/**
+ * AGGRESSIVE ROUTING PROTOCOL
+ * Detects if we are on the public explorer domain or standard app domain.
+ * Bypasses Auth dependency entirely for the explorer.
+ */
+const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
+const isExplorer = 
+    process.env.SITE_MODE === 'EXPLORER' || 
+    hostname.includes('scan') || 
+    hostname.includes('ledger') || 
+    hostname.includes('another-copy'); // Detection for the specific provided Vercel URL
 
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
       <ToastProvider>
-        {/* We use a basic ThemeProvider for both modes */}
         <ThemeProvider>
           {isExplorer ? (
             <LedgerPage />

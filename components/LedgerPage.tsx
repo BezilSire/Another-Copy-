@@ -1,88 +1,88 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { api } from '../services/apiService';
 import { LoaderIcon } from './icons/LoaderIcon';
-import { DatabaseIcon } from './icons/DatabaseIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
-import { UserCircleIcon } from './icons/UserCircleIcon';
 import { SearchIcon } from './icons/SearchIcon';
-import { ArrowUpRightIcon } from './icons/ArrowUpRightIcon';
 import { formatTimeAgo } from '../utils';
-import { TreasuryVault, UbtTransaction, GlobalEconomy, PublicUserProfile } from '../types';
-import { useAuth } from '../contexts/AuthContext';
+import { UbtTransaction, GlobalEconomy, PublicUserProfile } from '../types';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 
 type ExplorerView = 'ledger' | 'account' | 'transaction';
 
 export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', value: string } }> = ({ initialTarget }) => {
-    const { currentUser } = useAuth();
-    
-    // Explorer State
     const [view, setView] = useState<ExplorerView>(initialTarget?.type === 'address' ? 'account' : initialTarget?.type === 'tx' ? 'transaction' : 'ledger');
     const [targetValue, setTargetValue] = useState<string>(initialTarget?.value || '');
     const [accountData, setAccountData] = useState<PublicUserProfile | null>(null);
     const [selectedTx, setSelectedTx] = useState<UbtTransaction | null>(null);
     
-    // Data State
     const [transactions, setTransactions] = useState<UbtTransaction[]>([]);
     const [economy, setEconomy] = useState<GlobalEconomy | null>(null);
-    const [vaults, setVaults] = useState<TreasuryVault[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [namesMap, setNamesMap] = useState<Record<string, string>>({
+        'GENESIS': 'GENESIS_ROOT',
+        'FLOAT': 'LIQUIDITY_FLOAT',
+        'SYSTEM': 'PROTOCOL_ORACLE',
+        'SUSTENANCE': 'SUSTENANCE_RESERVE',
+        'DISTRESS': 'EMERGENCY_FUND',
+        'VENTURE': 'LAUNCHPAD_TREASURY',
+        'REDEMPTION': 'REDEMPTION_NODE',
+        'GENESIS_PROTOCOL': 'GENESIS_PROTOCOL'
+    });
 
-    const isExplorerSite = process.env.SITE_MODE === 'EXPLORER';
-
-    // Security Filter: Only show finalized blocks
-    const isCleanProtocol = (tx: UbtTransaction): boolean => {
-        const isSim = tx.type === 'SIMULATION_MINT' || tx.id.startsWith('sim-');
-        return !isSim;
-    };
-
-    // Load Base Data
+    // Aggressive Data Load
     useEffect(() => {
         let isMounted = true;
-        const loadBaseData = async () => {
-            setIsLoading(true);
+        
+        const forceLoad = async () => {
             try {
-                const [txs, econ] = await Promise.all([
-                    api.getPublicLedger(500),
-                    new Promise<GlobalEconomy | null>((resolve) => api.listenForGlobalEconomy(resolve, () => resolve(null)))
-                ]);
+                // First principles: Don't wait for the listener handshake. Fetch now.
+                const initialTxs = await api.getPublicLedger(100);
                 if (isMounted) {
-                    setTransactions(txs.filter(isCleanProtocol));
-                    setEconomy(econ as GlobalEconomy);
+                    setTransactions(initialTxs);
+                    setIsLoading(false);
                 }
-            } finally {
-                if (isMounted) setIsLoading(false);
+            } catch (e) {
+                console.error("Ledger Fetch Failure:", e);
             }
         };
-        loadBaseData();
-        const unsubVaults = api.listenToVaults(v => isMounted && setVaults(v), console.error);
-        return () => { isMounted = false; unsubVaults(); };
+
+        forceLoad();
+
+        // Establish persistent socket
+        const unsubLedger = api.listenForPublicLedger((txs) => {
+            if (isMounted) {
+                setTransactions(txs);
+                setIsLoading(false);
+                
+                // Resolve missing names
+                const uniqueIds = Array.from(new Set(txs.flatMap(t => [t.senderId, t.receiverId])));
+                uniqueIds.forEach(id => {
+                    if (!namesMap[id] && id.length > 10) {
+                        api.resolveNodeIdentity(id).then(res => {
+                            if (res && isMounted) setNamesMap(prev => ({ ...prev, [id]: res.name }));
+                        });
+                    }
+                });
+            }
+        }, 100);
+
+        const unsubEcon = api.listenForGlobalEconomy((econ) => {
+            if (isMounted) setEconomy(econ);
+        });
+
+        return () => { isMounted = false; unsubLedger(); unsubEcon(); };
     }, []);
 
-    // Identity & TX Resolution
     useEffect(() => {
         if (view === 'account' && targetValue) {
-            setIsLoading(true);
-            setAccountData(null);
-            api.resolveNodeIdentity(targetValue).then(res => {
-                setAccountData(res);
-            }).finally(() => setIsLoading(false));
+            api.resolveNodeIdentity(targetValue).then(setAccountData);
         }
         if (view === 'transaction' && targetValue) {
-            const found = transactions.find(t => t.id === targetValue || t.hash === targetValue);
+            const found = transactions.find(t => t.id === targetValue);
             setSelectedTx(found || null);
         }
     }, [view, targetValue, transactions]);
-
-    const handleSearch = (e: React.FormEvent) => {
-        e.preventDefault();
-        const val = searchQuery.trim();
-        if (!val) return;
-        if (val.length > 30) navigateAccount(val);
-        else navigateTx(val);
-    };
 
     const navigateAccount = (address: string) => {
         setTargetValue(address);
@@ -99,150 +99,107 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     };
 
     const filteredTransactions = useMemo(() => {
-        let list = transactions;
-        if (view === 'ledger') return list;
+        if (view === 'ledger') return transactions;
         if (view === 'account') {
-            return list.filter(tx => 
+            return transactions.filter(tx => 
                 tx.senderId === targetValue || 
                 tx.receiverId === targetValue || 
                 tx.senderPublicKey === targetValue ||
                 (accountData && (tx.senderId === accountData.id || tx.receiverId === accountData.id))
             );
         }
-        return list;
+        return transactions;
     }, [transactions, view, targetValue, accountData]);
 
     const ubtToUsd = (amt: number, txPrice?: number) => {
         const price = txPrice || economy?.ubt_to_usd_rate || 0.001;
-        return (amt * price).toFixed(2);
+        return (amt * price).toFixed(4);
     };
 
-    const TransactionDetail = ({ tx }: { tx: UbtTransaction }) => (
-        <div className="space-y-8 animate-fade-in text-slate-800">
-             <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm relative overflow-hidden">
-                <div className="relative z-10 space-y-4">
-                    <div className="flex items-center gap-3">
-                        <div className="p-2 bg-emerald-100 rounded-lg text-emerald-600">
-                            <ShieldCheckIcon className="h-5 w-5" />
-                        </div>
-                        <h2 className="text-lg font-bold text-slate-900 uppercase tracking-tight">Handshake Confirmed</h2>
-                    </div>
-                    <p className="text-4xl font-black text-slate-900 font-mono tracking-tighter">{tx.amount.toLocaleString()} UBT</p>
-                    <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Protocol Finality Established</p>
-                </div>
-             </div>
-
-             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                 <DetailCard label="Timestamp" value={new Date(tx.timestamp).toLocaleString()} />
-                 <DetailCard label="Network Mode" value={tx.protocol_mode} />
-                 <DetailCard label="Block Signature" value={tx.id} mono />
-                 <DetailCard label="State Hash" value={tx.hash} mono />
-                 <div className="md:col-span-2 p-6 bg-slate-50 rounded-2xl border border-slate-200">
-                     <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-3">Cryptographic Signature (Ed25519)</p>
-                     <p className="text-[11px] text-slate-600 font-mono break-all leading-relaxed">{tx.signature}</p>
-                 </div>
-             </div>
-             
-             {tx.ledger_url && (
-                 <div className="text-center pt-4">
-                    <a href={tx.ledger_url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 px-8 py-3 bg-blue-600 text-white font-bold rounded-xl text-xs hover:bg-blue-700 transition-all shadow-md">
-                        View Immutable Block on GitHub
-                    </a>
-                 </div>
-             )}
-        </div>
-    );
-
-    const DetailCard = ({ label, value, mono }: { label: string, value: string, mono?: boolean }) => (
-        <div className="p-6 bg-white rounded-2xl border border-slate-200 shadow-sm">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1">{label}</p>
-            <p className={`text-slate-900 font-bold truncate ${mono ? 'font-mono text-[11px]' : 'text-sm'}`}>{value}</p>
-        </div>
-    );
+    const resolveName = (id: string) => {
+        return namesMap[id] || id.substring(0, 12).toUpperCase();
+    };
 
     return (
-        <div className="min-h-screen bg-slate-50 text-slate-900 font-sans pb-32">
-            {/* HEADER NAVIGATION */}
-            <div className="bg-white border-b border-slate-200 px-6 sm:px-10 lg:px-20 py-8 shadow-sm">
-                <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-start lg:items-center gap-8">
-                    <div className="flex items-center gap-4 cursor-pointer" onClick={() => { setView('ledger'); setAccountData(null); setSelectedTx(null); }}>
-                        <div className="p-3 bg-brand-gold rounded-xl text-white">
-                            <GlobeIcon className="h-6 w-6" />
+        <div className="min-h-screen bg-black text-white font-sans pb-32">
+            {/* Explorer HUD */}
+            <div className="bg-slate-950 border-b border-white/5 py-10 px-6 sm:px-10 lg:px-20 shadow-2xl relative overflow-hidden">
+                <div className="absolute inset-0 blueprint-grid opacity-[0.03] pointer-events-none"></div>
+                <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10 relative z-10">
+                    <button onClick={() => { setView('ledger'); setAccountData(null); }} className="flex items-center gap-6 group text-left">
+                        <div className="p-4 bg-brand-gold rounded-[1.5rem] text-slate-950 shadow-glow-gold group-hover:scale-105 transition-all">
+                            <GlobeIcon className="h-8 w-8" />
                         </div>
                         <div>
-                            <h1 className="text-2xl font-black uppercase tracking-tighter text-slate-900 leading-none">Ubuntium Scan</h1>
-                            <p className="text-[9px] font-bold text-slate-400 mt-1 uppercase tracking-widest">Network Explorer</p>
+                            <h1 className="text-4xl font-black tracking-tighter uppercase gold-text leading-none">Ubuntium Scan</h1>
+                            <p className="label-caps !text-[10px] !text-emerald-500/60 !tracking-[0.4em] mt-3">Sovereign Data Explorer</p>
                         </div>
-                    </div>
-
-                    <form onSubmit={handleSearch} className="flex-1 max-w-2xl w-full relative">
-                        <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
-                            <SearchIcon className="h-5 w-5 text-slate-400" />
+                    </button>
+                    
+                    <form onSubmit={(e) => { e.preventDefault(); navigateTx(searchQuery); }} className="flex-1 max-w-2xl w-full relative">
+                        <div className="absolute inset-y-0 left-0 pl-6 flex items-center pointer-events-none">
+                            <SearchIcon className="h-6 w-6 text-gray-700" />
                         </div>
                         <input 
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="Search by Address / Transaction Hash..."
-                            className="w-full bg-slate-50 border border-slate-200 rounded-2xl py-4 pl-14 pr-6 text-sm font-bold text-slate-900 focus:bg-white focus:ring-1 focus:ring-blue-500 transition-all placeholder-slate-400 uppercase"
+                            placeholder="Enter Transaction signature / Node public address..."
+                            className="w-full bg-slate-950 border border-white/10 rounded-3xl py-6 pl-16 pr-6 text-sm font-black text-white focus:ring-1 focus:ring-brand-gold/30 transition-all placeholder-gray-800 uppercase data-mono"
                         />
                     </form>
-
-                    {isExplorerSite && (
-                         <button onClick={() => window.location.href = 'https://global-commons.app'} className="px-6 py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition-all shadow-md">
-                            Login to Protocol
-                        </button>
-                    )}
+                    
+                    <button onClick={() => window.location.href = 'https://global-commons.app'} className="px-10 py-5 bg-white text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-[0.4em] hover:bg-brand-gold transition-all shadow-xl active:scale-95">
+                        Citizen Portal
+                    </button>
                 </div>
             </div>
 
-            <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-20 py-10">
+            <div className="max-w-7xl mx-auto px-6 sm:px-10 lg:px-20 py-12 space-y-12">
                 
-                {/* METRICS DASHBOARD */}
                 {view === 'ledger' && (
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-12 animate-fade-in">
-                        <MetricBox label="UBT Value" value={`$${(economy?.ubt_to_usd_rate || 0.001).toFixed(4)}`} color="text-emerald-600" />
-                        <MetricBox label="Circ. Supply" value="15,000,000" color="text-slate-900" />
-                        <MetricBox label="Total Transacted" value={transactions.length.toLocaleString()} color="text-slate-900" />
-                        <MetricBox label="Network Pulse" value="Live" color="text-blue-600" />
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in">
+                        <HudMetric label="System Value" value={`$${(economy?.ubt_to_usd_rate || 0.001).toFixed(4)}`} color="text-brand-gold" />
+                        <HudMetric label="Ledger Height" value={`#${transactions.length}`} color="text-white" />
+                        <HudMetric label="Consensus" value="Active" color="text-emerald-500" />
+                        <HudMetric label="Supply Cap" value="15.0M" color="text-blue-400" />
                     </div>
                 )}
 
-                {/* CONTENT AREA */}
                 <div className="space-y-6">
-                    <div className="flex items-center justify-between">
-                        <h3 className="text-sm font-black text-slate-500 uppercase tracking-widest">
-                            {view === 'ledger' ? 'Latest Transactions' : view === 'account' ? 'Node State' : 'Block Details'}
+                    <div className="flex items-center gap-4">
+                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-glow-matrix"></div>
+                        <h3 className="text-sm font-black text-white uppercase tracking-[0.4em]">
+                            {view === 'ledger' ? 'Immutable Transaction Stream' : view === 'account' ? 'Node Identity State' : 'Block Data'}
                         </h3>
-                        {view !== 'ledger' && (
-                            <button onClick={() => setView('ledger')} className="text-[10px] font-bold text-blue-600 hover:underline uppercase tracking-widest">
-                                Return to Stream
-                            </button>
-                        )}
                     </div>
 
                     {isLoading ? (
                         <div className="py-40 text-center">
-                            <LoaderIcon className="h-10 w-10 animate-spin text-brand-gold mx-auto opacity-30" />
-                            <p className="text-[10px] font-bold text-slate-400 mt-6 uppercase tracking-widest">Indexing Blockchain...</p>
+                            <LoaderIcon className="h-12 w-12 animate-spin text-brand-gold mx-auto opacity-30" />
+                            <p className="text-[10px] font-black text-gray-500 mt-8 uppercase tracking-[0.6em]">Establishing_Ledger_Sync...</p>
                         </div>
                     ) : view === 'transaction' && selectedTx ? (
-                        <TransactionDetail tx={selectedTx} />
-                    ) : view === 'account' && accountData ? (
-                        <div className="space-y-6">
-                            <div className="bg-white p-8 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-6">
-                                <div className="w-16 h-16 bg-slate-100 rounded-2xl border border-slate-200 flex items-center justify-center">
-                                    <UserCircleIcon className="h-10 w-10 text-slate-400" />
-                                </div>
+                        <div className="module-frame glass-module p-10 rounded-[3rem] border-white/5 space-y-10 animate-fade-in">
+                             <div className="flex justify-between items-start border-b border-white/5 pb-8">
                                 <div>
-                                    <h2 className="text-2xl font-black text-slate-900 uppercase tracking-tighter leading-none">{accountData.name}</h2>
-                                    <p className="text-[10px] font-bold text-slate-500 mt-2 uppercase tracking-widest">{accountData.circle} &bull; {accountData.role}</p>
+                                    <p className="label-caps !text-[10px] text-brand-gold mb-3">Temporal Signature</p>
+                                    <p className="text-2xl font-black text-white font-mono break-all">{selectedTx.id}</p>
                                 </div>
-                            </div>
-                            <ExplorerTable txs={filteredTransactions} navigateTx={navigateTx} navigateAccount={navigateAccount} ubtToUsd={ubtToUsd} />
+                                <span className="px-4 py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest">Finalized</span>
+                             </div>
+                             <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
+                                <div><p className="label-caps !text-[8px] text-gray-500 mb-2">Timestamp</p><p className="font-bold">{new Date(selectedTx.timestamp).toLocaleString()}</p></div>
+                                <div><p className="label-caps !text-[8px] text-gray-500 mb-2">Volume</p><p className="text-xl font-black font-mono">{selectedTx.amount} UBT</p></div>
+                                <div><p className="label-caps !text-[8px] text-gray-500 mb-2">USD Proxy</p><p className="text-xl font-black font-mono text-emerald-500">${ubtToUsd(selectedTx.amount, selectedTx.priceAtSync)}</p></div>
+                             </div>
+                             <div className="bg-black/40 p-8 rounded-3xl border border-white/5 shadow-inner">
+                                <p className="label-caps !text-[8px] text-gray-500 mb-4">Cryptographic Seal</p>
+                                <p className="text-[11px] text-gray-400 font-mono break-all leading-relaxed">{selectedTx.signature}</p>
+                             </div>
                         </div>
                     ) : (
-                        <ExplorerTable txs={filteredTransactions} navigateTx={navigateTx} navigateAccount={navigateAccount} ubtToUsd={ubtToUsd} />
+                        <ExplorerTable txs={filteredTransactions} onTx={navigateTx} onAccount={navigateAccount} ubtToUsd={ubtToUsd} resolveName={resolveName} />
                     )}
                 </div>
             </div>
@@ -250,50 +207,48 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     );
 };
 
-function ExplorerTable({ txs, navigateTx, navigateAccount, ubtToUsd }: { txs: UbtTransaction[], navigateTx: any, navigateAccount: any, ubtToUsd: any }) {
+function ExplorerTable({ txs, onTx, onAccount, ubtToUsd, resolveName }: any) {
     return (
-        <div className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
+        <div className="bg-slate-900/60 rounded-[3rem] border border-white/10 overflow-hidden shadow-[0_0_50px_rgba(0,0,0,1)] backdrop-blur-3xl">
             <div className="overflow-x-auto no-scrollbar">
                 <table className="w-full text-left border-collapse">
                     <thead>
-                        <tr className="bg-slate-50 text-[10px] font-black text-slate-500 uppercase tracking-widest border-b border-slate-200">
-                            <th className="px-8 py-4">Signature</th>
-                            <th className="px-8 py-4">Time</th>
-                            <th className="px-8 py-4">Sender</th>
-                            <th className="px-8 py-4">Recipient</th>
-                            <th className="px-8 py-4">Amount</th>
-                            <th className="px-8 py-4">Type</th>
+                        <tr className="bg-white/5 text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] border-b border-white/5">
+                            <th className="px-10 py-6">Signature</th>
+                            <th className="px-10 py-6">Origin Node</th>
+                            <th className="px-10 py-6">Target Node</th>
+                            <th className="px-10 py-6">Volume</th>
+                            <th className="px-10 py-6">Temporal</th>
                         </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-100 font-sans">
-                        {txs.map((tx) => (
-                            <tr key={tx.id} className="hover:bg-slate-50 transition-colors group">
-                                <td className="px-8 py-4">
-                                    <button onClick={() => navigateTx(tx.id)} className="text-blue-600 hover:text-blue-800 text-[12px] font-mono font-bold transition-all">
-                                        {tx.id.substring(0, 10).toUpperCase()}...
+                    <tbody className="divide-y divide-white/5 font-mono">
+                        {txs.map((tx: any) => (
+                            <tr key={tx.id} className="hover:bg-brand-gold/[0.02] transition-colors group">
+                                <td className="px-10 py-6">
+                                    <button onClick={() => onTx(tx.id)} className="text-brand-gold hover:text-white text-[11px] font-black transition-all uppercase">
+                                        {tx.id.substring(0, 12)}...
                                     </button>
                                 </td>
-                                <td className="px-8 py-4 text-[11px] text-slate-500 font-medium whitespace-nowrap">
-                                    {formatTimeAgo(tx.timestamp)}
-                                </td>
-                                <td className="px-8 py-4">
-                                    <button onClick={() => navigateAccount(tx.senderId)} className="text-slate-600 hover:text-blue-600 text-[11px] font-mono truncate max-w-[120px] block">
-                                        {tx.senderId.substring(0, 12)}...
+                                <td className="px-10 py-6">
+                                    <button onClick={() => onAccount(tx.senderId)} className="text-gray-400 hover:text-brand-gold text-[10px] truncate max-w-[150px] block font-sans font-bold">
+                                        {resolveName(tx.senderId)}
                                     </button>
                                 </td>
-                                <td className="px-8 py-4">
-                                    <button onClick={() => navigateAccount(tx.receiverId)} className="text-slate-600 hover:text-blue-600 text-[11px] font-mono truncate max-w-[120px] block">
-                                        {tx.receiverId.substring(0, 12)}...
+                                <td className="px-10 py-6">
+                                    <button onClick={() => onAccount(tx.receiverId)} className="text-gray-400 hover:text-brand-gold text-[10px] truncate max-w-[150px] block font-sans font-bold">
+                                        {resolveName(tx.receiverId)}
                                     </button>
                                 </td>
-                                <td className="px-8 py-4">
+                                <td className="px-10 py-6">
                                     <div className="flex flex-col">
-                                        <span className="text-xs font-bold text-slate-900">{tx.amount.toLocaleString()} UBT</span>
-                                        <span className="text-[10px] text-slate-400 font-medium">≈ ${ubtToUsd(tx.amount, (tx as any).priceAtSync)}</span>
+                                        <span className="text-sm font-black text-white">{tx.amount.toLocaleString()} <span className="text-[9px] text-gray-700">UBT</span></span>
+                                        <span className="text-[9px] text-emerald-500 font-black">≈ ${ubtToUsd(tx.amount, tx.priceAtSync)}</span>
                                     </div>
                                 </td>
-                                <td className="px-8 py-4">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{tx.type || 'P2P'}</span>
+                                <td className="px-10 py-6">
+                                    <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest whitespace-nowrap">
+                                        {formatTimeAgo(tx.timestamp)}
+                                    </span>
                                 </td>
                             </tr>
                         ))}
@@ -304,9 +259,9 @@ function ExplorerTable({ txs, navigateTx, navigateAccount, ubtToUsd }: { txs: Ub
     );
 }
 
-const MetricBox = ({ label, value, color }: { label: string, value: string, color: string }) => (
-    <div className="bg-white p-6 rounded-2xl border border-slate-200 shadow-sm">
-        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">{label}</p>
+const HudMetric = ({ label, value, color }: { label: string, value: string, color: string }) => (
+    <div className="module-frame bg-slate-950 p-6 rounded-[1.8rem] border border-white/5 shadow-inner">
+        <p className="label-caps !text-[8px] text-gray-600 mb-2">{label}</p>
         <p className={`text-2xl font-black font-mono tracking-tighter ${color}`}>{value}</p>
     </div>
 );
