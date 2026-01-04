@@ -24,21 +24,18 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
 
     const isExplorerSite = process.env.SITE_MODE === 'EXPLORER';
 
-    const isCleanProtocol = (tx: UbtTransaction): boolean => {
-        return tx.type !== 'SIMULATION_MINT' && !tx.id.startsWith('sim-');
-    };
-
     // Load Live Data Stream
     useEffect(() => {
         let isMounted = true;
+        
+        // Protocol: Show ALL data on the public explorer, including simulation hashes for transparency
         const unsubLedger = api.listenForPublicLedger((txs) => {
             if (isMounted) {
-                const cleanTxs = txs.filter(isCleanProtocol);
-                setTransactions(cleanTxs);
+                setTransactions(txs);
                 setIsLoading(false);
                 
-                // Fetch missing names
-                const uniqueIds = Array.from(new Set(cleanTxs.flatMap(t => [t.senderId, t.receiverId])));
+                // Identity Resolution Protocol
+                const uniqueIds = Array.from(new Set(txs.flatMap(t => [t.senderId, t.receiverId])));
                 uniqueIds.forEach(id => {
                     if (!namesMap[id] && id.length > 10) {
                         api.resolveNodeIdentity(id).then(res => {
@@ -47,7 +44,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                     }
                 });
             }
-        }, 500);
+        }, 100);
 
         const unsubEcon = api.listenForGlobalEconomy((econ) => {
             if (isMounted) setEconomy(econ);
@@ -112,6 +109,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
 
     return (
         <div className="min-h-screen bg-black text-white font-sans pb-32">
+            {/* HUD Header */}
             <div className="bg-slate-950 border-b border-white/5 py-10 px-6 sm:px-10 lg:px-20 shadow-2xl relative overflow-hidden">
                 <div className="absolute inset-0 blueprint-grid opacity-[0.03] pointer-events-none"></div>
                 <div className="max-w-7xl mx-auto flex flex-col lg:flex-row justify-between items-start lg:items-center gap-10 relative z-10">
@@ -121,7 +119,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                         </div>
                         <div>
                             <h1 className="text-4xl font-black tracking-tighter uppercase gold-text leading-none">Ubuntium Scan</h1>
-                            <p className="label-caps !text-[10px] !text-gray-500 !tracking-[0.4em] mt-3">Live Mainnet Explorer v5.2</p>
+                            <p className="label-caps !text-[10px] !text-gray-500 !tracking-[0.4em] mt-3">Live Network State v5.2</p>
                         </div>
                     </button>
                     
@@ -133,7 +131,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                             type="text"
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="Enter Transaction Hash / Node Anchor..."
+                            placeholder="Enter Transaction Signature / Node Identity..."
                             className="w-full bg-slate-950 border border-white/10 rounded-3xl py-6 pl-16 pr-6 text-sm font-black text-white focus:ring-1 focus:ring-brand-gold/30 transition-all placeholder-gray-800 uppercase data-mono"
                         />
                     </form>
@@ -150,10 +148,10 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                 
                 {view === 'ledger' && (
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-6 animate-fade-in">
-                        <HudMetric label="Mainnet Value" value={`$${(economy?.ubt_to_usd_rate || 0.001).toFixed(4)}`} color="text-brand-gold" />
+                        <HudMetric label="Oracle Value" value={`$${(economy?.ubt_to_usd_rate || 0.001).toFixed(4)}`} color="text-brand-gold" />
                         <HudMetric label="Ledger Height" value={`#${transactions.length}`} color="text-white" />
                         <HudMetric label="Protocol Pulse" value="Active" color="text-emerald-500" />
-                        <HudMetric label="Supply Anchor" value="15.0M" color="text-blue-400" />
+                        <HudMetric label="Supply Index" value="15.0M" color="text-blue-400" />
                     </div>
                 )}
 
@@ -161,31 +159,31 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                     <div className="flex items-center gap-4">
                         <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-glow-matrix"></div>
                         <h3 className="text-sm font-black text-white uppercase tracking-[0.4em]">
-                            {view === 'ledger' ? 'Immutable Event Stream' : view === 'account' ? 'Node State' : 'Block Data'}
+                            {view === 'ledger' ? 'Immutable Temporal Stream' : view === 'account' ? 'Node Identity State' : 'Block Data'}
                         </h3>
                     </div>
 
                     {isLoading ? (
                         <div className="py-40 text-center">
                             <LoaderIcon className="h-12 w-12 animate-spin text-brand-gold mx-auto opacity-30" />
-                            <p className="text-[10px] font-black text-gray-500 mt-8 uppercase tracking-[0.6em]">Indexing_Distributed_Ledger...</p>
+                            <p className="text-[10px] font-black text-gray-500 mt-8 uppercase tracking-[0.6em]">Synchronizing_Global_Ledger...</p>
                         </div>
                     ) : view === 'transaction' && selectedTx ? (
                         <div className="module-frame glass-module p-10 rounded-[3rem] border-white/5 space-y-10 animate-fade-in">
                              <div className="flex justify-between items-start border-b border-white/5 pb-8">
                                 <div>
-                                    <p className="label-caps !text-[10px] text-brand-gold mb-3">Handshake ID</p>
+                                    <p className="label-caps !text-[10px] text-brand-gold mb-3">Temporal Signature</p>
                                     <p className="text-2xl font-black text-white font-mono break-all">{selectedTx.id}</p>
                                 </div>
-                                <span className="px-4 py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest">Confirmed</span>
+                                <span className="px-4 py-2 bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest">Finalized</span>
                              </div>
                              <div className="grid grid-cols-1 md:grid-cols-3 gap-10">
                                 <div><p className="label-caps !text-[8px] text-gray-500 mb-2">Timestamp</p><p className="font-bold">{new Date(selectedTx.timestamp).toLocaleString()}</p></div>
-                                <div><p className="label-caps !text-[8px] text-gray-500 mb-2">Quantum Volume</p><p className="text-xl font-black font-mono">{selectedTx.amount} UBT</p></div>
-                                <div><p className="label-caps !text-[8px] text-gray-500 mb-2">Oracle Value</p><p className="text-xl font-black font-mono text-emerald-500">${ubtToUsd(selectedTx.amount, selectedTx.priceAtSync)}</p></div>
+                                <div><p className="label-caps !text-[8px] text-gray-500 mb-2">Volume</p><p className="text-xl font-black font-mono">{selectedTx.amount} UBT</p></div>
+                                <div><p className="label-caps !text-[8px] text-gray-500 mb-2">Fiat Mirror</p><p className="text-xl font-black font-mono text-emerald-500">${ubtToUsd(selectedTx.amount, selectedTx.priceAtSync)}</p></div>
                              </div>
                              <div className="bg-black/40 p-8 rounded-3xl border border-white/5 shadow-inner">
-                                <p className="label-caps !text-[8px] text-gray-500 mb-4">State Signature (Ed25519)</p>
+                                <p className="label-caps !text-[8px] text-gray-500 mb-4">Ed25519 State Seal</p>
                                 <p className="text-[11px] text-gray-400 font-mono break-all leading-relaxed">{selectedTx.signature}</p>
                              </div>
                         </div>
@@ -218,7 +216,7 @@ function ExplorerTable({ txs, onTx, onAccount, ubtToUsd, resolveName }: any) {
                 <table className="w-full text-left border-collapse">
                     <thead>
                         <tr className="bg-white/5 text-[10px] font-black text-gray-500 uppercase tracking-[0.3em] border-b border-white/5">
-                            <th className="px-10 py-6">Block Sig</th>
+                            <th className="px-10 py-6">Block</th>
                             <th className="px-10 py-6">Origin</th>
                             <th className="px-10 py-6">Target</th>
                             <th className="px-10 py-6">Volume</th>

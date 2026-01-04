@@ -1,5 +1,4 @@
-import * as React from 'react';
-import { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
 
@@ -16,7 +15,7 @@ interface State {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-/* Fixed: Using React namespace import to ensure React.Component and its methods are recognized in all build environments */
+// Fix: Use React.Component explicitly to resolve inheritance check issues in the compiler
 export class ErrorBoundary extends React.Component<Props, State> {
   public state: State = {
     hasError: false,
@@ -33,7 +32,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
     return { hasError: true, error, errorInfo: null };
   }
 
-  /* Fixed: setState member is now correctly inherited from the base React.Component class */
+  // Fix: By extending React.Component, setState is correctly recognized as an inherited method
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error, errorInfo);
     this.setState({ 
@@ -78,7 +77,7 @@ export class ErrorBoundary extends React.Component<Props, State> {
       );
     }
 
-    /* Fixed: props member is now correctly inherited from the base React.Component class */
+    // Fix: By extending React.Component, props is correctly recognized as an inherited member
     return this.props.children;
   }
 }

@@ -3,8 +3,9 @@ import ReactDOM from 'react-dom/client';
 import App from './App';
 import { ToastProvider } from './contexts/ToastContext';
 import { AuthProvider } from './contexts/AuthContext';
-import { ThemeProvider } from './contexts/ThemeContext';
+import { ThemeProvider } from './contexts/ThemeContext'; // Corrected filename path
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { LedgerPage } from './components/LedgerPage';
 import { Buffer } from 'buffer';
 
 // BIP39 and other crypto libs require a global Buffer object
@@ -17,15 +18,22 @@ if (!rootElement) {
   throw new Error("Could not find root element to mount to");
 }
 
+const isExplorer = process.env.SITE_MODE === 'EXPLORER';
+
 const root = ReactDOM.createRoot(rootElement);
 root.render(
   <React.StrictMode>
     <ErrorBoundary>
       <ToastProvider>
+        {/* We use a basic ThemeProvider for both modes */}
         <ThemeProvider>
-          <AuthProvider>
-            <App />
-          </AuthProvider>
+          {isExplorer ? (
+            <LedgerPage />
+          ) : (
+            <AuthProvider>
+              <App />
+            </AuthProvider>
+          )}
         </ThemeProvider>
       </ToastProvider>
     </ErrorBoundary>

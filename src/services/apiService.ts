@@ -129,9 +129,8 @@ export const api = {
     processUbtTransaction: async (transaction: UbtTransaction) => {
         return runTransaction(db, async (t) => {
             const econRef = doc(globalsCollection, 'economy');
-            const floatRef = doc(vaultsCollection, 'FLOAT');
-            const isFloatSender = transaction.senderId === 'FLOAT';
-            const senderRef = isFloatSender ? floatRef : doc(usersCollection, transaction.senderId);
+            const isFloatSender = ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(transaction.senderId);
+            const senderRef = isFloatSender ? doc(vaultsCollection, transaction.senderId) : doc(usersCollection, transaction.senderId);
             const receiverRef = doc(usersCollection, transaction.receiverId);
             
             const [econSnap, senderSnap] = await Promise.all([t.get(econRef), t.get(senderRef)]);
@@ -145,7 +144,6 @@ export const api = {
         }); 
     },
 
-    // Added getUserLedger to fix missing method error
     getUserLedger: async (uid: string) => {
         const q1 = query(ledgerCollection, where('senderId', '==', uid));
         const q2 = query(ledgerCollection, where('receiverId', '==', uid));
@@ -232,12 +230,14 @@ export const api = {
         const snapshot = await getDocs(q);
         return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile)).filter(u => u.id !== currentUser.id);
     },
-    // Added resolveNodeIdentity to fix missing method error
     resolveNodeIdentity: async (identifier: string): Promise<PublicUserProfile | null> => {
-        const userDoc = await getDoc(doc(usersCollection, identifier));
-        if (userDoc.exists()) return { id: userDoc.id, ...userDoc.data() } as PublicUserProfile;
-        const vaultDoc = await getDoc(doc(vaultsCollection, identifier));
-        if (vaultDoc.exists()) return { id: vaultDoc.id, name: vaultDoc.data()?.name, ubtBalance: vaultDoc.data()?.balance, role: 'admin', circle: 'TREASURY' } as any;
+        if (!identifier) return null;
+        try {
+            const userDoc = await getDoc(doc(usersCollection, identifier));
+            if (userDoc.exists()) return { id: userDoc.id, ...userDoc.data() } as PublicUserProfile;
+            const vaultDoc = await getDoc(doc(vaultsCollection, identifier));
+            if (vaultDoc.exists()) return { id: vaultDoc.id, name: vaultDoc.data()?.name, ubtBalance: vaultDoc.data()?.balance, role: 'admin', circle: 'TREASURY' } as any;
+        } catch (e) {}
         return null;
     },
 
@@ -267,13 +267,13 @@ export const api = {
     listenForMeetingSignals: (id: string, cb: (m: Meeting) => void): Unsubscribe => onSnapshot(doc(meetingsCollection, id), s => s.exists() && cb({ id: s.id, ...s.data() } as Meeting)),
     addSignal: (meetingId: string, signal: RTCSignal) => addDoc(collection(db, 'meetings', meetingId, 'signals'), { ...signal, timestamp: Date.now() }),
     addIceCandidate: (meetingId: string, candidate: ICESignal) => addDoc(collection(db, 'meetings', meetingId, 'ice'), { ...candidate, timestamp: Date.now() }),
-    listenForSignals: (meetingId: string, toUid: string, cb: (s: RTCSignal) => void): Unsubscribe => {
-        return onSnapshot(query(collection(db, 'meetings', meetingId, 'signals'), where('to', '==', toUid)), s => {
+    listenForSignals: (meetingId: string, user_id: string, cb: (s: RTCSignal) => void): Unsubscribe => {
+        return onSnapshot(query(collection(db, 'meetings', meetingId, 'signals'), where('to', '==', user_id)), s => {
             s.docChanges().forEach(change => { if (change.type === 'added') cb(change.doc.data() as RTCSignal); });
         });
     },
-    listenForIce: (meetingId: string, toUid: string, cb: (c: ICESignal) => void): Unsubscribe => {
-        return onSnapshot(query(collection(db, 'meetings', meetingId, 'ice'), where('to', '==', toUid)), s => {
+    listenForIce: (meetingId: string, user_id: string, cb: (c: ICESignal) => void): Unsubscribe => {
+        return onSnapshot(query(collection(db, 'meetings', meetingId, 'ice'), where('to', '==', user_id)), s => {
             s.docChanges().forEach(change => { if (change.type === 'added') cb(change.doc.data() as ICESignal); });
         });
     },
@@ -306,7 +306,6 @@ export const api = {
     listenForPostsByAuthor: (authorId: string, cb: (posts: Post[]) => void, err?: any): Unsubscribe => onSnapshot(query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), err),
     listenForComments: (parentId: string, cb: (comments: Comment[]) => void, coll: 'posts' | 'proposals', err?: any): Unsubscribe => onSnapshot(query(collection(db, coll, parentId, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), err),
     listenForMultiSigProposals: (cb: (p: MultiSigProposal[]) => void): Unsubscribe => onSnapshot(query(multisigCollection, where('status', '==', 'pending')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as MultiSigProposal))), console.error),
-    // Added listenForPublicLedger to fix missing method error
     listenForPublicLedger: (cb: (txs: UbtTransaction[]) => void, l: number = 200): Unsubscribe => onSnapshot(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction))), console.error),
 
     initializeTreasury: async (admin: Admin) => {
@@ -472,7 +471,6 @@ export const api = {
                 [vote === 'claimant' ? 'votesForClaimant' : 'votesForRespondent']: increment(1) 
             });
         }),
-    // Added processAdminHandshake to fix missing method error
     processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
         return runTransaction(db, async (t) => {
             const econRef = doc(globalsCollection, 'economy');
