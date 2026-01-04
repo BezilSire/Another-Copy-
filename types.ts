@@ -1,4 +1,3 @@
-
 import { Timestamp } from 'firebase/firestore';
 
 export type UserRole = 'member' | 'agent' | 'admin';
@@ -319,6 +318,7 @@ export interface UbtTransaction {
     signature: string;
     hash: string;
     senderPublicKey: string;
+    receiverPublicKey?: string; // New: Decouple from Firebase for Public Explorer
     parentHash: string;
     priceAtSync?: number; 
     status?: 'pending' | 'verified' | 'failed';

@@ -60,14 +60,24 @@ export const sovereignService = {
 
     /**
      * LEGACY BRIDGE PROTOCOL
-     * Used by Admin to push old Firebase transactions to GitHub.
+     * Modified: 
+     * 1. Filters out SIMULATION and MINT transactions (Expungement)
+     * 2. Resolves Receiver ID to Public Key and STAMPS it into the file.
      */
     syncLegacyToGitHub: async (onProgress: (log: string) => void) => {
-        onProgress("> SCANNING_FIREBASE_LEDGER...");
+        onProgress("> INITIALIZING_SOVEREIGN_CLEANSE...");
         const firebaseTxs = await api.getPublicLedger(1000);
-        onProgress(`> FOUND ${firebaseTxs.length} HISTORICAL BLOCKS.`);
+        
+        // Filter out simulation blocks (10,000 UBT mints etc)
+        const realTxs = firebaseTxs.filter(tx => 
+            tx.type !== 'SIMULATION_MINT' && 
+            tx.type !== 'SYSTEM_MINT' &&
+            tx.amount !== 10000 // Double safety for common simulation amount
+        );
+        
+        onProgress(`> FOUND ${realTxs.length} LEGITIMATE HISTORICAL BLOCKS.`);
 
-        // 1. Get existing blocks on GitHub to avoid duplicates
+        // 1. Get existing blocks on GitHub
         const listUrl = `${GITHUB_API}/repos/${REPO}/contents/ledger`;
         const listRes = await fetch(listUrl);
         const existingFiles = listRes.ok ? await listRes.json() : [];
@@ -77,16 +87,28 @@ export const sovereignService = {
         }));
 
         let count = 0;
-        for (const tx of firebaseTxs) {
+        for (const tx of realTxs) {
             if (!existingIds.has(tx.id)) {
+                onProgress(`> RESOLVING_IDENTITY: ${tx.receiverId.substring(0,8)}...`);
+                
+                // RESOLVE IDENTITY BEFORE PUSHING
+                let enrichedTx = { ...tx };
+                try {
+                    const receiverProfile = await api.getPublicUserProfile(tx.receiverId);
+                    if (receiverProfile?.publicKey) {
+                        enrichedTx.receiverPublicKey = receiverProfile.publicKey;
+                    }
+                } catch (e) {
+                    console.warn("Could not resolve receiver key for", tx.id);
+                }
+
                 onProgress(`> ANCHORING_BLOCK: ${tx.id.substring(0,8)}...`);
-                await sovereignService.dispatchTransaction(tx);
+                await sovereignService.dispatchTransaction(enrichedTx);
                 count++;
-                // Small delay to prevent GitHub rate limiting
                 await new Promise(r => setTimeout(r, 200));
             }
         }
-        onProgress(`> SYNC_COMPLETE. ${count} BLOCKS RECONCILED.`);
+        onProgress(`> RECONCILIATION_COMPLETE. ${count} BLOCKS STAMPED.`);
     },
 
     /**

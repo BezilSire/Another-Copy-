@@ -46,12 +46,13 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
         const history = transactions.filter(t => 
             t.senderId === targetValue || 
             t.receiverId === targetValue ||
-            t.senderPublicKey === targetValue
+            t.senderPublicKey === targetValue ||
+            t.receiverPublicKey === targetValue
         );
 
         // Calculate balance from history (Total In - Total Out)
         const balance = history.reduce((acc, t) => {
-            const isReceiver = t.receiverId === targetValue || (t as any).receiverPublicKey === targetValue;
+            const isReceiver = t.receiverId === targetValue || t.receiverPublicKey === targetValue;
             return isReceiver ? acc + t.amount : acc - t.amount;
         }, 0);
 
@@ -84,6 +85,8 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
             'SYSTEM': 'PROTOCOL_ORACLE'
         };
         if (systemNodes[id]) return systemNodes[id];
+        
+        // PRIORITIZE PUBLIC KEY
         const address = pubKey || id;
         if (address.length < 15) return address.toUpperCase();
         return address.substring(0, 8) + '...' + address.substring(address.length - 4);
@@ -175,7 +178,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                         <DetailRow label="Temporal Marker" value={new Date(selectedTx.timestamp).toLocaleString()} />
                         <DetailRow label="Quantum Volume" value={`${selectedTx.amount} UBT`} isStrong />
                         <DetailRow label="Origin Node" value={selectedTx.senderPublicKey || selectedTx.senderId} isMono isLink onClick={() => navigateAccount(selectedTx.senderPublicKey || selectedTx.senderId)} />
-                        <DetailRow label="Target Node" value={selectedTx.receiverId} isMono isLink onClick={() => navigateAccount(selectedTx.receiverId)} />
+                        <DetailRow label="Target Node" value={selectedTx.receiverPublicKey || selectedTx.receiverId} isMono isLink onClick={() => navigateAccount(selectedTx.receiverPublicKey || selectedTx.receiverId)} />
                         <DetailRow label="Proof Hash" value={selectedTx.hash} isMono isSmall />
                     </div>
                 ) : (
@@ -222,7 +225,7 @@ const TxTable = ({ txs, navigateAccount, navigateTx, resolveDisplayName }: any) 
                         </td>
                         <td className="px-10 py-6">
                             <button onClick={() => navigateAccount(tx.receiverPublicKey || tx.receiverId)} className="text-gray-500 hover:text-blue-600 transition-colors font-bold">
-                                {resolveDisplayName(tx.receiverId, (tx as any).receiverPublicKey)}
+                                {resolveDisplayName(tx.receiverId, tx.receiverPublicKey)}
                             </button>
                         </td>
                         <td className="px-10 py-6">

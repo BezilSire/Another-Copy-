@@ -133,14 +133,23 @@ export const api = {
             const senderRef = isFloatSender ? doc(vaultsCollection, transaction.senderId) : doc(usersCollection, transaction.senderId);
             const receiverRef = doc(usersCollection, transaction.receiverId);
             
-            const [econSnap, senderSnap] = await Promise.all([t.get(econRef), t.get(senderRef)]);
+            const [econSnap, senderSnap, receiverSnap] = await Promise.all([t.get(econRef), t.get(senderRef), t.get(receiverRef)]);
+            
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
             const balKey = isFloatSender ? 'balance' : 'ubtBalance';
             const senderBal = senderSnap.data()?.[balKey] || 0;
+            
             if (senderBal < transaction.amount) throw new Error("INSUFFICIENT_LIQUIDITY");
+
+            // ENRICH TRANSACTION WITH RECEIVER PUBLIC KEY FOR GITHUB SYNC
+            let finalTx = { ...transaction };
+            if (receiverSnap.exists() && receiverSnap.data()?.publicKey) {
+                finalTx.receiverPublicKey = receiverSnap.data()?.publicKey;
+            }
+
             t.update(senderRef, { [balKey]: increment(-transaction.amount) });
             t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
-            t.set(doc(ledgerCollection, transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+            t.set(doc(ledgerCollection, transaction.id), { ...finalTx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         }); 
     },
 
@@ -202,12 +211,32 @@ export const api = {
         const userRef = doc(usersCollection, p.userId);
         const sourceRef = doc(vaultsCollection, sourceVaultId);
         const econRef = doc(globalsCollection, 'economy');
+        const receiverSnap = await t.get(userRef);
+
         t.update(purchaseRef, { status: 'VERIFIED', verifiedAt: serverTimestamp() });
         t.update(userRef, { ubtBalance: increment(p.amountUbt) });
         t.update(sourceRef, { balance: increment(-p.amountUbt) });
         t.update(econRef, { cvp_usd_backing: increment(p.amountUsd) }); 
+
         const txId = `bridge-${Date.now().toString(36)}`;
-        t.set(doc(ledgerCollection, txId), { id: txId, senderId: sourceVaultId, receiverId: p.userId, amount: p.amountUbt, timestamp: Date.now(), type: 'FIAT_BRIDGE', protocol_mode: 'MAINNET', serverTimestamp: serverTimestamp() });
+        
+        // ENRICH FOR DECENTRALIZED VIEW
+        let receiverKey = "PROVISIONING";
+        if (receiverSnap.exists() && receiverSnap.data()?.publicKey) {
+            receiverKey = receiverSnap.data()?.publicKey;
+        }
+
+        t.set(doc(ledgerCollection, txId), { 
+            id: txId, 
+            senderId: sourceVaultId, 
+            receiverId: p.userId, 
+            receiverPublicKey: receiverKey,
+            amount: p.amountUbt, 
+            timestamp: Date.now(), 
+            type: 'FIAT_BRIDGE', 
+            protocol_mode: 'MAINNET', 
+            serverTimestamp: serverTimestamp() 
+        });
     }),
     rejectUbtPurchase: (id: string) => updateDoc(doc(pendingPurchasesCollection, id), { status: 'REJECTED' }),
     getPublicUserProfile: async (uid: string): Promise<PublicUserProfile | null> => {
