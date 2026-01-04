@@ -3,6 +3,8 @@
  * Handles the "Unkillable" ledger layer on GitHub.
  */
 
+import { api } from './apiService';
+
 const GITHUB_API = "https://api.github.com";
 const REPO = "BezilSire/ubuntium-ledger";
 const TOKEN = process.env.GITHUB_TOKEN;
@@ -51,18 +53,47 @@ export const sovereignService = {
     },
 
     dispatchTransaction: async (tx: any): Promise<string | null> => {
-        // Use timestamp in filename for easy chronological sorting on GitHub
-        const path = `ledger/tx-${Date.now()}-${tx.id}.json`;
+        // Use original timestamp for historical accuracy
+        const path = `ledger/tx-${tx.timestamp || Date.now()}-${tx.id}.json`;
         return await sovereignService.commitBlock(path, tx, `Asset Dispatch: ${tx.id}`);
     },
 
     /**
-     * PUBLIC DISCOVERY PROTOCOL
-     * Fetches transactions directly from GitHub without needing a Firebase session.
+     * LEGACY BRIDGE PROTOCOL
+     * Used by Admin to push old Firebase transactions to GitHub.
      */
-    fetchPublicLedger: async (limitCount: number = 32): Promise<any[]> => {
+    syncLegacyToGitHub: async (onProgress: (log: string) => void) => {
+        onProgress("> SCANNING_FIREBASE_LEDGER...");
+        const firebaseTxs = await api.getPublicLedger(1000);
+        onProgress(`> FOUND ${firebaseTxs.length} HISTORICAL BLOCKS.`);
+
+        // 1. Get existing blocks on GitHub to avoid duplicates
+        const listUrl = `${GITHUB_API}/repos/${REPO}/contents/ledger`;
+        const listRes = await fetch(listUrl);
+        const existingFiles = listRes.ok ? await listRes.json() : [];
+        const existingIds = new Set(existingFiles.map((f: any) => {
+            const match = f.name.match(/tx-\d+-(.+)\.json/);
+            return match ? match[1] : '';
+        }));
+
+        let count = 0;
+        for (const tx of firebaseTxs) {
+            if (!existingIds.has(tx.id)) {
+                onProgress(`> ANCHORING_BLOCK: ${tx.id.substring(0,8)}...`);
+                await sovereignService.dispatchTransaction(tx);
+                count++;
+                // Small delay to prevent GitHub rate limiting
+                await new Promise(r => setTimeout(r, 200));
+            }
+        }
+        onProgress(`> SYNC_COMPLETE. ${count} BLOCKS RECONCILED.`);
+    },
+
+    /**
+     * PUBLIC DISCOVERY PROTOCOL
+     */
+    fetchPublicLedger: async (limitCount: number = 100): Promise<any[]> => {
         try {
-            // 1. List directory contents
             const listUrl = `${GITHUB_API}/repos/${REPO}/contents/ledger`;
             const listRes = await fetch(listUrl);
             if (!listRes.ok) return [];
@@ -70,13 +101,11 @@ export const sovereignService = {
             const files = await listRes.json();
             if (!Array.isArray(files)) return [];
 
-            // 2. Sort by name (chronological tx-TIMESTAMP-ID.json) and take latest
             const latestFiles = files
                 .filter(f => f.name.startsWith('tx-'))
                 .sort((a, b) => b.name.localeCompare(a.name))
                 .slice(0, limitCount);
 
-            // 3. Fetch file contents in parallel
             const txPromises = latestFiles.map(async (file) => {
                 const contentRes = await fetch(file.download_url);
                 return await contentRes.json();
@@ -84,7 +113,6 @@ export const sovereignService = {
 
             return await Promise.all(txPromises);
         } catch (e) {
-            console.error("GitHub Ledger Discovery Failed:", e);
             return [];
         }
     }

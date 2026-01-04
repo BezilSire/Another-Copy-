@@ -1,8 +1,8 @@
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Admin, Agent, Member, Broadcast, Report, User, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PendingUbtPurchase, MultiSigProposal } from '../types';
 import { api } from '../services/apiService';
 import { cryptoService } from '../services/cryptoService';
+import { sovereignService } from '../services/sovereignService';
 import { LayoutDashboardIcon } from './icons/LayoutDashboardIcon';
 import { DollarSignIcon } from './icons/DollarSignIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
@@ -22,8 +22,11 @@ import { ScaleIcon } from './icons/ScaleIcon';
 import { SovereignUpgradeBanner } from './SovereignUpgradeBanner';
 import { GenesisNodeFlow } from './GenesisNodeFlow';
 import { useToast } from '../contexts/ToastContext';
+import { RotateCwIcon } from './icons/RotateCwIcon';
+// Added missing LoaderIcon import to fix "Cannot find name 'LoaderIcon'"
+import { LoaderIcon } from './icons/LoaderIcon';
 
-type AdminView = 'dashboard' | 'feed' | 'profile' | 'wallet' | 'oracle' | 'treasury' | 'dispatch' | 'registrar' | 'justice';
+type AdminView = 'dashboard' | 'feed' | 'profile' | 'wallet' | 'oracle' | 'treasury' | 'dispatch' | 'registrar' | 'justice' | 'ledger_reconcile';
 
 export const AdminDashboard: React.FC<{
   user: Admin;
@@ -46,6 +49,14 @@ export const AdminDashboard: React.FC<{
   const [msProposals, setMsProposals] = useState<MultiSigProposal[]>([]);
   const [isUpgrading, setIsUpgrading] = useState(false);
   const { addToast } = useToast();
+
+  const [syncLogs, setSyncLogs] = useState<string[]>([]);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const logEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [syncLogs]);
 
   const hasVault = cryptoService.hasVault();
 
@@ -83,6 +94,21 @@ export const AdminDashboard: React.FC<{
     }
   };
 
+  const handleLedgerReconcile = async () => {
+      setIsSyncing(true);
+      setSyncLogs(["> INITIALIZING_LEDGER_RECONCILIATION..."]);
+      try {
+          await sovereignService.syncLegacyToGitHub((log) => {
+              setSyncLogs(prev => [...prev, log]);
+          });
+          addToast("Ledger Reconciliation Complete.", "success");
+      } catch (e) {
+          addToast("Reconciliation failed.", "error");
+      } finally {
+          setIsSyncing(false);
+      }
+  };
+
   const TabButton: React.FC<{label: string, count?: number, isActive: boolean, onClick: () => void, icon: React.ReactNode}> = ({ label, count, isActive, onClick, icon }) => (
     <button onClick={onClick} className={`${isActive ? 'border-brand-gold text-brand-gold gold-glow-text' : 'border-transparent text-gray-500 hover:text-gray-300'} group inline-flex items-center whitespace-nowrap py-4 px-1 border-b-2 font-black text-[10px] uppercase tracking-widest transition-all`}>
         <span className="mr-2 h-4 w-4">{icon}</span>
@@ -91,18 +117,10 @@ export const AdminDashboard: React.FC<{
     </button>
   );
 
-  const handleSendBroadcast = async (msg: string) => {
-    try {
-        await api.sendBroadcast(user, msg);
-    } catch (e) {
-        console.error("Broadcast failed", e);
-    }
-  };
-
   const renderActiveView = () => {
     switch (view) {
         case 'dashboard': 
-            return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={handleSendBroadcast} />;
+            return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={async (m) => await api.sendBroadcast(user, m)} />;
         case 'treasury':
             return < TreasuryManager admin={user} />;
         case 'dispatch':
@@ -113,6 +131,36 @@ export const AdminDashboard: React.FC<{
             return <AdminRegistrarTerminal admin={user} />;
         case 'justice':
             return <AdminJusticeTerminal admin={user} reports={reports} />;
+        case 'ledger_reconcile': 
+            return (
+                <div className="max-w-4xl mx-auto space-y-10 animate-fade-in">
+                    <div className="module-frame bg-slate-900/60 p-10 rounded-[3rem] border border-white/5 shadow-2xl space-y-8">
+                        <div className="flex justify-between items-center border-b border-white/5 pb-8">
+                            <div>
+                                <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Ledger Reconciliation</h3>
+                                <p className="label-caps !text-[8px] text-emerald-500 mt-2">Firebase &rarr; GitHub Bridge</p>
+                            </div>
+                            <button 
+                                onClick={handleLedgerReconcile}
+                                disabled={isSyncing}
+                                className="px-8 py-4 bg-brand-gold text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-glow-gold active:scale-95 transition-all flex items-center gap-3 disabled:opacity-50"
+                            >
+                                {isSyncing ? <LoaderIcon className="h-4 w-4 animate-spin" /> : <><RotateCwIcon className="h-4 w-4" /> Start Reconciliation</>}
+                            </button>
+                        </div>
+                        
+                        <div className="bg-black p-8 rounded-[2rem] border border-white/5 shadow-inner h-[400px] overflow-y-auto no-scrollbar font-mono text-[10px] text-brand-gold/60 space-y-2">
+                            {syncLogs.map((log, i) => <div key={i} className="animate-fade-in">{log}</div>)}
+                            {isSyncing && <div className="w-2 h-4 bg-brand-gold animate-terminal-cursor mt-2 shadow-glow-gold"></div>}
+                            <div ref={logEndRef} />
+                        </div>
+                        
+                        <p className="text-[9px] text-gray-500 uppercase font-black tracking-widest leading-loose">
+                            This tool scans the internal Firebase ledger and pushes any missing transactions to the public GitHub repository. This ensures 100% data parity for the public explorer.
+                        </p>
+                    </div>
+                </div>
+            );
         case 'wallet': return <LedgerPage />;
         case 'profile': return <AdminProfile user={user} onUpdateUser={onUpdateUser} />;
         case 'feed': return ( <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter="all" isAdminView /> );
@@ -144,9 +192,10 @@ export const AdminDashboard: React.FC<{
                   <TabButton label="Treasury" icon={<LockIcon/>} count={msProposals.length} isActive={view === 'treasury'} onClick={() => setView('treasury')} />
                   <TabButton label="Dispatch" icon={<GlobeIcon/>} isActive={view === 'dispatch'} onClick={() => setView('dispatch')} />
                   <TabButton label="Oracle" icon={<DollarSignIcon/>} isActive={view === 'oracle'} count={pendingPurchases.length} onClick={() => setView('oracle')} />
+                  <TabButton label="Reconcile" icon={<RotateCwIcon/>} isActive={view === 'ledger_reconcile'} onClick={() => setView('ledger_reconcile')} />
                   <TabButton label="Registrar" icon={<DatabaseIcon/>} isActive={view === 'registrar'} onClick={() => setView('registrar')} />
                   <TabButton label="Justice" icon={<ScaleIcon/>} isActive={view === 'justice'} count={reports.filter(r => r.status === 'new').length} onClick={() => setView('justice')} />
-                  <TabButton label="Ledger" icon={<GlobeIcon/>} isActive={view === 'wallet'} onClick={() => setView('wallet')} />
+                  <TabButton label="Scan" icon={<GlobeIcon/>} isActive={view === 'wallet'} onClick={() => setView('wallet')} />
                   <TabButton label="Identity" icon={<UserCircleIcon/>} isActive={view === 'profile'} onClick={() => setView('profile')} />
               </nav>
           </div>
@@ -154,7 +203,7 @@ export const AdminDashboard: React.FC<{
 
       {!hasVault && (
           <div className="mt-8">
-              <SovereignUpgradeBanner onUpgrade={() => setIsUpgrading(true)} />
+              <SovereignUpgradeBanner user={user} onUpgrade={() => setIsUpgrading(true)} />
           </div>
       )}
 
