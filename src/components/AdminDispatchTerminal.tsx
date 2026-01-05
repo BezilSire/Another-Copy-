@@ -15,6 +15,10 @@ import { KeyIcon } from './icons/KeyIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { LockIcon } from './icons/LockIcon';
+import { FileTextIcon } from './icons/FileTextIcon';
+import { GlobeIcon } from './icons/GlobeIcon';
+import { ClipboardIcon } from './icons/ClipboardIcon';
+import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
 
 type DispatchMode = 'registry' | 'anchor' | 'scan';
 
@@ -37,6 +41,8 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
     const [isScanning, setIsScanning] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
     
+    const [isCopied, setIsCopied] = useState(false);
+    
     const debouncedSearch = useDebounce(searchQuery, 300);
     const debouncedAddress = useDebounce(targetAddress, 500);
     const { addToast } = useToast();
@@ -46,10 +52,6 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
         return () => unsub();
     }, []);
 
-    const selectedVault = vaults.find(v => v.id === selectedVaultId);
-    const isVaultLocked = selectedVault?.isLocked ?? false;
-
-    // Resolve address to user if possible (for the Mirror UI)
     useEffect(() => {
         if (mode === 'anchor' && debouncedAddress.length > 20) {
             setIsResolving(true);
@@ -84,8 +86,9 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
             return;
         }
 
-        if (isVaultLocked) {
-            addToast("AUTHORIZATION DENIED: Node is locked by Treasury Protocol.", "error");
+        const selectedVault = vaults.find(v => v.id === selectedVaultId);
+        if (selectedVault?.isLocked) {
+            addToast("AUTHORIZATION DENIED: Node is locked.", "error");
             return;
         }
 
@@ -98,6 +101,11 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
         const amt = parseFloat(amount);
         if (isNaN(amt) || amt <= 0) {
             addToast("Invalid quantum volume.", "error");
+            return;
+        }
+
+        if (!localStorage.getItem('gcn_sign_secret_key')) {
+            addToast("IDENTITY_LOCK: Enter PIN in Security Tab to sign dispatches.", "error");
             return;
         }
 
@@ -136,7 +144,7 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
             
             setTimeout(() => {
                 addLog("STATE SYNC COMPLETE. DISPATCH BROADCAST.");
-                addToast("Authority Dispatch Successful.", "success");
+                addToast(`Successfully distributed ${amt} UBT.`, "success");
                 setAmount('');
                 setSelectedUser(null);
                 setTargetAddress('');
@@ -175,13 +183,13 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                     <div className="flex bg-black/60 p-1.5 rounded-2xl border border-white/5">
                         <button 
                             onClick={() => {setMode('anchor'); setSelectedUser(null);}} 
-                            className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${mode === 'anchor' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-gray-500 hover:text-gray-300'}`}
+                            className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${mode === 'anchor' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-gray-600 hover:text-gray-300'}`}
                         >
                             Direct Anchor
                         </button>
                         <button 
                             onClick={() => {setMode('registry'); setSelectedUser(null);}} 
-                            className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${mode === 'registry' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-gray-500 hover:text-gray-300'}`}
+                            className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${mode === 'registry' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-gray-600 hover:text-gray-300'}`}
                         >
                             Registry
                         </button>
@@ -197,7 +205,7 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                             <select 
                                 value={selectedVaultId}
                                 onChange={e => setSelectedVaultId(e.target.value)}
-                                className={`w-full bg-slate-900 border p-5 rounded-2xl text-white text-xs font-black uppercase tracking-widest focus:outline-none appearance-none shadow-inner transition-all ${isVaultLocked ? 'border-red-500/50 text-red-400 bg-red-950/10' : 'border-white/10 bg-slate-900/60'}`}
+                                className={`w-full bg-slate-900 border p-5 rounded-2xl text-white text-xs font-black uppercase tracking-widest focus:outline-none appearance-none shadow-inner transition-all border-white/10 bg-slate-900/60`}
                             >
                                 <option value="">Select Origin Node...</option>
                                 {vaults.map(v => (
@@ -206,14 +214,6 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                                     </option>
                                 ))}
                             </select>
-                            {isVaultLocked && (
-                                <div className="flex items-center gap-3 px-5 py-4 bg-red-950/20 rounded-2xl border border-red-500/20 animate-pulse mt-2">
-                                    <LockIcon className="h-5 w-5 text-red-500" />
-                                    <span className="text-[9px] font-black text-red-400 uppercase tracking-widest leading-loose">
-                                        AUTHORIZATION VOID: Source node is locked. Toggle status in <strong className="text-white underline">Treasury Manager</strong>.
-                                    </span>
-                                </div>
-                            )}
                         </div>
 
                         <div className="space-y-3">
@@ -251,13 +251,13 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                                     <QrCodeIcon className="h-6 w-6 group-hover:scale-110 transition-transform" />
                                 </button>
                             </div>
-                            {selectedUser && (
+                            {(selectedUser || (mode === 'anchor' && targetAddress.length > 20)) && (
                                 <div className="bg-emerald-500/5 p-5 rounded-2xl border border-emerald-500/20 flex items-center justify-between animate-fade-in shadow-inner">
                                     <div className="flex items-center gap-4">
-                                        <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-glow-matrix"></div>
+                                        <div className={`w-2 h-2 rounded-full animate-pulse shadow-glow-matrix ${selectedUser ? 'bg-emerald-500' : 'bg-brand-gold'}`}></div>
                                         <div>
-                                            <p className="label-caps !text-[8px] text-emerald-500 opacity-60">Verified Node Identity</p>
-                                            <p className="text-sm font-black text-white uppercase tracking-tight">{selectedUser.name}</p>
+                                            <p className="label-caps !text-[8px] text-emerald-500 opacity-60">{selectedUser ? 'Verified Node Identity' : 'Unindexed Protocol Node'}</p>
+                                            <p className="text-sm font-black text-white uppercase tracking-tight">{selectedUser ? selectedUser.name : 'EXTERNAL_NODE'}</p>
                                         </div>
                                     </div>
                                     <button onClick={() => {setSelectedUser(null); setTargetAddress('');}} className="text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-widest pr-2">Clear</button>
@@ -287,7 +287,7 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                             <div className="flex justify-between items-center mb-8">
                                 <h3 className="text-[9px] font-black text-gray-500 uppercase tracking-[0.4em]">Protocol Monitor</h3>
                                 <div className="flex gap-2">
-                                    <div className={`w-2 h-2 rounded-full ${isVaultLocked ? 'bg-red-500' : 'bg-emerald-500'} animate-pulse`}></div>
+                                    <div className={`w-2 h-2 rounded-full bg-emerald-500 animate-pulse`}></div>
                                     <div className="w-2 h-2 rounded-full bg-brand-gold/20"></div>
                                 </div>
                             </div>
@@ -298,7 +298,7 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                                 ) : (
                                     <div className="h-full flex items-center justify-center opacity-20 text-center px-6">
                                         <p className="uppercase tracking-[0.2em] leading-loose text-[8px]">
-                                            {isVaultLocked ? 'IDENTITY AUTHORIZATION FAILED - NODE LACKING PERMISSIONS' : 'Awaiting initialization sequence...'}
+                                            Awaiting initialization sequence...
                                         </p>
                                     </div>
                                 )}
@@ -307,10 +307,10 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                             
                             <button 
                                 onClick={handleDispatch}
-                                disabled={isProcessing || isVaultLocked || !selectedVaultId || !amount}
+                                disabled={isProcessing || isResolving || !selectedVaultId || !amount}
                                 className="w-full py-6 mt-8 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-4 disabled:opacity-20 disabled:grayscale"
                             >
-                                {isProcessing ? <LoaderIcon className="h-5 w-5 animate-spin"/> : <>Sign & Dispatch Assets <ShieldCheckIcon className="h-5 w-5"/></>}
+                                {isProcessing ? <LoaderIcon className="h-5 w-5 animate-spin"/> : isResolving ? <LoaderIcon className="h-5 w-5 animate-spin"/> : <>Sign & Dispatch Assets <ShieldCheckIcon className="h-5 w-5"/></>}
                             </button>
                         </div>
                         

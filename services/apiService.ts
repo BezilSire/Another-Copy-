@@ -137,7 +137,6 @@ export const api = {
             
             if (senderBal < transaction.amount) throw new Error("INSUFFICIENT_LIQUIDITY");
 
-            // ENRICH TRANSACTION WITH TARGET ADDRESS BEFORE LEDGERING
             let finalTx = { ...transaction };
             if (receiverSnap.exists()) {
                 const rData = receiverSnap.data();
@@ -152,7 +151,6 @@ export const api = {
             t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
             t.set(doc(ledgerCollection, transaction.id), { ...finalTx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         }); 
-        // Real-time automatic dispatch to GitHub
         sovereignService.dispatchTransaction(transaction).catch(console.error);
     },
 
@@ -206,9 +204,25 @@ export const api = {
             const fromRef = doc(vaultsCollection, from.id);
             const toRef = doc(vaultsCollection, to.id);
             const econSnap = await t.get(doc(globalsCollection, 'economy'));
+            
+            const fromSnap = await t.get(fromRef);
+            if ((fromSnap.data()?.balance || 0) < amt) throw new Error("INSUFFICIENT_NODE_LIQUIDITY");
+
             t.update(fromRef, { balance: increment(-amt) });
             t.update(toRef, { balance: increment(amt) });
-            tx = { id: txId, senderId: from.id, receiverId: to.id, amount: amt, timestamp: Date.now(), reason, type: 'VAULT_SYNC', protocol_mode: 'MAINNET', senderPublicKey: admin.publicKey || "ROOT_AUTH", priceAtSync: econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001, serverTimestamp: serverTimestamp() };
+            tx = { 
+                id: txId, 
+                senderId: from.id, 
+                receiverId: to.id, 
+                amount: amt, 
+                timestamp: Date.now(), 
+                reason, 
+                type: 'VAULT_SYNC', 
+                protocol_mode: 'MAINNET', 
+                senderPublicKey: admin.publicKey || "ROOT_AUTH", 
+                priceAtSync: econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001, 
+                serverTimestamp: serverTimestamp() 
+            };
             t.set(doc(ledgerCollection, txId), tx);
         });
         if (tx) sovereignService.dispatchTransaction(tx).catch(console.error);
@@ -354,8 +368,8 @@ export const api = {
     listenForCVP: (admin: User, cb: (c: CommunityValuePool | null) => void, err?: any): Unsubscribe => onSnapshot(doc(globalsCollection, 'cvp'), s => cb(s.exists() ? { id: s.id, ...s.data() } as CommunityValuePool : null), err),
     listenForFundraisingVentures: (cb: (v: Venture[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('status', '==', 'fundraising')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err),
     listenForPostsByAuthor: (authorId: string, cb: (posts: Post[]) => void, err?: any): Unsubscribe => onSnapshot(query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), err),
-    listenForComments: (parentId: string, cb: (comments: Comment[]) => void, meta: 'posts' | 'proposals', err?: any): Unsubscribe => onSnapshot(query(collection(db, meta, parentId, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), err),
-    listenForMultiSigProposals: (cb: (p: MultiSigProposal[]) => void): Unsubscribe => onSnapshot(query(multisigCollection, where('status', '==', 'pending')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as MultiSigProposal))), console.error),
+    listenForComments: (parentId: string, cb: (comments: Comment[]) => void, coll: 'posts' | 'proposals', err?: any): Unsubscribe => onSnapshot(query(collection(db, coll, parentId, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), err),
+    listenForMultiSigProposals: (cb: (p: MultiSigProposal[]) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(query(multisigCollection, where('status', '==', 'pending')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as MultiSigProposal))), err),
     listenForPublicLedger: (cb: (txs: UbtTransaction[]) => void, l: number = 200): Unsubscribe => onSnapshot(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction))), console.error),
 
     initializeTreasury: async (admin: Admin) => {
@@ -489,7 +503,7 @@ export const api = {
     },
 
     getProposal: async (pid: string): Promise<Proposal | null> => {
-        const snap = await getDoc(doc(proposalsCollection, pid));
+        const snap = await getDoc(doc(db, 'proposals', pid));
         return snap.exists() ? { id: snap.id, ...snap.data() } as Proposal : null;
     },
 
@@ -750,7 +764,6 @@ export const api = {
     },
     awardKnowledgePoints: (uid: string) => updateDoc(doc(usersCollection, uid), { hasReadKnowledgeBase: true, knowledgePoints: increment(10) }).then(() => true),
     
-    // Additional methods needed for various features
     requestPayout: (u: User, n: string, p: string, a: number) => {
         return addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() });
     },

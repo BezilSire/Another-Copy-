@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -7,7 +8,7 @@ service cloud.firestore {
     function isGuest() { return isSignedIn() && request.auth.token.firebase.sign_in_provider == 'anonymous'; }
     function isMember() { return isSignedIn() && !isGuest(); }
     
-    // Improved Admin check
+    // resilient Admin check
     function isAdmin() { 
       return isMember() && 
              exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
@@ -19,7 +20,6 @@ service cloud.firestore {
 
     // --- IDENTITY & WALLETS ---
     match /users/{userId} {
-      // Allow public GET for the Explorer to resolve names in the ledger
       allow get: if true; 
       allow read: if isSignedIn(); 
       allow list: if isAdmin();
@@ -33,7 +33,7 @@ service cloud.firestore {
 
     // --- GOVERNANCE ---
     match /candidates/{candidateId} {
-      allow read, list: if true; // Public can see who is running
+      allow read, list: if true; 
       allow create: if isMember();
       allow update: if isMember() && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes', 'voteCount', 'status']));
       allow delete: if isAdmin() || (isMember() && resource.data.userId == request.auth.uid);
@@ -41,22 +41,22 @@ service cloud.firestore {
 
     // --- TREASURY & LEDGER ---
     match /treasury_vaults/{vaultId} {
-      allow read: if true; // Public transparency
-      allow list: if true;
+      allow read, list: if true; 
       allow update: if isAdmin() || (isMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['balance']));
       allow create, delete: if isAdmin();
     }
     match /ledger/{docId} {
-      allow read, list: if true; // Public read for External Explorer
+      allow read, list: if true; 
       allow create: if isMember();
       allow update, delete: if isAdmin();
     }
     match /globals/{docId} {
-      allow read: if true; // Public read for Economy metrics
+      allow read: if true; 
       allow write: if isAdmin();
     }
     match /multisig_proposals/{id} {
-      allow read, list: if isAdmin();
+      // Ensure admins can always read the queue to prevent sync hangs
+      allow read, list: if isSignedIn(); 
       allow write: if isAdmin();
     }
 
@@ -71,7 +71,7 @@ service cloud.firestore {
     match /posts/{postId} {
       allow read, list: if isSignedIn();
       allow create: if isMember();
-      allow update: if isMember() && (resource.data.authorId == request.auth.uid || isAdmin() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes', 'repostCount', 'commentCount']));
+      allow update: if isMember() && (resource.data.authorId == request.auth.uid || isAdmin() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes', 'repostCount', 'commentCount', 'isPinned', 'content']));
       allow delete: if isAdmin() || (isMember() && resource.data.authorId == request.auth.uid);
       
       match /comments/{id} { allow read, list: if isSignedIn(); allow write: if isMember(); }

@@ -137,7 +137,6 @@ export const api = {
             
             if (senderBal < transaction.amount) throw new Error("INSUFFICIENT_LIQUIDITY");
 
-            // ENRICH TRANSACTION WITH TARGET ADDRESS BEFORE LEDGERING
             let finalTx = { ...transaction };
             if (receiverSnap.exists()) {
                 const rData = receiverSnap.data();
@@ -152,7 +151,6 @@ export const api = {
             t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
             t.set(doc(ledgerCollection, transaction.id), { ...finalTx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         }); 
-        // Real-time automatic dispatch to GitHub
         sovereignService.dispatchTransaction(transaction).catch(console.error);
     },
 
@@ -750,7 +748,6 @@ export const api = {
     },
     awardKnowledgePoints: (uid: string) => updateDoc(doc(usersCollection, uid), { hasReadKnowledgeBase: true, knowledgePoints: increment(10) }).then(() => true),
     
-    // Additional methods needed for various features
     requestPayout: (u: User, n: string, p: string, a: number) => {
         return addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() });
     },

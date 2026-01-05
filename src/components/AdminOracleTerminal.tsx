@@ -23,7 +23,8 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
         
         setBusyId(p.id);
         try {
-            await api.approveUbtPurchase(admin, p, sourceNode);
+            // Fix: Added empty object as 4th argument to satisfy api.approveUbtPurchase signature
+            await api.approveUbtPurchase(admin, p, sourceNode, {});
             addToast(`HANDSHAKE_SETTLED via ${sourceNode}`, "success");
         } catch (e: any) {
             addToast(`SETTLEMENT_ABORTED: ${e.message}`, "error");
