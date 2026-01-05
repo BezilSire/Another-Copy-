@@ -1,13 +1,12 @@
-
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
 
-interface Props {
+interface ErrorBoundaryProps {
   children?: ReactNode;
 }
 
-interface State {
+interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
   errorInfo: ErrorInfo | null;
@@ -16,10 +15,12 @@ interface State {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-// Fixed: Explicitly extend Component from React and provide a constructor to resolve setState and props visibility issues in the compiler
-export class ErrorBoundary extends Component<Props, State> {
-  constructor(props: Props) {
+/* Fix: Explicitly extend React.Component and ensure state is correctly handled via constructor */
+export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  constructor(props: ErrorBoundaryProps) {
     super(props);
+    /* Initialize state within constructor to satisfy the type checker */
+    /* Fix: state is a correctly inherited property from React.Component */
     this.state = {
       hasError: false,
       error: null,
@@ -27,14 +28,15 @@ export class ErrorBoundary extends Component<Props, State> {
     };
   }
 
-  public static getDerivedStateFromError(error: Error): State {
+  public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
     // Update state so the next render will show the fallback UI.
     return { hasError: true, error, errorInfo: null };
   }
 
+  /* Process lifecycle errors into local state */
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error, errorInfo);
-    // Fixed: Using setState inherited from Component by ensuring proper class structure
+    /* Fix: setState is now correctly identified via React.Component extension */
     this.setState({ 
       hasError: true,
       error, 
@@ -47,6 +49,7 @@ export class ErrorBoundary extends Component<Props, State> {
   };
 
   public render(): ReactNode {
+    /* Fix: state is now correctly identified via React.Component extension */
     const { hasError, error } = this.state;
 
     if (hasError) {
@@ -77,7 +80,7 @@ export class ErrorBoundary extends Component<Props, State> {
       );
     }
 
-    // Fixed: Using props inherited from Component by ensuring proper class structure
+    /* Fix: props is correctly inherited from React.Component */
     return this.props.children;
   }
 }

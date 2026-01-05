@@ -204,25 +204,9 @@ export const api = {
             const fromRef = doc(vaultsCollection, from.id);
             const toRef = doc(vaultsCollection, to.id);
             const econSnap = await t.get(doc(globalsCollection, 'economy'));
-            
-            const fromSnap = await t.get(fromRef);
-            if ((fromSnap.data()?.balance || 0) < amt) throw new Error("INSUFFICIENT_NODE_LIQUIDITY");
-
             t.update(fromRef, { balance: increment(-amt) });
             t.update(toRef, { balance: increment(amt) });
-            tx = { 
-                id: txId, 
-                senderId: from.id, 
-                receiverId: to.id, 
-                amount: amt, 
-                timestamp: Date.now(), 
-                reason, 
-                type: 'VAULT_SYNC', 
-                protocol_mode: 'MAINNET', 
-                senderPublicKey: admin.publicKey || "ROOT_AUTH", 
-                priceAtSync: econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001, 
-                serverTimestamp: serverTimestamp() 
-            };
+            tx = { id: txId, senderId: from.id, receiverId: to.id, amount: amt, timestamp: Date.now(), reason, type: 'VAULT_SYNC', protocol_mode: 'MAINNET', senderPublicKey: admin.publicKey || "ROOT_AUTH", priceAtSync: econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001, serverTimestamp: serverTimestamp() };
             t.set(doc(ledgerCollection, txId), tx);
         });
         if (tx) sovereignService.dispatchTransaction(tx).catch(console.error);
@@ -297,8 +281,18 @@ export const api = {
     resolveNodeIdentity: async (identifier: string): Promise<PublicUserProfile | null> => {
         if (!identifier) return null;
         try {
+            // First check by standard UID
             const userDoc = await getDoc(doc(usersCollection, identifier));
             if (userDoc.exists()) return { id: userDoc.id, ...userDoc.data() } as PublicUserProfile;
+            
+            // Then check by Public Key (UBT-...)
+            if (identifier.startsWith('UBT-')) {
+                const q = query(usersCollection, where('publicKey', '==', identifier), limit(1));
+                const s = await getDocs(q);
+                if (!s.empty) return { id: s.docs[0].id, ...s.docs[0].data() } as PublicUserProfile;
+            }
+
+            // Finally check System Vaults
             const vaultDoc = await getDoc(doc(vaultsCollection, identifier));
             if (vaultDoc.exists()) return { id: vaultDoc.id, name: vaultDoc.data()?.name, ubtBalance: vaultDoc.data()?.balance, role: 'admin', circle: 'TREASURY' } as any;
         } catch (e) {}
@@ -369,7 +363,7 @@ export const api = {
     listenForFundraisingVentures: (cb: (v: Venture[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('status', '==', 'fundraising')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err),
     listenForPostsByAuthor: (authorId: string, cb: (posts: Post[]) => void, err?: any): Unsubscribe => onSnapshot(query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), err),
     listenForComments: (parentId: string, cb: (comments: Comment[]) => void, coll: 'posts' | 'proposals', err?: any): Unsubscribe => onSnapshot(query(collection(db, coll, parentId, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), err),
-    listenForMultiSigProposals: (cb: (p: MultiSigProposal[]) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(query(multisigCollection, where('status', '==', 'pending')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as MultiSigProposal))), err),
+    listenForMultiSigProposals: (cb: (p: MultiSigProposal[]) => void): Unsubscribe => onSnapshot(query(multisigCollection, where('status', '==', 'pending')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as MultiSigProposal))), console.error),
     listenForPublicLedger: (cb: (txs: UbtTransaction[]) => void, l: number = 200): Unsubscribe => onSnapshot(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction))), console.error),
 
     initializeTreasury: async (admin: Admin) => {

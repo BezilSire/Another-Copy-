@@ -28,7 +28,8 @@ export const TreasuryManager: React.FC<{ admin: Admin }> = ({ admin }) => {
             setIsLoading(false); 
         }, () => setIsLoading(false));
 
-        const unsubProposals = api.listenForMultiSigProposals(setMsProposals, () => {});
+        // Fixed: Removed the second argument from listenForMultiSigProposals as it only accepts one callback argument.
+        const unsubProposals = api.listenForMultiSigProposals(setMsProposals);
         const unsubEcon = api.listenForGlobalEconomy(e => {
             setEconomy(e);
             if (e && !priceInput) setPriceInput(String(e.ubt_to_usd_rate));

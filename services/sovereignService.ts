@@ -59,8 +59,17 @@ export const sovereignService = {
 
     dispatchTransaction: async (tx: any): Promise<string | null> => {
         if (BLACKLISTED_SIGNATURES.includes(tx.id)) return null;
+        
+        // Enrichment Protocol: Ensure packets contain maximum audit details
+        let enrichedPacket = { ...tx };
+        
+        // Map System Nodes for the public layer
+        const sysNodes = ['FLOAT', 'GENESIS', 'SYSTEM', 'SUSTENANCE', 'DISTRESS', 'VENTURE'];
+        if (sysNodes.includes(tx.receiverId)) enrichedPacket.receiverPublicKey = `${tx.receiverId}_NODE`;
+        if (sysNodes.includes(tx.senderId)) enrichedPacket.senderPublicKey = `${tx.senderId}_NODE`;
+
         const path = `ledger/tx-${tx.timestamp || Date.now()}-${tx.id}.json`;
-        return await sovereignService.commitBlock(path, tx, `Block Dispatch: ${tx.id}`);
+        return await sovereignService.commitBlock(path, enrichedPacket, `Block Dispatch: ${tx.id}`);
     },
 
     /**
@@ -88,9 +97,7 @@ export const sovereignService = {
                 let enrichedTx = { ...tx };
                 
                 // CRITICAL: Identity resolution protocol
-                // Ensure we use UBT- addresses for the public layer
                 try {
-                    // Force resolve if PK is missing in the ledger doc
                     if (!enrichedTx.receiverPublicKey && tx.receiverId.length > 10) {
                         const receiverProfile = await api.getPublicUserProfile(tx.receiverId);
                         if (receiverProfile?.publicKey) {
@@ -104,7 +111,6 @@ export const sovereignService = {
                         }
                     }
 
-                    // System node mapping
                     const sysNodes = ['FLOAT', 'GENESIS', 'SYSTEM', 'SUSTENANCE', 'DISTRESS', 'VENTURE'];
                     if (sysNodes.includes(tx.receiverId)) enrichedTx.receiverPublicKey = `${tx.receiverId}_NODE`;
                     if (sysNodes.includes(tx.senderId)) enrichedTx.senderPublicKey = `${tx.senderId}_NODE`;
@@ -145,7 +151,6 @@ export const sovereignService = {
 
             const results = await Promise.all(txPromises);
             
-            // CHRONOLOGY FIX: Ensure strict reverse-chronological order by timestamp
             return results
                 .filter(tx => !BLACKLISTED_SIGNATURES.includes(tx.id))
                 .sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));

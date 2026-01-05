@@ -1,3 +1,4 @@
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
@@ -17,7 +18,7 @@ if (!rootElement) throw new Error("Root not found");
 
 /**
  * DIRECT INGRESS PROTOCOL
- * If we are on the public explorer domain, we kill the auth app and render the ledger only.
+ * If we are on the public explorer domain, we render the Ledger only.
  */
 const hostname = window.location.hostname;
 const isExplorer = 
@@ -28,7 +29,6 @@ const isExplorer =
 
 const root = ReactDOM.createRoot(rootElement);
 
-// If explorer, we render the LedgerPage in a minimalist wrapper to avoid any App.tsx side-effects
 if (isExplorer) {
     root.render(
         <React.StrictMode>

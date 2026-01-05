@@ -111,8 +111,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
         const floatVault = vaults.find(v => v.id === 'FLOAT');
         const circulating = floatVault?.balance || 1000000;
         const price = economy?.ubt_to_usd_rate || 0.001;
-        const marketCap = price * circulating;
-        return { circulating, price, marketCap };
+        return { circulating, price };
     }, [vaults, economy]);
 
     const estTotal = (parseFloat(swapAmount) || 0) * metrics.price;
@@ -185,10 +184,6 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                         </div>
                     </div>
                     <div className="flex gap-6">
-                         <div className="bg-white/[0.03] p-6 rounded-[1.5rem] border border-white/5 text-center min-w-[180px]">
-                            <p className="text-[9px] font-black text-gray-600 uppercase mb-3 tracking-[0.3em]">Market_Cap</p>
-                            <p className="text-3xl font-black text-emerald-500 tracking-tighter">${metrics.marketCap.toLocaleString(undefined, { maximumFractionDigits: 0 })}</p>
-                        </div>
                         <div className="bg-white/[0.03] p-6 rounded-[1.5rem] border border-white/5 text-center min-w-[180px]">
                             <p className="text-[9px] font-black text-gray-600 uppercase mb-3 tracking-[0.3em]">Circ_Float</p>
                             <p className="text-3xl font-black text-white tracking-tighter">{metrics.circulating.toLocaleString()}</p>
