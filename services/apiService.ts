@@ -110,6 +110,9 @@ export const api = {
     },
     updateUser: (uid: string, data: Partial<User>) => setDoc(doc(db, 'users', uid), data, { merge: true }),
     
+    // Node Authority Management
+    setUserStatus: (uid: string, status: User['status']) => updateDoc(doc(db, 'users', uid), { status }),
+
     getUsersByUids: async (uids: string[]): Promise<User[]> => {
         if (uids.length === 0) return [];
         const results: User[] = [];
@@ -281,18 +284,8 @@ export const api = {
     resolveNodeIdentity: async (identifier: string): Promise<PublicUserProfile | null> => {
         if (!identifier) return null;
         try {
-            // First check by standard UID
             const userDoc = await getDoc(doc(usersCollection, identifier));
             if (userDoc.exists()) return { id: userDoc.id, ...userDoc.data() } as PublicUserProfile;
-            
-            // Then check by Public Key (UBT-...)
-            if (identifier.startsWith('UBT-')) {
-                const q = query(usersCollection, where('publicKey', '==', identifier), limit(1));
-                const s = await getDocs(q);
-                if (!s.empty) return { id: s.docs[0].id, ...s.docs[0].data() } as PublicUserProfile;
-            }
-
-            // Finally check System Vaults
             const vaultDoc = await getDoc(doc(vaultsCollection, identifier));
             if (vaultDoc.exists()) return { id: vaultDoc.id, name: vaultDoc.data()?.name, ubtBalance: vaultDoc.data()?.balance, role: 'admin', circle: 'TREASURY' } as any;
         } catch (e) {}

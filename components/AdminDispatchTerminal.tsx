@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Admin, PublicUserProfile, UbtTransaction, TreasuryVault } from '../types';
 import { api } from '../services/apiService';
@@ -14,9 +13,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { KeyIcon } from './icons/KeyIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
-import { LockIcon } from './icons/LockIcon';
-import { FileTextIcon } from './icons/FileTextIcon';
-import { GlobeIcon } from './icons/GlobeIcon';
+import { XCircleIcon } from './icons/XCircleIcon';
 import { ClipboardIcon } from './icons/ClipboardIcon';
 import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
 
@@ -41,13 +38,14 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
     const [isScanning, setIsScanning] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
     
-    // Success Receipt State
     const [successTx, setSuccessTx] = useState<UbtTransaction | null>(null);
-    const [isCopied, setIsCopied] = useState(false);
     
     const debouncedSearch = useDebounce(searchQuery, 300);
     const debouncedAddress = useDebounce(targetAddress, 500);
     const { addToast } = useToast();
+
+    const canSign = !!localStorage.getItem('gcn_sign_secret_key');
+    const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
 
     useEffect(() => {
         const unsub = api.listenToVaults(setVaults, console.error);
@@ -55,14 +53,17 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
     }, []);
 
     useEffect(() => {
-        if (mode === 'anchor' && debouncedAddress.length > 20) {
+        if (mode === 'anchor' && debouncedAddress.length > 20 && !selectedUser) {
             setIsResolving(true);
-            api.getUserByPublicKey(debouncedAddress).then(user => {
-                if (user) setSelectedUser(user as PublicUserProfile);
+            api.resolveNodeIdentity(debouncedAddress).then(user => {
+                if (user) {
+                    setSelectedUser(user as PublicUserProfile);
+                    addToast("Target Identified.", "success");
+                }
                 else setSelectedUser(null);
             }).finally(() => setIsResolving(false));
         }
-    }, [debouncedAddress, mode]);
+    }, [debouncedAddress, mode, selectedUser, addToast]);
 
     useEffect(() => {
         if (mode === 'registry' && debouncedSearch.length > 1 && !selectedUser) {
@@ -83,6 +84,11 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
     };
 
     const handleDispatch = async () => {
+        if (!isUnlocked) {
+            addToast("AUTHORIZATION_REQUIRED: Unlock your node using the key icon in HUD.", "error");
+            return;
+        }
+
         if (!selectedVaultId) {
             addToast("Select an origin reserve node.", "error");
             return;
@@ -96,7 +102,7 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
 
         const finalTargetKey = mode === 'anchor' ? targetAddress : selectedUser?.publicKey;
         if (!finalTargetKey) {
-            addToast("Invalid destination node identity.", "error");
+            addToast("Invalid destination identity.", "error");
             return;
         }
 
@@ -115,7 +121,7 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
             const targetId = selectedUser?.id || 'EXTERNAL_NODE';
             
             setTimeout(() => addLog("FETCHING AUTHORITY ROOT KEYS..."), 300);
-            setTimeout(() => addLog(`TARGET_RESOLVED: ${finalTargetKey.substring(0,12)}...`), 600);
+            setTimeout(() => addLog(`TARGET_RESOLVED: ${selectedUser?.name || 'EXTERNAL_NODE'}`), 600);
             setTimeout(() => addLog("GENERATING ATOMIC SIGNATURE..."), 900);
             setTimeout(() => addLog("COMMITTING TO MAINNET LEDGER..."), 1200);
 
@@ -132,7 +138,7 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                 nonce: nonce,
                 signature: signature,
                 hash: payloadToSign,
-                senderPublicKey: cryptoService.getPublicKey() || "",
+                senderPublicKey: admin.publicKey || "",
                 parentHash: 'TREASURY_ROOT',
                 protocol_mode: 'MAINNET'
             };
@@ -140,7 +146,6 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
             await api.processAdminHandshake(selectedVaultId, targetId, amt, transaction);
             
             setTimeout(() => {
-                addLog("STATE SYNC COMPLETE. DISPATCH BROADCAST.");
                 setSuccessTx(transaction);
                 setAmount('');
                 setSelectedUser(null);
@@ -150,18 +155,9 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
             }, 1800);
 
         } catch (e: any) {
-            const msg = e.message || "Protocol Fault.";
-            addLog(`!! CRITICAL: ${msg.toUpperCase()}`);
-            addToast(msg, "error");
+            addToast(e.message || "Protocol Fault.", "error");
             setIsProcessing(false);
         }
-    };
-
-    const handleCopyHash = (text: string) => {
-        navigator.clipboard.writeText(text).then(() => {
-            setIsCopied(true);
-            setTimeout(() => setIsCopied(false), 2000);
-        });
     };
 
     return (
@@ -179,8 +175,6 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
             {successTx && (
                 <div className="fixed inset-0 z-[110] flex items-center justify-center p-6 bg-black/90 backdrop-blur-2xl">
                     <div className="module-frame glass-module p-10 rounded-[3.5rem] border-emerald-500/20 shadow-glow-matrix max-w-lg w-full space-y-8 animate-fade-in relative overflow-hidden">
-                        <div className="corner-tl !border-emerald-500/40"></div><div className="corner-tr !border-emerald-500/40"></div>
-                        
                         <div className="text-center space-y-4">
                             <div className="w-20 h-20 bg-emerald-500/10 rounded-full border border-emerald-500/20 flex items-center justify-center mx-auto shadow-glow-matrix">
                                 <ShieldCheckIcon className="h-10 w-10 text-emerald-500" />
@@ -188,55 +182,23 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                             <h3 className="text-2xl font-black text-white uppercase tracking-tighter leading-none">Handshake Verified</h3>
                             <p className="label-caps !text-[8px] text-emerald-500 !tracking-[0.4em]">Atomic Dispatch Synchronized</p>
                         </div>
-
-                        <div className="space-y-6">
-                            <div className="bg-black/40 p-6 rounded-2xl border border-white/5 space-y-4">
-                                <div>
-                                    <p className="text-[7px] text-gray-600 font-black uppercase tracking-widest mb-1">Receipt Hash</p>
-                                    <div className="flex items-center justify-between gap-4">
-                                        <p className="data-mono text-[9px] text-brand-gold break-all">{successTx.hash}</p>
-                                        <button onClick={() => handleCopyHash(successTx.hash)} className="text-gray-500 hover:text-white transition-colors">
-                                            {isCopied ? <ClipboardCheckIcon className="h-4 w-4 text-emerald-500"/> : <ClipboardIcon className="h-4 w-4"/>}
-                                        </button>
-                                    </div>
-                                </div>
-                                <div className="pt-4 border-t border-white/5 flex justify-between">
-                                     <div>
-                                        <p className="text-[7px] text-gray-600 font-black uppercase tracking-widest">Volume</p>
-                                        <p className="text-lg font-black text-white font-mono">{successTx.amount} UBT</p>
-                                     </div>
-                                     <div className="text-right">
-                                        <p className="text-[7px] text-gray-600 font-black uppercase tracking-widest">Target</p>
-                                        <p className="text-lg font-black text-emerald-500 uppercase tracking-tight">Handshaked</p>
-                                     </div>
-                                </div>
+                        <div className="bg-black/40 p-6 rounded-2xl border border-white/5">
+                            <p className="text-[7px] text-gray-600 font-black uppercase tracking-widest mb-2">Receipt Hash</p>
+                            <p className="data-mono text-[9px] text-brand-gold break-all leading-relaxed">{successTx.hash}</p>
+                            <div className="mt-4 pt-4 border-t border-white/5 flex justify-between">
+                                <p className="text-lg font-black text-white font-mono">{successTx.amount} UBT</p>
+                                <span className="px-3 py-1 bg-emerald-500/20 text-emerald-400 rounded-lg text-[8px] font-black uppercase tracking-widest">Signed</span>
                             </div>
                         </div>
-
-                        <div className="grid grid-cols-2 gap-4">
-                            <button 
-                                onClick={() => window.location.href = `${window.location.origin}/ledger?tx=${successTx.id}`}
-                                className="py-4 bg-white/5 border border-white/10 rounded-2xl text-[9px] font-black uppercase tracking-widest text-white hover:bg-white/10 transition-all flex items-center justify-center gap-2"
-                            >
-                                <GlobeIcon className="h-4 w-4 text-brand-gold" /> View on Scan
-                            </button>
-                            <button 
-                                onClick={() => setSuccessTx(null)}
-                                className="py-4 bg-brand-gold text-slate-950 font-black rounded-2xl text-[9px] uppercase tracking-widest shadow-glow-gold active:scale-95 transition-all"
-                            >
-                                Close Terminal
-                            </button>
-                        </div>
+                        <button onClick={() => setSuccessTx(null)} className="w-full py-5 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all">Close Terminal</button>
                     </div>
                 </div>
             )}
 
             <div className="module-frame bg-slate-950 p-8 sm:p-12 rounded-[3.5rem] border-brand-gold/30 shadow-[0_0_100px_-20px_rgba(212,175,55,0.15)] relative overflow-hidden">
-                <div className="corner-tl !border-brand-gold/60"></div><div className="corner-tr !border-brand-gold/60"></div><div className="corner-bl !border-brand-gold/60"></div><div className="corner-br !border-brand-gold/60"></div>
-                
                 <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 border-b border-white/5 pb-8">
                     <div>
-                        <h2 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter gold-text leading-none">Authority Dispatch</h2>
+                        <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text leading-none">Authority Dispatch</h2>
                         <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.5em] mt-3">Distribution Control Panel v2.6</p>
                     </div>
                     
@@ -251,7 +213,7 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                             onClick={() => {setMode('registry'); setSelectedUser(null);}} 
                             className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${mode === 'registry' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-gray-500 hover:text-gray-300'}`}
                         >
-                            Registry
+                            Registry Search
                         </button>
                     </div>
                 </div>
@@ -265,7 +227,7 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                             <select 
                                 value={selectedVaultId}
                                 onChange={e => setSelectedVaultId(e.target.value)}
-                                className={`w-full bg-slate-900 border p-5 rounded-2xl text-white text-xs font-black uppercase tracking-widest focus:outline-none appearance-none shadow-inner transition-all border-white/10 bg-slate-900/60`}
+                                className={`w-full bg-slate-900 border p-5 rounded-2xl text-white text-xs font-black uppercase tracking-widest focus:outline-none appearance-none shadow-inner transition-all border-white/10`}
                             >
                                 <option value="">Select Origin Node...</option>
                                 {vaults.map(v => (
@@ -285,10 +247,12 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                                     <input 
                                         type="text"
                                         value={mode === 'anchor' ? targetAddress : searchQuery}
-                                        onChange={e => mode === 'anchor' ? setTargetAddress(e.target.value) : setSearchQuery(e.target.value)}
+                                        onChange={e => mode === 'anchor' ? setTargetAddress(e.target.value.toUpperCase()) : setSearchQuery(e.target.value)}
                                         className="w-full bg-slate-900/60 border border-white/10 p-5 rounded-2xl text-white text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-brand-gold/40 transition-all placeholder-gray-800 uppercase"
-                                        placeholder={mode === 'anchor' ? "PASTE PUBLIC ANCHOR..." : "SEARCH REGISTRY..."}
+                                        placeholder={mode === 'anchor' ? "PASTE PUBLIC ADDRESS (UBT-...)" : "SEARCH REGISTRY NAME..."}
                                     />
+                                    {isResolving && <LoaderIcon className="h-4 w-4 animate-spin text-brand-gold absolute right-16 top-1/2 -translate-y-1/2" />}
+                                    
                                     {mode === 'registry' && searchResults.length > 0 && !selectedUser && (
                                         <div className="absolute top-full left-0 right-0 mt-3 max-h-60 overflow-y-auto bg-black border border-white/10 rounded-2xl z-50 shadow-2xl no-scrollbar backdrop-blur-3xl">
                                             {searchResults.map(u => (
@@ -313,6 +277,32 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                             </div>
                         </div>
 
+                        {selectedUser && (
+                            <div className="bg-emerald-950/20 border border-emerald-500/20 p-6 rounded-[2.5rem] flex items-center justify-between animate-fade-in shadow-inner relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 p-4 opacity-5 group-hover:opacity-10 transition-opacity"><ShieldCheckIcon className="h-20 w-20 text-emerald-500" /></div>
+                                <div className="flex items-center gap-5 relative z-10">
+                                    <div className="w-16 h-16 rounded-2xl bg-black flex items-center justify-center border border-white/10 shadow-2xl">
+                                        <UserCircleIcon className="h-10 w-10 text-gray-500" />
+                                    </div>
+                                    <div>
+                                        <p className="label-caps !text-[8px] text-emerald-500 mb-1">Target Identity Confirmed</p>
+                                        <h4 className="text-2xl font-black text-white uppercase tracking-tighter leading-none">{selectedUser.name}</h4>
+                                        <div className="flex items-center gap-3 mt-2">
+                                            <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{selectedUser.circle}</span>
+                                            <span className="text-[9px] text-gray-600">/</span>
+                                            <span className="text-[9px] font-black text-emerald-400 uppercase tracking-widest">{selectedUser.profession || 'Citizen Node'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button 
+                                    onClick={() => { setSelectedUser(null); setTargetAddress(''); setSearchQuery(''); }} 
+                                    className="p-3 text-gray-600 hover:text-red-500 transition-colors relative z-10"
+                                >
+                                    <XCircleIcon className="h-6 w-6" />
+                                </button>
+                            </div>
+                        )}
+
                         <div className="space-y-3">
                             <label className="label-caps !text-[9px] text-gray-500">Quantum Dispatch Volume</label>
                             <div className="relative">
@@ -335,8 +325,8 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                             <div className="flex justify-between items-center mb-8">
                                 <h3 className="text-[9px] font-black text-gray-500 uppercase tracking-[0.4em]">Protocol Monitor</h3>
                                 <div className="flex gap-2">
-                                    <div className={`w-2 h-2 rounded-full bg-emerald-500 animate-pulse`}></div>
-                                    <div className="w-2 h-2 rounded-full bg-brand-gold/20"></div>
+                                    <div className={`w-2 h-2 rounded-full ${isUnlocked ? 'bg-emerald-500 animate-pulse' : 'bg-red-500'} shadow-glow-matrix`}></div>
+                                    <div className={`w-2 h-2 rounded-full ${isProcessing ? 'bg-brand-gold animate-pulse' : 'bg-white/10'}`}></div>
                                 </div>
                             </div>
                             
@@ -355,7 +345,7 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                             
                             <button 
                                 onClick={handleDispatch}
-                                disabled={isProcessing || !selectedVaultId || !amount}
+                                disabled={isProcessing || !amount || parseFloat(amount) <= 0 || !selectedUser || !isUnlocked}
                                 className="w-full py-6 mt-8 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-4 disabled:opacity-20 disabled:grayscale"
                             >
                                 {isProcessing ? <LoaderIcon className="h-5 w-5 animate-spin"/> : <>Sign & Dispatch Assets <ShieldCheckIcon className="h-5 w-5"/></>}
@@ -365,7 +355,7 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                         <div className="p-6 bg-blue-900/10 border border-blue-500/20 rounded-3xl flex items-start gap-5">
                              <AlertTriangleIcon className="h-6 w-6 text-blue-400 opacity-60 flex-shrink-0" />
                              <p className="text-[9px] text-blue-300 leading-loose uppercase font-black italic tracking-tight">
-                                AUTHORITY NOTE: Ledger events are atomic and immutable. Target node will receive credit immediately upon handshake verification.
+                                AUTHORITY NOTE: Ledger events are atomic and immutable. Destination node will receive credit immediately upon handshake verification.
                              </p>
                         </div>
                     </div>

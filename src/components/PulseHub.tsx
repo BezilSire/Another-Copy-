@@ -64,7 +64,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
 
     const ubtPrice = economy?.ubt_to_usd_rate || 0.001;
     
-    // Total Liquidity cap logic
+    // Total Liquidity pool depth
     const circulatingFloat = vaults.find(v => v.id === 'FLOAT')?.balance || 0;
 
     // Calculate UBT output based on USD input
@@ -79,19 +79,19 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
     const ussdString = `*151*2*2*${merchantCode}*${rawUsdAmount}#`;
 
     const handleBuyInit = async () => {
-        const usd = parseFloat(usdInput);
-        if (!usd || usd < 1) return addToast("Minimum purchase is $1.00 USD.", "error");
+        const usdValue = parseFloat(usdInput);
+        if (!usdValue || usdValue < 1) return addToast("Minimum purchase is $1.00 USD.", "error");
         
         setIsProcessing(true);
         try {
-            // Strict data packet to prevent order mismatch
-            const order = await api.createPendingUbtPurchase(user, usd, ubtOutput);
+            // CRITICAL: Force strict number conversion for Firestore compatibility
+            const order = await api.createPendingUbtPurchase(user, Number(usdValue), Number(ubtOutput));
             setLastPurchaseId(order.id);
             setBuyState('escrow');
             addToast("Protocol Initialized. Assets moved to escrow.", "success");
         } catch (e: any) {
             console.error("Order Failure:", e);
-            addToast("Protocol Mismatch: Node could not sync order.", "error");
+            addToast("Protocol Mismatch: Ledger could not sync order document.", "error");
         } finally {
             setIsProcessing(false);
         }
@@ -109,7 +109,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
             setUsdInput('');
             setEcocashRef('');
         } catch (e) {
-            addToast("Sync failed. Check reference ID.", "error");
+            addToast("Sync failed. Check reference ID formatting.", "error");
         } finally {
             setIsProcessing(false);
         }
@@ -139,12 +139,12 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
 
             {/* MAIN PURCHASE CARD */}
             <div className="bg-white rounded-[2.5rem] shadow-2xl overflow-hidden">
-                <div className="p-8 border-b border-slate-100 flex justify-between items-center">
+                <div className="p-8 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                     <div>
                         <h2 className="text-2xl font-black text-slate-900 tracking-tighter uppercase">Buy UBT</h2>
-                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Mainnet Asset Ingress</p>
+                        <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1">Direct Mainnet Entry</p>
                     </div>
-                    <div className="p-3 bg-slate-50 rounded-2xl">
+                    <div className="p-3 bg-white rounded-2xl shadow-sm border border-slate-100">
                         <TrendingUpIcon className="h-6 w-6 text-slate-900" />
                     </div>
                 </div>
@@ -152,7 +152,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                 <div className="p-8 space-y-6">
                     {buyState === 'input' ? (
                         <div className="space-y-6 animate-fade-in">
-                            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-200 group focus-within:border-brand-gold transition-all">
+                            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-200 group focus-within:border-brand-gold transition-all shadow-inner">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block">Fiat Volume</label>
                                 <div className="flex items-center justify-between">
                                     <div className="flex items-center gap-2">
@@ -176,7 +176,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                                 </div>
                             </div>
 
-                            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-200">
+                            <div className="bg-slate-50 p-6 rounded-[2rem] border border-slate-200 shadow-inner">
                                 <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] mb-3 block">Node Allocation</label>
                                 <div className="flex items-center justify-between">
                                     <p className={`text-5xl font-black ${ubtOutput > 0 ? 'text-emerald-600' : 'text-slate-200'}`}>
@@ -189,23 +189,23 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                             <button 
                                 onClick={handleBuyInit}
                                 disabled={isProcessing || !usdInput || parseFloat(usdInput) < 1}
-                                className="w-full py-6 bg-slate-900 text-white font-black rounded-3xl shadow-xl active:scale-95 transition-all uppercase tracking-[0.4em] text-[11px] disabled:opacity-30 flex justify-center items-center gap-3"
+                                className="w-full py-6 bg-slate-950 text-white font-black rounded-3xl shadow-xl active:scale-95 transition-all uppercase tracking-[0.4em] text-[11px] disabled:opacity-30 flex justify-center items-center gap-3"
                             >
-                                {isProcessing ? <LoaderIcon className="h-5 w-5 animate-spin" /> : "Initiate Protocol"}
+                                {isProcessing ? <LoaderIcon className="h-5 w-5 animate-spin" /> : "Initiate Dispatch Protocol"}
                             </button>
                         </div>
                     ) : (
                         <div className="space-y-8 animate-fade-in">
-                            <div className="bg-emerald-50 border border-emerald-100 p-6 rounded-[2.5rem] text-center">
-                                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-4">Node Escrow Active</p>
-                                <p className="text-3xl font-black text-slate-950 font-mono tracking-tighter">{ussdString}</p>
-                                <div className="grid grid-cols-2 gap-3 mt-6">
+                            <div className="bg-emerald-50 border border-emerald-100 p-8 rounded-[2.5rem] text-center shadow-inner">
+                                <p className="text-[10px] font-black text-emerald-600 uppercase tracking-[0.3em] mb-4">Funds in Node Escrow</p>
+                                <p className="text-3xl font-black text-slate-950 font-mono tracking-tighter select-all">{ussdString}</p>
+                                <div className="grid grid-cols-2 gap-3 mt-8">
                                     <button 
                                         onClick={() => {
                                             window.location.href = `tel:${ussdString.replace(/#/g, '%23')}`;
-                                            addToast("Dialing...", "info");
+                                            addToast("Dialing Bridge...", "info");
                                         }}
-                                        className="flex items-center justify-center gap-2 py-3 bg-slate-900 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95"
+                                        className="flex items-center justify-center gap-2 py-4 bg-slate-950 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-lg active:scale-95 transition-all"
                                     >
                                         <PhoneIcon className="h-4 w-4" /> Dial Now
                                     </button>
@@ -215,7 +215,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                                             setIsCopied(true);
                                             setTimeout(() => setIsCopied(false), 2000);
                                         }}
-                                        className="flex items-center justify-center gap-2 py-3 bg-white border border-slate-200 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest active:scale-95"
+                                        className="flex items-center justify-center gap-2 py-4 bg-white border border-slate-200 text-slate-600 rounded-2xl text-[10px] font-black uppercase tracking-widest active:scale-95 transition-all shadow-sm"
                                     >
                                         {isCopied ? <ClipboardCheckIcon className="h-4 w-4 text-emerald-500" /> : <ClipboardIcon className="h-4 w-4" />}
                                         {isCopied ? "Copied" : "Copy Code"}
@@ -226,8 +226,8 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                             <div className="bg-blue-50 border border-blue-100 p-5 rounded-2xl flex gap-4 items-start shadow-sm">
                                 <InfoIcon className="h-5 w-5 text-blue-500 shrink-0" />
                                 <div className="space-y-1 text-left">
-                                    <p className="text-[10px] font-black text-blue-900 uppercase">Settlement Steps</p>
-                                    <p className="text-[11px] text-blue-800 leading-relaxed font-medium">1. Dial the USSD code to pay.<br/>2. Enter the <strong className="text-blue-950 underline">Reference ID</strong> from your Ecocash SMS below to anchor the block.</p>
+                                    <p className="text-[10px] font-black text-blue-900 uppercase tracking-widest">Protocol Instructions</p>
+                                    <p className="text-[11px] text-blue-800 leading-relaxed font-medium">1. Dial the USSD code to execute the Ecocash handshake.<br/>2. Locate the <strong className="text-blue-950 underline">Reference ID</strong> in your SMS and paste it below to verify the block.</p>
                                 </div>
                             </div>
 
@@ -237,8 +237,8 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                                     type="text"
                                     value={ecocashRef}
                                     onChange={e => setEcocashRef(e.target.value.toUpperCase())}
-                                    placeholder="PASTE_REF_ID"
-                                    className="w-full bg-slate-50 border-2 border-slate-100 p-5 rounded-2xl text-slate-950 font-mono text-center text-xl tracking-[0.2em] focus:border-slate-900 outline-none transition-all placeholder-slate-200"
+                                    placeholder="PASTE_REF_HERE"
+                                    className="w-full bg-slate-50 border-2 border-slate-100 p-5 rounded-2xl text-slate-950 font-mono text-center text-xl tracking-[0.2em] focus:border-slate-950 outline-none transition-all placeholder-slate-200"
                                 />
                             </div>
 
@@ -246,11 +246,11 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                                 <button 
                                     onClick={handleFinalize}
                                     disabled={isProcessing || !ecocashRef}
-                                    className="w-full py-6 bg-slate-900 text-white font-black rounded-3xl shadow-xl active:scale-95 transition-all uppercase tracking-[0.4em] text-[11px]"
+                                    className="w-full py-6 bg-slate-950 text-white font-black rounded-3xl shadow-xl active:scale-95 transition-all uppercase tracking-[0.4em] text-[11px]"
                                 >
-                                    {isProcessing ? <LoaderIcon className="h-5 w-5 animate-spin" /> : "Anchor Settlement"}
+                                    {isProcessing ? <LoaderIcon className="h-5 w-5 animate-spin" /> : "Verify & Anchor Block"}
                                 </button>
-                                <button onClick={() => setBuyState('input')} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors">Discard Order</button>
+                                <button onClick={() => setBuyState('input')} className="w-full py-2 text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors">Abort Order</button>
                             </div>
                         </div>
                     )}
@@ -258,7 +258,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
             </div>
 
             {/* ORDER HISTORY */}
-            <div className="space-y-4">
+            <div className="space-y-4 pt-4">
                 <div className="flex items-center gap-3 px-4">
                     <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-glow-matrix"></div>
                     <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.3em]">Temporal Ledger</h3>
@@ -266,7 +266,7 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                 
                 <div className="space-y-3">
                     {myHistory.map(item => (
-                        <div key={item.id} className="bg-slate-900/50 border border-white/5 p-5 rounded-[1.5rem] flex justify-between items-center transition-all">
+                        <div key={item.id} className="bg-slate-900/50 border border-white/5 p-5 rounded-[1.5rem] flex justify-between items-center transition-all hover:bg-slate-900">
                             <div className="flex items-center gap-4">
                                 <div className={`p-3 rounded-xl ${item.status === 'VERIFIED' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-brand-gold/10 text-brand-gold animate-pulse'}`}>
                                     <DatabaseIcon className="h-5 w-5" />
@@ -283,8 +283,8 @@ export const PulseHub: React.FC<PulseHubProps> = ({ user }) => {
                         </div>
                     ))}
                     {myHistory.length === 0 && (
-                        <div className="py-12 text-center border-2 border-dashed border-white/5 rounded-[2rem] opacity-20">
-                            <p className="text-[10px] font-black uppercase tracking-widest">No protocol dispatches found</p>
+                        <div className="py-16 text-center border border-dashed border-white/5 rounded-[2.5rem] opacity-20">
+                            <p className="text-[10px] font-black uppercase tracking-widest">No Protocol Events Indexed</p>
                         </div>
                     )}
                 </div>

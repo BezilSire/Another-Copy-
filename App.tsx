@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -23,7 +24,7 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const sequence = ["> BOOTING UBUNTIUM_CORE_v5.2.1...", "> INITIALIZING CRYPTO_LAYER...", "> SYNCING_GLOBAL_DAG...", "> RESOLVING_SOVEREIGN_ID...", "> WELCOME CITIZEN."];
   useEffect(() => {
     let i = 0;
-    const interval = window.setInterval(() => { if (i < sequence.length) { setLogs(prev => [...prev, sequence[i]]); i++; } else { window.clearInterval(interval); setTimeout(onComplete, 300); } }, 60);
+    const interval = window.setInterval(() => { if (i < sequence.length) { setLogs(prev => [...prev, sequence[i]]); i++; } else { window.clearInterval(interval); setTimeout(onComplete, 300); } }, 40); // Faster boot
     return () => window.clearInterval(interval);
   }, [onComplete]);
   return (
@@ -37,10 +38,9 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 const App: React.FC = () => {
   const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser } = useAuth();
   
-  // Rule: Check if we are in Explorer Mode for external domain
   const isExplorer = process.env.SITE_MODE === 'EXPLORER';
   
-  const [isBooting, setIsBooting] = useState(false); // Disabled by default per user request
+  const [isBooting, setIsBooting] = useState(false); 
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<Conversation | 'main' | null>(null);
@@ -75,11 +75,7 @@ const App: React.FC = () => {
   const handleViewProfile = (userId: string | null) => { setChatTarget(null); setViewingProfileId(userId); };
   
   const renderMainContent = () => {
-    // Protocol: Explorer Site Entry Point - No Auth Pulsing required
-    if (isExplorer) {
-        return <LedgerPage />;
-    }
-    
+    if (isExplorer) return <LedgerPage />;
     if (isBooting) return null;
     
     if (currentUser || firebaseUser) {
@@ -89,7 +85,10 @@ const App: React.FC = () => {
             role: 'member', 
             status: 'active',
             circle: 'GLOBAL',
-            isProfileComplete: false
+            isProfileComplete: false,
+            ccap: 0,
+            ubtBalance: 0,
+            distress_calls_available: 0
         } as any);
 
         if (chatTarget) return <ChatsPage user={userToRender} initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null} onClose={() => setChatTarget(null)} onViewProfile={handleViewProfile} onNewMessageClick={() => {}} onNewGroupClick={() => {}} />;
@@ -135,7 +134,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`flex flex-col min-h-screen selection:bg-brand-gold/30 ${isExplorer ? 'bg-black' : 'bg-black'}`}>
+    <div className={`flex flex-col min-h-screen selection:bg-brand-gold/30 bg-black`}>
       {!isExplorer && isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
       {(isExplorer || !isBooting) && (
           <div className="flex-1 flex flex-col animate-fade-in">

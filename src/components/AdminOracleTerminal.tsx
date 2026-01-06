@@ -1,7 +1,8 @@
 
 import React, { useState } from 'react';
-import { PendingUbtPurchase, Admin } from '../types';
+import { PendingUbtPurchase, Admin, UbtTransaction } from '../types';
 import { api } from '../services/apiService';
+import { cryptoService } from '../services/cryptoService';
 import { useToast } from '../contexts/ToastContext';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { formatTimeAgo } from '../utils';
@@ -19,12 +20,32 @@ export const AdminOracleTerminal: React.FC<AdminOracleTerminalProps> = ({ purcha
     const [sourceNode, setSourceNode] = useState<'FLOAT' | 'GENESIS'>('FLOAT');
 
     const handleSettleBridge = async (p: PendingUbtPurchase) => {
+        const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
+        if (!isUnlocked) {
+            addToast("AUTHORIZATION_REQUIRED: Unlock your node using the key icon in HUD.", "error");
+            return;
+        }
+
         if (!window.confirm(`AUTHORIZE SETTLEMENT: Transfer ${p.amountUbt} UBT to citizen ${p.userName}?`)) return;
         
         setBusyId(p.id);
         try {
-            // Fix: Added empty object as 4th argument to satisfy api.approveUbtPurchase signature
-            await api.approveUbtPurchase(admin, p, sourceNode, {});
+            // Cryptographic Handshake Generation for Settlement
+            const timestamp = Date.now();
+            const nonce = cryptoService.generateNonce();
+            const payload = `BRIDGE_SETTLE:${p.id}:${p.userId}:${p.amountUbt}:${timestamp}:${nonce}`;
+            const signature = cryptoService.signTransaction(payload);
+            const txId = `bridge-set-${Date.now().toString(36)}`;
+
+            const txData: Partial<UbtTransaction> = {
+                id: txId,
+                timestamp,
+                nonce,
+                signature,
+                hash: payload
+            };
+
+            await api.approveUbtPurchase(admin, p, sourceNode, txData);
             addToast(`HANDSHAKE_SETTLED via ${sourceNode}`, "success");
         } catch (e: any) {
             addToast(`SETTLEMENT_ABORTED: ${e.message}`, "error");

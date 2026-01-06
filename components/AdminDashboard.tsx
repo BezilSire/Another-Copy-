@@ -1,8 +1,8 @@
-import React, { useState, useEffect, useRef } from 'react';
+
+import React, { useState, useEffect } from 'react';
 import { Admin, Agent, Member, Broadcast, Report, User, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PendingUbtPurchase, MultiSigProposal } from '../types';
 import { api } from '../services/apiService';
 import { cryptoService } from '../services/cryptoService';
-import { sovereignService } from '../services/sovereignService';
 import { LayoutDashboardIcon } from './icons/LayoutDashboardIcon';
 import { DollarSignIcon } from './icons/DollarSignIcon';
 import { UserCircleIcon } from './icons/UserCircleIcon';
@@ -11,22 +11,27 @@ import { Dashboard } from './Dashboard';
 import { LedgerPage } from './LedgerPage';
 import { AdminProfile } from './AdminProfile';
 import { PostsFeed } from './PostsFeed';
+import { NewPostModal } from './NewPostModal';
 import { TreasuryManager } from './TreasuryManager';
 import { LockIcon } from './icons/LockIcon';
 import { AdminDispatchTerminal } from './AdminDispatchTerminal';
 import { AdminOracleTerminal } from './AdminOracleTerminal';
 import { AdminRegistrarTerminal } from './AdminRegistrarTerminal';
 import { AdminJusticeTerminal } from './AdminJusticeTerminal';
+import { AdminUserManagement } from './AdminUserManagement';
 import { GlobeIcon } from './icons/GlobeIcon';
 import { ScaleIcon } from './icons/ScaleIcon';
 import { SovereignUpgradeBanner } from './SovereignUpgradeBanner';
 import { GenesisNodeFlow } from './GenesisNodeFlow';
 import { useToast } from '../contexts/ToastContext';
-import { RotateCwIcon } from './icons/RotateCwIcon';
-// Added missing LoaderIcon import to fix "Cannot find name 'LoaderIcon'"
-import { LoaderIcon } from './icons/LoaderIcon';
+import { MessageSquareIcon } from './icons/MessageSquareIcon';
+import { PlusIcon } from './icons/PlusIcon';
+import { KeyIcon } from './icons/KeyIcon';
+import { PinVaultLogin } from './PinVaultLogin';
+import { useAuth } from '../contexts/AuthContext';
+import { UsersIcon } from './icons/UsersIcon';
 
-type AdminView = 'dashboard' | 'feed' | 'profile' | 'wallet' | 'oracle' | 'treasury' | 'dispatch' | 'registrar' | 'justice' | 'ledger_reconcile';
+type AdminView = 'ops' | 'nodes' | 'stream' | 'treasury' | 'dispatch' | 'oracle' | 'registrar' | 'justice' | 'ledger' | 'identity';
 
 export const AdminDashboard: React.FC<{
   user: Admin;
@@ -35,7 +40,7 @@ export const AdminDashboard: React.FC<{
   onOpenChat: () => void;
   onViewProfile: (userId: string | null) => void;
 }> = ({ user, onUpdateUser, onViewProfile }) => {
-  const [view, setView] = useState<AdminView>('dashboard');
+  const [view, setView] = useState<AdminView>('ops');
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [agents, setAgents] = useState<Agent[]>([]);
@@ -48,28 +53,24 @@ export const AdminDashboard: React.FC<{
   const [pendingPurchases, setPendingPurchases] = useState<PendingUbtPurchase[]>([]);
   const [msProposals, setMsProposals] = useState<MultiSigProposal[]>([]);
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
+  const [isNewPostModalOpen, setIsNewPostModalOpen] = useState(false);
   const { addToast } = useToast();
+  const { unlockSovereignSession, isSovereignLocked } = useAuth();
 
-  const [syncLogs, setSyncLogs] = useState<string[]>([]);
-  const [isSyncing, setIsSyncing] = useState(false);
-  const logEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [syncLogs]);
-
-  const hasVault = cryptoService.hasVault();
+  const isUnlocked = !isSovereignLocked;
+  const hasVault = cryptoService.hasVault() || (user as any).encryptedVault;
 
   useEffect(() => {
-    const unsubUsers = api.listenForAllUsers(user, setAllUsers, console.error);
-    const unsubMembers = api.listenForAllMembers(user, setMembers, console.error);
-    const unsubAgents = api.listenForAllAgents(user, setAgents, console.error);
-    const unsubPending = api.listenForPendingMembers(user, setPendingMembers, console.error);
-    const unsubReports = api.listenForReports(user, setReports, console.error);
-    const unsubPayouts = api.listenForPayoutRequests(user, setPayouts, console.error);
-    const unsubVentures = api.listenForVentures(user, setVentures, console.error);
-    const unsubCvp = api.listenForCVP(user, setCvp, console.error);
-    const unsubOracle = api.listenForPendingPurchases(setPendingPurchases, console.error);
+    const unsubUsers = api.listenForAllUsers(user, setAllUsers, (err) => console.error(err));
+    const unsubMembers = api.listenForAllMembers(user, setMembers, (err) => console.error(err));
+    const unsubAgents = api.listenForAllAgents(user, setAgents, (err) => console.error(err));
+    const unsubPending = api.listenForPendingMembers(user, setPendingMembers, (err) => console.error(err));
+    const unsubReports = api.listenForReports(user, setReports, (err) => console.error(err));
+    const unsubPayouts = api.listenForPayoutRequests(user, setPayouts, (err) => console.error(err));
+    const unsubVentures = api.listenForVentures(user, setVentures, (err) => console.error(err));
+    const unsubCvp = api.listenForCVP(user, setCvp, (err) => console.error(err));
+    const unsubOracle = api.listenForPendingPurchases(setPendingPurchases, (err) => console.error(err));
     const unsubMultisig = api.listenForMultiSigProposals(setMsProposals);
     api.getBroadcasts().then(setBroadcasts).catch(console.error);
 
@@ -81,48 +82,63 @@ export const AdminDashboard: React.FC<{
 
   const handleUpgradeComplete = async (mnemonic: string, pin: string) => {
     try {
-        await cryptoService.saveVault({ mnemonic }, pin);
+        const encryptedVault = await cryptoService.saveVault({ mnemonic }, pin);
         const pubKey = cryptoService.getPublicKey();
         if (pubKey) {
-            await onUpdateUser({ publicKey: pubKey });
+            await onUpdateUser({ publicKey: pubKey, encryptedVault } as any);
         }
         setIsUpgrading(false);
-        addToast("Authority Anchored. Identity Restored.", "success");
+        addToast("Authority Root Anchored.", "success");
         window.location.reload();
     } catch (err) {
-        addToast("Anchoring failed.", "error");
+        addToast("Handshake Failed.", "error");
     }
   };
 
-  const handleLedgerReconcile = async () => {
-      setIsSyncing(true);
-      setSyncLogs(["> INITIALIZING_LEDGER_RECONCILIATION..."]);
-      try {
-          await sovereignService.syncLegacyToGitHub((log) => {
-              setSyncLogs(prev => [...prev, log]);
-          });
-          addToast("Ledger Reconciliation Complete.", "success");
-      } catch (e) {
-          addToast("Reconciliation failed.", "error");
-      } finally {
-          setIsSyncing(false);
-      }
-  };
-
   const TabButton: React.FC<{label: string, count?: number, isActive: boolean, onClick: () => void, icon: React.ReactNode}> = ({ label, count, isActive, onClick, icon }) => (
-    <button onClick={onClick} className={`${isActive ? 'border-brand-gold text-brand-gold gold-glow-text' : 'border-transparent text-gray-500 hover:text-gray-300'} group inline-flex items-center whitespace-nowrap py-4 px-1 border-b-2 font-black text-[10px] uppercase tracking-widest transition-all`}>
-        <span className="mr-2 h-4 w-4">{icon}</span>
-        {label}
-        {count !== undefined && count > 0 && <span className="ml-2 bg-red-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full">{count}</span>}
+    <button 
+        onClick={onClick} 
+        className={`group flex items-center gap-3 py-5 px-6 border-b-2 transition-all duration-300 whitespace-nowrap cursor-pointer
+            ${isActive 
+                ? 'border-brand-gold text-brand-gold bg-brand-gold/5 shadow-inner' 
+                : 'border-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5'}
+        `}
+    >
+        <span className={`h-5 w-5 transition-transform duration-300 ${isActive ? 'scale-110' : 'opacity-50 group-hover:opacity-100'}`}>{icon}</span>
+        <span className="text-[11px] font-black uppercase tracking-[0.2em]">{label}</span>
+        {count !== undefined && count > 0 && (
+            <span className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-lg animate-pulse">{count}</span>
+        )}
     </button>
   );
 
   const renderActiveView = () => {
     switch (view) {
-        case 'dashboard': 
-            return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={async (m) => await api.sendBroadcast(user, m)} />;
+        case 'ops': 
+            return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={async (m) => { await api.sendBroadcast(user, m); }} />;
+        case 'nodes':
+            return <AdminUserManagement admin={user} users={allUsers} />;
+        case 'stream': 
+            return ( 
+                <div className="max-w-4xl mx-auto space-y-10 animate-fade-in">
+                    <div className="module-frame bg-slate-900/60 p-8 rounded-[3rem] border border-white/5 shadow-2xl flex flex-col sm:flex-row justify-between items-center gap-6 relative overflow-hidden">
+                        <div className="absolute inset-0 blueprint-grid opacity-[0.03] pointer-events-none"></div>
+                        <div className="relative z-10">
+                            <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Global Activity</h3>
+                            <p className="label-caps !text-[8px] text-emerald-500 mt-2">Authority Surveillance Active</p>
+                        </div>
+                        <button 
+                            onClick={() => setIsNewPostModalOpen(true)}
+                            className="relative z-10 px-8 py-4 bg-brand-gold text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-glow-gold active:scale-95 transition-all flex items-center gap-3 cursor-pointer"
+                        >
+                            <PlusIcon className="h-5 w-5" /> Social Dispatch
+                        </button>
+                    </div>
+                    <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter="all" isAdminView />
+                </div>
+            );
         case 'treasury':
-            return < TreasuryManager admin={user} />;
+            return <TreasuryManager admin={user} />;
         case 'dispatch':
             return <AdminDispatchTerminal admin={user} />;
         case 'oracle': 
@@ -131,39 +147,10 @@ export const AdminDashboard: React.FC<{
             return <AdminRegistrarTerminal admin={user} />;
         case 'justice':
             return <AdminJusticeTerminal admin={user} reports={reports} />;
-        case 'ledger_reconcile': 
-            return (
-                <div className="max-w-4xl mx-auto space-y-10 animate-fade-in">
-                    <div className="module-frame bg-slate-900/60 p-10 rounded-[3rem] border border-white/5 shadow-2xl space-y-8">
-                        <div className="flex justify-between items-center border-b border-white/5 pb-8">
-                            <div>
-                                <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Ledger Reconciliation</h3>
-                                <p className="label-caps !text-[8px] text-emerald-500 mt-2">Firebase &rarr; GitHub Bridge</p>
-                            </div>
-                            <button 
-                                onClick={handleLedgerReconcile}
-                                disabled={isSyncing}
-                                className="px-8 py-4 bg-brand-gold text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-glow-gold active:scale-95 transition-all flex items-center gap-3 disabled:opacity-50"
-                            >
-                                {isSyncing ? <LoaderIcon className="h-4 w-4 animate-spin" /> : <><RotateCwIcon className="h-4 w-4" /> Start Reconciliation</>}
-                            </button>
-                        </div>
-                        
-                        <div className="bg-black p-8 rounded-[2rem] border border-white/5 shadow-inner h-[400px] overflow-y-auto no-scrollbar font-mono text-[10px] text-brand-gold/60 space-y-2">
-                            {syncLogs.map((log, i) => <div key={i} className="animate-fade-in">{log}</div>)}
-                            {isSyncing && <div className="w-2 h-4 bg-brand-gold animate-terminal-cursor mt-2 shadow-glow-gold"></div>}
-                            <div ref={logEndRef} />
-                        </div>
-                        
-                        <p className="text-[9px] text-gray-500 uppercase font-black tracking-widest leading-loose">
-                            This tool scans the internal Firebase ledger and pushes any missing transactions to the public GitHub repository. This ensures 100% data parity for the public explorer.
-                        </p>
-                    </div>
-                </div>
-            );
-        case 'wallet': return <LedgerPage />;
-        case 'profile': return <AdminProfile user={user} onUpdateUser={onUpdateUser} />;
-        case 'feed': return ( <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter="all" isAdminView /> );
+        case 'ledger':
+            return <LedgerPage />;
+        case 'identity':
+            return <AdminProfile user={user} onUpdateUser={onUpdateUser} />;
         default: return null;
     }
   };
@@ -177,39 +164,79 @@ export const AdminDashboard: React.FC<{
   }
 
   return (
-    <div className="space-y-12 animate-fade-in max-w-[100vw] px-4 sm:px-10 lg:px-20 pb-20 font-sans">
-      <div className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-10 border-b border-white/5 pb-2">
-          <div className="space-y-4">
-              <h1 className="text-6xl font-black text-white tracking-tighter uppercase leading-none gold-text">Authority HUD</h1>
-              <div className="flex items-center gap-4">
-                   <div className="w-3 h-3 rounded-full bg-emerald-500 animate-pulse shadow-glow-matrix"></div>
-                   <p className="label-caps !text-white !text-[10px] !tracking-[0.4em]">Root Node Identity Verified</p>
+    <div className="min-h-screen bg-black flex flex-col font-sans animate-fade-in">
+      <div className="bg-slate-950 border-b border-white/5 px-6 sm:px-10 lg:px-20 pt-12 pb-2 flex flex-col gap-10">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
+              <div className="space-y-4">
+                  <h1 className="text-5xl sm:text-6xl font-black text-white tracking-tighter uppercase leading-none gold-text">Authority HUD</h1>
+                  <div className="flex items-center gap-4">
+                       <div className={`w-2.5 h-2.5 rounded-full animate-pulse shadow-glow-matrix ${isUnlocked ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+                       <p className="label-caps !text-white !text-[9px] !tracking-[0.4em]">{isUnlocked ? 'Root Identity Verified' : 'Local Node Locked'}</p>
+                       {hasVault && (
+                           <button 
+                             onClick={() => isUnlocked ? addToast("Identity signature verified.", "info") : setIsUnlocking(true)} 
+                             className={`ml-4 p-2.5 rounded-xl shadow-lg hover:scale-110 transition-all cursor-pointer border
+                                ${isUnlocked 
+                                    ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500 shadow-glow-matrix' 
+                                    : 'bg-brand-gold text-slate-950 border-brand-gold/50 shadow-glow-gold'}
+                             `}
+                             title={isUnlocked ? "Node Unlocked" : "Click to Unlock Node"}
+                           >
+                               <KeyIcon className="h-5 w-5" />
+                           </button>
+                       )}
+                  </div>
               </div>
           </div>
-          <div className="w-full xl:w-auto overflow-x-auto no-scrollbar">
-              <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                  <TabButton label="Ops" icon={<LayoutDashboardIcon/>} isActive={view === 'dashboard'} onClick={() => setView('dashboard')} />
-                  <TabButton label="Treasury" icon={<LockIcon/>} count={msProposals.length} isActive={view === 'treasury'} onClick={() => setView('treasury')} />
-                  <TabButton label="Dispatch" icon={<GlobeIcon/>} isActive={view === 'dispatch'} onClick={() => setView('dispatch')} />
+
+          <div className="w-full overflow-x-auto no-scrollbar">
+              <nav className="-mb-px flex space-x-2 min-w-max pb-2" aria-label="Tabs">
+                  <TabButton label="Ops" icon={<LayoutDashboardIcon/>} isActive={view === 'ops'} onClick={() => setView('ops')} />
+                  <TabButton label="Nodes" icon={<UsersIcon/>} isActive={view === 'nodes'} onClick={() => setView('nodes')} />
+                  <TabButton label="Stream" icon={<MessageSquareIcon/>} isActive={view === 'stream'} onClick={() => setView('stream')} />
+                  <TabButton label="Treasury" icon={<LockIcon/>} isActive={view === 'treasury'} count={msProposals.length} onClick={() => setView('treasury')} />
+                  <TabButton label="Dispatch" icon={<PlusIcon/>} isActive={view === 'dispatch'} onClick={() => setView('dispatch')} />
                   <TabButton label="Oracle" icon={<DollarSignIcon/>} isActive={view === 'oracle'} count={pendingPurchases.length} onClick={() => setView('oracle')} />
-                  <TabButton label="Reconcile" icon={<RotateCwIcon/>} isActive={view === 'ledger_reconcile'} onClick={() => setView('ledger_reconcile')} />
                   <TabButton label="Registrar" icon={<DatabaseIcon/>} isActive={view === 'registrar'} onClick={() => setView('registrar')} />
                   <TabButton label="Justice" icon={<ScaleIcon/>} isActive={view === 'justice'} count={reports.filter(r => r.status === 'new').length} onClick={() => setView('justice')} />
-                  <TabButton label="Scan" icon={<GlobeIcon/>} isActive={view === 'wallet'} onClick={() => setView('wallet')} />
-                  <TabButton label="Identity" icon={<UserCircleIcon/>} isActive={view === 'profile'} onClick={() => setView('profile')} />
+                  <TabButton label="Ledger" icon={<GlobeIcon/>} isActive={view === 'ledger'} onClick={() => setView('ledger')} />
+                  <TabButton label="Identity" icon={<UserCircleIcon/>} isActive={view === 'identity'} onClick={() => setView('identity')} />
               </nav>
           </div>
       </div>
 
-      {!hasVault && (
-          <div className="mt-8">
-              <SovereignUpgradeBanner user={user} onUpgrade={() => setIsUpgrading(true)} />
+      <div className="flex-1 px-4 sm:px-10 lg:px-20 py-12">
+          {!hasVault && (
+              <div className="mb-12">
+                  <SovereignUpgradeBanner onUpgrade={() => setIsUpgrading(true)} user={user} />
+              </div>
+          )}
+
+          <div className="min-h-[60vh] animate-fade-in">
+              {renderActiveView()}
+          </div>
+      </div>
+
+      {isUnlocking && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl">
+              <div className="w-full max-w-md relative">
+                  <PinVaultLogin 
+                    onUnlock={(data, pin) => { unlockSovereignSession(data, pin); setIsUnlocking(false); }} 
+                    onReset={() => { setIsUnlocking(false); setIsUpgrading(true); }} 
+                  />
+                  <button onClick={() => setIsUnlocking(false)} className="absolute -top-16 right-0 text-white/40 hover:text-white uppercase text-[10px] font-black p-4 tracking-widest transition-colors">✕ Abort Handshake</button>
+              </div>
           </div>
       )}
 
-      <div className="mt-10 min-h-[60vh]">
-          {renderActiveView()}
-      </div>
+      {isNewPostModalOpen && (
+          <NewPostModal 
+              isOpen={isNewPostModalOpen} 
+              onClose={() => setIsNewPostModalOpen(false)} 
+              user={user} 
+              onPostCreated={() => { setIsNewPostModalOpen(false); addToast("Broadcast ledgered.", "success"); }} 
+          />
+      )}
     </div>
   );
 };

@@ -31,9 +31,7 @@ import { MeetingHub } from './MeetingHub';
 import { GovernancePage } from './GovernancePage';
 import { useAuth } from '../contexts/AuthContext';
 import { LockIcon } from './icons/LockIcon';
-import { IntentLab } from './IntentLab';
-import { AssemblyHub } from './AssemblyHub';
-import { RegistryHub } from './RegistryHub';
+import { OracleHUD } from './OracleHUD';
 
 interface MemberDashboardProps {
   user: MemberUser;
@@ -97,14 +95,12 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
 
     switch (view) {
       case 'home': return ( 
-        <div className="space-y-6"> 
+        <div className="space-y-8"> 
           {!hasLocalVault && <SovereignUpgradeBanner user={user} onUpgrade={() => setIsUpgrading(true)} />} 
+          <OracleHUD user={user} />
           <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter="all" /> 
         </div> 
       );
-      case 'lab': return <IntentLab user={user} onUpdateUser={onUpdateUser} />;
-      case 'assembly': return <AssemblyHub currentUser={user} onViewProfile={onViewProfile as any} />;
-      case 'registry': return <RegistryHub user={user} />;
       case 'governance': return <GovernancePage user={user} />;
       case 'meeting': return <MeetingHub user={user} />;
       case 'state': return <StateRegistry user={user} />;

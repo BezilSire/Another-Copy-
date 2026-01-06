@@ -57,7 +57,7 @@ export const AdminDashboard: React.FC<{
   const { unlockSovereignSession } = useAuth();
 
   const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
-  const hasVault = cryptoService.hasVault();
+  const hasVault = cryptoService.hasVault() || (user as any).encryptedVault;
 
   useEffect(() => {
     const unsubUsers = api.listenForAllUsers(user, setAllUsers, (err) => console.error(err));
