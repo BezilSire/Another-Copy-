@@ -1,5 +1,5 @@
 
-import React, { Component, ErrorInfo, ReactNode } from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
 
@@ -16,16 +16,16 @@ interface ErrorBoundaryState {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-/* Fix: Explicitly import and extend Component from react to resolve property access errors on state, setState and props */
-export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
+export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+  /* Fix: Explicitly declare state property to ensure visibility to the type checker and resolve line 24 error */
+  public state: ErrorBoundaryState = {
+    hasError: false,
+    error: null,
+    errorInfo: null
+  };
+
   constructor(props: ErrorBoundaryProps) {
     super(props);
-    /* Initialize state within constructor to satisfy the type checker */
-    this.state = {
-      hasError: false,
-      error: null,
-      errorInfo: null
-    };
   }
 
   public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
@@ -36,7 +36,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   /* Capture lifecycle errors and trigger the error state */
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error, errorInfo);
-    /* Fix: setState is now correctly identified via Component inheritance */
+    /* Fix: setState is correctly identified via React.Component inheritance resolving line 40 error */
     this.setState({ 
       hasError: true,
       error, 
@@ -49,7 +49,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   };
 
   public render(): ReactNode {
-    /* Fix: state is correctly identified via Component inheritance */
+    /* Fix: state is correctly identified via React.Component inheritance resolving line 53 error */
     const { hasError, error } = this.state;
 
     if (hasError) {
@@ -80,7 +80,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       );
     }
 
-    /* Fix: props is correctly identified via Component inheritance */
+    /* Fix: props is correctly identified via React.Component inheritance resolving line 84 error */
     return this.props.children;
   }
 }
