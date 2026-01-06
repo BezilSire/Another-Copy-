@@ -174,7 +174,7 @@ export const AdminDashboard: React.FC<{
                        <p className="label-caps !text-white !text-[9px] !tracking-[0.4em]">{isUnlocked ? 'Root Identity Verified' : 'Local Node Locked'}</p>
                        {hasVault && (
                            <button 
-                             onClick={() => isUnlocked ? addToast("Identity signature verified.", "info") : setIsUnlocking(true)} 
+                             onClick={() => isUnlocked ? addToast("Signature verified.", "info") : setIsUnlocking(true)} 
                              className={`ml-4 p-2.5 rounded-xl shadow-lg hover:scale-110 transition-all cursor-pointer border
                                 ${isUnlocked 
                                     ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500 shadow-glow-matrix' 

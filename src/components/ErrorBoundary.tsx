@@ -1,16 +1,16 @@
 
-import React from 'react';
+import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
 
 interface ErrorBoundaryProps {
-  children?: React.ReactNode;
+  children?: ReactNode;
 }
 
 interface ErrorBoundaryState {
   hasError: boolean;
   error: Error | null;
-  errorInfo: React.ErrorInfo | null;
+  errorInfo: ErrorInfo | null;
 }
 
 /**
@@ -34,9 +34,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   }
 
   /* Capture lifecycle errors and trigger the error state */
-  public componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
+  public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error, errorInfo);
-    /* Fixed: Correctly invoking setState from the React.Component base class */
+    /* Correctly invoking setState from the Component base class */
     this.setState({ 
       hasError: true,
       error, 
@@ -48,7 +48,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
     window.location.reload();
   };
 
-  public render(): React.ReactNode {
+  public render(): ReactNode {
     const { hasError, error } = this.state;
 
     if (hasError) {
@@ -70,7 +70,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
 
             <button 
                 onClick={this.handleReset}
-                className="w-full py-6 bg-white text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-xs shadow-xl active:scale-95 transition-all flex justify-center items-center gap-3"
+                className="w-full py-6 bg-white text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[11px] shadow-xl active:scale-95 transition-all flex justify-center items-center gap-3"
             >
                 <RotateCwIcon className="h-4 w-4" /> Reset Protocol State
             </button>
@@ -79,7 +79,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       );
     }
 
-    /* Fixed: Accessing children through this.props, which is now correctly inherited from the React.Component base class */
+    /* Accessing children through this.props, which is now correctly inherited from the Component base class */
     return this.props.children;
   }
 }
