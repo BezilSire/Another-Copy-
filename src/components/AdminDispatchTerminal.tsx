@@ -15,37 +15,28 @@ import { KeyIcon } from './icons/KeyIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { LockIcon } from './icons/LockIcon';
-import { FileTextIcon } from './icons/FileTextIcon';
-import { GlobeIcon } from './icons/GlobeIcon';
-import { ClipboardIcon } from './icons/ClipboardIcon';
-import { ClipboardCheckIcon } from './icons/ClipboardCheckIcon';
 
-type DispatchMode = 'registry' | 'anchor' | 'scan';
+type DispatchMode = 'registry' | 'anchor';
 
 export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => {
     const [mode, setMode] = useState<DispatchMode>('anchor');
     const [vaults, setVaults] = useState<TreasuryVault[]>([]);
     const [selectedVaultId, setSelectedVaultId] = useState('');
-    
-    // Search Mode State
+    const [targetAddress, setTargetAddress] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [searchResults, setSearchResults] = useState<PublicUserProfile[]>([]);
     const [selectedUser, setSelectedUser] = useState<PublicUserProfile | null>(null);
-    
-    // Direct Anchor Mode State
-    const [targetAddress, setTargetAddress] = useState('');
-    const [isResolving, setIsResolving] = useState(false);
-    
     const [amount, setAmount] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isResolving, setIsResolving] = useState(false);
     const [isScanning, setIsScanning] = useState(false);
     const [logs, setLogs] = useState<string[]>([]);
     
-    const [isCopied, setIsCopied] = useState(false);
-    
-    const debouncedSearch = useDebounce(searchQuery, 300);
     const debouncedAddress = useDebounce(targetAddress, 500);
+    const debouncedSearch = useDebounce(searchQuery, 300);
     const { addToast } = useToast();
+
+    const isUnlocked = localStorage.getItem('gcn_sign_secret_key');
 
     useEffect(() => {
         const unsub = api.listenToVaults(setVaults, console.error);
@@ -65,262 +56,161 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
     useEffect(() => {
         if (mode === 'registry' && debouncedSearch.length > 1 && !selectedUser) {
             api.searchUsers(debouncedSearch, admin).then(setSearchResults);
-        } else {
-            setSearchResults([]);
         }
     }, [debouncedSearch, admin, selectedUser, mode]);
 
     const addLog = (msg: string) => setLogs(p => [...p, `> ${msg}`]);
 
-    const handleScanComplete = (data: { id: string, name: string, key: string }) => {
-        setMode('anchor');
-        setTargetAddress(data.key);
-        setSelectedUser({ id: data.id, name: data.name, publicKey: data.key } as any);
-        setIsScanning(false);
-        addToast("Node Identity Indexed.", "success");
-    };
-
     const handleDispatch = async () => {
-        if (!selectedVaultId) {
-            addToast("Select an origin reserve node.", "error");
+        if (!isUnlocked) {
+            addToast("AUTHORIZATION_REQUIRED: Unlock your node using the key icon in HUD.", "error");
             return;
         }
 
-        const selectedVault = vaults.find(v => v.id === selectedVaultId);
-        if (selectedVault?.isLocked) {
-            addToast("AUTHORIZATION DENIED: Node is locked.", "error");
-            return;
-        }
-
-        const finalTargetKey = mode === 'anchor' ? targetAddress : selectedUser?.publicKey;
-        if (!finalTargetKey) {
-            addToast("Invalid destination node identity.", "error");
-            return;
-        }
-
-        const amt = parseFloat(amount);
-        if (isNaN(amt) || amt <= 0) {
-            addToast("Invalid quantum volume.", "error");
-            return;
-        }
-
-        if (!localStorage.getItem('gcn_sign_secret_key')) {
-            addToast("IDENTITY_LOCK: Enter PIN in Security Tab to sign dispatches.", "error");
+        if (!selectedVaultId || !amount) return;
+        const targetKey = mode === 'anchor' ? targetAddress : selectedUser?.publicKey;
+        if (!targetKey) {
+            addToast("No valid destination node identified.", "error");
             return;
         }
 
         setIsProcessing(true);
-        setLogs(["> INITIALIZING SIGNED HANDSHAKE..."]);
+        setLogs(["> INITIALIZING ATOMIC DISPATCH..."]);
         
         try {
             const timestamp = Date.now();
             const nonce = cryptoService.generateNonce();
+            const amt = parseFloat(amount);
             const targetId = selectedUser?.id || 'EXTERNAL_NODE';
-            
-            setTimeout(() => addLog("FETCHING AUTHORITY ROOT KEYS..."), 300);
-            setTimeout(() => addLog(`TARGET_RESOLVED: ${finalTargetKey.substring(0,12)}...`), 600);
-            setTimeout(() => addLog("GENERATING ATOMIC SIGNATURE..."), 900);
-            setTimeout(() => addLog("COMMITTING TO MAINNET LEDGER..."), 1200);
 
-            const payloadToSign = `${selectedVaultId}:${finalTargetKey}:${amt}:${timestamp}:${nonce}`;
-            const signature = cryptoService.signTransaction(payloadToSign);
-            const txId = `auth-dispatch-${Date.now().toString(36)}`;
+            setTimeout(() => addLog(`RECIPIENT_NODE: ${selectedUser?.name || 'EXTERNAL_HANDSHAKE'}`), 300);
+            setTimeout(() => addLog(`SOURCE_VAULT: ${selectedVaultId}`), 600);
+            setTimeout(() => addLog("GENERATING SIGNATURE..."), 900);
             
-            const transaction: UbtTransaction = {
+            const payload = `${selectedVaultId}:${targetKey}:${amt}:${timestamp}:${nonce}`;
+            const signature = cryptoService.signTransaction(payload);
+            const txId = `auth-${Date.now().toString(36)}`;
+
+            const tx: UbtTransaction = {
                 id: txId,
                 senderId: selectedVaultId,
                 receiverId: targetId,
                 amount: amt,
-                timestamp: timestamp,
-                nonce: nonce,
-                signature: signature,
-                hash: payloadToSign,
+                timestamp,
+                nonce,
+                signature,
+                hash: payload,
                 senderPublicKey: cryptoService.getPublicKey() || "",
-                parentHash: 'TREASURY_ROOT',
+                parentHash: 'ROOT_STATE',
                 protocol_mode: 'MAINNET'
             };
 
-            await api.processAdminHandshake(selectedVaultId, targetId, amt, transaction);
-            
-            setTimeout(() => {
-                addLog("STATE SYNC COMPLETE. DISPATCH BROADCAST.");
-                addToast(`Successfully distributed ${amt} UBT.`, "success");
-                setAmount('');
-                setSelectedUser(null);
-                setTargetAddress('');
-                setLogs([]);
-                setIsProcessing(false);
-            }, 1800);
-
+            await api.processAdminHandshake(selectedVaultId, targetId, amt, tx);
+            addLog("MAINNET SYNC COMPLETE.");
+            addToast("Handshake complete. Assets distributed.", "success");
+            setAmount('');
+            setSelectedUser(null);
+            setTargetAddress('');
         } catch (e: any) {
-            const msg = e.message || "Protocol Fault.";
-            addLog(`!! CRITICAL: ${msg.toUpperCase()}`);
-            addToast(msg, "error");
+            addToast(e.message || "Dispatch aborted.", "error");
+        } finally {
             setIsProcessing(false);
+            setLogs([]);
         }
     };
 
     return (
-        <div className="max-w-5xl mx-auto space-y-10 animate-fade-in pb-20 font-sans">
-            {isScanning && (
-                <UBTScan 
-                    currentUser={admin} 
-                    onClose={() => setIsScanning(false)} 
-                    onTransactionComplete={() => {}} 
-                    onScanIdentity={handleScanComplete}
-                />
-            )}
+        <div className="max-w-4xl mx-auto space-y-10 animate-fade-in pb-20">
+            {isScanning && <UBTScan currentUser={admin} onClose={() => setIsScanning(false)} onTransactionComplete={() => {}} onScanIdentity={(d) => { setTargetAddress(d.key); setMode('anchor'); setIsScanning(false); }} />}
 
-            <div className="module-frame bg-slate-950 p-8 sm:p-12 rounded-[3.5rem] border-brand-gold/30 shadow-[0_0_100px_-20px_rgba(212,175,55,0.15)] relative overflow-hidden">
-                <div className="corner-tl !border-brand-gold/60"></div><div className="corner-tr !border-brand-gold/60"></div><div className="corner-bl !border-brand-gold/60"></div><div className="corner-br !border-brand-gold/60"></div>
-                
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-12 border-b border-white/5 pb-8">
+            <div className="module-frame bg-slate-950 p-8 sm:p-12 rounded-[3.5rem] border border-white/10 shadow-premium relative">
+                <div className="flex justify-between items-center mb-12 border-b border-white/5 pb-8">
                     <div>
-                        <h2 className="text-3xl sm:text-4xl font-black text-white uppercase tracking-tighter gold-text leading-none">Authority Dispatch</h2>
-                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.5em] mt-3">Distribution Control Panel v2.6</p>
+                        <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text leading-none">Dispatch Terminal</h2>
+                        <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest mt-2">Authority Redistribution Node</p>
                     </div>
-                    
                     <div className="flex bg-black/60 p-1.5 rounded-2xl border border-white/5">
-                        <button 
-                            onClick={() => {setMode('anchor'); setSelectedUser(null);}} 
-                            className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${mode === 'anchor' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-gray-600 hover:text-gray-300'}`}
-                        >
-                            Direct Anchor
-                        </button>
-                        <button 
-                            onClick={() => {setMode('registry'); setSelectedUser(null);}} 
-                            className={`px-5 py-2.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${mode === 'registry' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-gray-600 hover:text-gray-300'}`}
-                        >
-                            Registry
-                        </button>
+                        <button onClick={() => setMode('anchor')} className={`px-6 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${mode === 'anchor' ? 'bg-brand-gold text-slate-950' : 'text-gray-500'}`}>Direct Anchor</button>
+                        <button onClick={() => setMode('registry')} className={`px-6 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${mode === 'registry' ? 'bg-brand-gold text-slate-950' : 'text-gray-500'}`}>Search Registry</button>
                     </div>
                 </div>
 
-                <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
-                    <div className="lg:col-span-7 space-y-8">
-                        <div className="space-y-3">
-                            <label className="label-caps !text-[9px] text-gray-500 flex items-center gap-2">
-                                <DatabaseIcon className="h-3 w-3 text-brand-gold" /> Origin Reserve Node
-                            </label>
-                            <select 
-                                value={selectedVaultId}
-                                onChange={e => setSelectedVaultId(e.target.value)}
-                                className={`w-full bg-slate-900 border p-5 rounded-2xl text-white text-xs font-black uppercase tracking-widest focus:outline-none appearance-none shadow-inner transition-all border-white/10 bg-slate-900/60`}
-                            >
-                                <option value="">Select Origin Node...</option>
-                                {vaults.map(v => (
-                                    <option key={v.id} value={v.id}>
-                                        {v.name} {v.isLocked ? '[LOCKED]' : '[AVAILABLE]'} &mdash; {v.balance.toLocaleString()} UBT
-                                    </option>
-                                ))}
+                <div className="space-y-10">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="space-y-4">
+                            <label className="label-caps !text-[9px] text-gray-500">Origin Node</label>
+                            <select value={selectedVaultId} onChange={e => setSelectedVaultId(e.target.value)} className="w-full bg-slate-900 border border-white/10 p-5 rounded-2xl text-white text-xs font-black uppercase">
+                                <option value="">Select Origin...</option>
+                                {vaults.map(v => <option key={v.id} value={v.id}>{v.name} ({v.balance.toLocaleString()} UBT)</option>)}
                             </select>
                         </div>
-
-                        <div className="space-y-3">
-                            <label className="label-caps !text-[9px] text-gray-500 flex items-center gap-2">
-                                <KeyIcon className="h-3 w-3 text-brand-gold" /> Destination Target
-                            </label>
-                            <div className="flex gap-3">
-                                <div className="relative flex-1 group">
-                                    <input 
-                                        type="text"
-                                        value={mode === 'anchor' ? targetAddress : searchQuery}
-                                        onChange={e => mode === 'anchor' ? setTargetAddress(e.target.value) : setSearchQuery(e.target.value)}
-                                        className="w-full bg-slate-900/60 border border-white/10 p-5 rounded-2xl text-white text-[11px] font-mono focus:outline-none focus:ring-1 focus:ring-brand-gold/40 transition-all placeholder-gray-800 uppercase"
-                                        placeholder={mode === 'anchor' ? "PASTE PUBLIC ANCHOR..." : "SEARCH REGISTRY..."}
-                                    />
-                                    {mode === 'registry' && searchResults.length > 0 && !selectedUser && (
-                                        <div className="absolute top-full left-0 right-0 mt-3 max-h-60 overflow-y-auto bg-black border border-white/10 rounded-2xl z-50 shadow-2xl no-scrollbar backdrop-blur-3xl">
-                                            {searchResults.map(u => (
-                                                <button key={u.id} onClick={() => setSelectedUser(u)} className="w-full text-left p-5 hover:bg-white/5 flex items-center gap-5 border-b border-white/5 last:border-0 transition-all">
-                                                    <div className="w-12 h-12 rounded-xl bg-slate-900 border border-white/10 flex items-center justify-center"><UserCircleIcon className="h-8 w-8 text-gray-700" /></div>
-                                                    <div className="min-w-0">
-                                                        <p className="text-sm font-black text-white uppercase tracking-tight truncate">{u.name}</p>
-                                                        <p className="text-[9px] text-gray-600 uppercase font-black tracking-widest mt-0.5">{u.circle}</p>
-                                                    </div>
-                                                </button>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-                                <button 
-                                    onClick={() => setIsScanning(true)}
-                                    className="p-5 bg-white/5 hover:bg-brand-gold/20 border border-white/10 rounded-2xl text-brand-gold transition-all active:scale-95 shadow-lg group"
-                                    title="Scan Node QR"
-                                >
-                                    <QrCodeIcon className="h-6 w-6 group-hover:scale-110 transition-transform" />
-                                </button>
-                            </div>
-                            {(selectedUser || (mode === 'anchor' && targetAddress.length > 20)) && (
-                                <div className="bg-emerald-500/5 p-5 rounded-2xl border border-emerald-500/20 flex items-center justify-between animate-fade-in shadow-inner">
-                                    <div className="flex items-center gap-4">
-                                        <div className={`w-2 h-2 rounded-full animate-pulse shadow-glow-matrix ${selectedUser ? 'bg-emerald-500' : 'bg-brand-gold'}`}></div>
-                                        <div>
-                                            <p className="label-caps !text-[8px] text-emerald-500 opacity-60">{selectedUser ? 'Verified Node Identity' : 'Unindexed Protocol Node'}</p>
-                                            <p className="text-sm font-black text-white uppercase tracking-tight">{selectedUser ? selectedUser.name : 'EXTERNAL_NODE'}</p>
-                                        </div>
-                                    </div>
-                                    <button onClick={() => {setSelectedUser(null); setTargetAddress('');}} className="text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-widest pr-2">Clear</button>
-                                </div>
-                            )}
-                        </div>
-
-                        <div className="space-y-3">
-                            <label className="label-caps !text-[9px] text-gray-500">Quantum Dispatch Volume</label>
-                            <div className="relative">
+                        <div className="space-y-4">
+                            <label className="label-caps !text-[9px] text-gray-500">Destination Anchor</label>
+                            <div className="relative group">
                                 <input 
-                                    type="number" 
-                                    value={amount}
-                                    onChange={e => setAmount(e.target.value)}
-                                    className="w-full bg-black border border-white/10 p-8 rounded-[2.5rem] text-white font-mono text-5xl font-black focus:outline-none focus:ring-1 focus:ring-brand-gold/40 placeholder-gray-900 shadow-inner"
-                                    placeholder="0.00"
+                                    type="text" 
+                                    value={mode === 'anchor' ? targetAddress : searchQuery}
+                                    onChange={e => mode === 'anchor' ? setTargetAddress(e.target.value) : setSearchQuery(e.target.value)}
+                                    className="w-full bg-slate-900 border border-white/10 p-5 rounded-2xl text-white font-mono text-xs uppercase" 
+                                    placeholder={mode === 'anchor' ? "UBT-..." : "SEARCH NAME..."}
                                 />
-                                <div className="absolute inset-y-0 right-10 flex items-center pointer-events-none">
-                                    <span className="text-2xl font-black text-gray-800 font-mono tracking-widest uppercase">UBT</span>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div className="lg:col-span-5 flex flex-col gap-8">
-                        <div className="flex-1 bg-slate-950/80 rounded-[3rem] border border-white/5 p-8 flex flex-col shadow-inner">
-                            <div className="flex justify-between items-center mb-8">
-                                <h3 className="text-[9px] font-black text-gray-500 uppercase tracking-[0.4em]">Protocol Monitor</h3>
-                                <div className="flex gap-2">
-                                    <div className={`w-2 h-2 rounded-full bg-emerald-500 animate-pulse`}></div>
-                                    <div className="w-2 h-2 rounded-full bg-brand-gold/20"></div>
-                                </div>
-                            </div>
-                            
-                            <div className="flex-1 font-mono text-[9px] text-brand-gold/70 space-y-2.5 overflow-y-auto no-scrollbar max-h-60 lg:max-h-none border-l border-white/5 pl-6">
-                                {logs.length > 0 ? (
-                                    logs.map((log, i) => <div key={i} className="animate-fade-in">{log}</div>)
-                                ) : (
-                                    <div className="h-full flex items-center justify-center opacity-20 text-center px-6">
-                                        <p className="uppercase tracking-[0.2em] leading-loose text-[8px]">
-                                            Awaiting initialization sequence...
-                                        </p>
+                                <button onClick={() => setIsScanning(true)} className="absolute right-3 top-1/2 -translate-y-1/2 p-2 text-brand-gold hover:text-white"><QrCodeIcon className="h-5 w-5"/></button>
+                                {mode === 'registry' && searchResults.length > 0 && !selectedUser && (
+                                    <div className="absolute top-full left-0 right-0 mt-2 bg-black border border-white/10 rounded-2xl z-50 overflow-hidden shadow-2xl">
+                                        {searchResults.map(u => (
+                                            <button key={u.id} onClick={() => setSelectedUser(u)} className="w-full text-left p-4 hover:bg-white/5 flex items-center gap-4 border-b border-white/5 last:border-0">
+                                                <UserCircleIcon className="h-8 w-8 text-gray-600" />
+                                                <div>
+                                                    <p className="text-xs font-bold text-white uppercase">{u.name}</p>
+                                                    <p className="text-[9px] text-gray-500">{u.circle}</p>
+                                                </div>
+                                            </button>
+                                        ))}
                                     </div>
                                 )}
-                                {isProcessing && <div className="w-1.5 h-3 bg-brand-gold animate-terminal-cursor mt-2 shadow-glow-gold"></div>}
                             </div>
-                            
-                            <button 
-                                onClick={handleDispatch}
-                                disabled={isProcessing || isResolving || !selectedVaultId || !amount}
-                                className="w-full py-6 mt-8 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-4 disabled:opacity-20 disabled:grayscale"
-                            >
-                                {isProcessing ? <LoaderIcon className="h-5 w-5 animate-spin"/> : isResolving ? <LoaderIcon className="h-5 w-5 animate-spin"/> : <>Sign & Dispatch Assets <ShieldCheckIcon className="h-5 w-5"/></>}
-                            </button>
-                        </div>
-                        
-                        <div className="p-6 bg-blue-900/10 border border-blue-500/20 rounded-3xl flex items-start gap-5">
-                             <AlertTriangleIcon className="h-6 w-6 text-blue-400 opacity-60 flex-shrink-0" />
-                             <p className="text-[9px] text-blue-300 leading-loose uppercase font-black italic tracking-tight">
-                                AUTHORITY NOTE: Ledger events are atomic and immutable. Target node will receive credit immediately upon handshake verification.
-                             </p>
                         </div>
                     </div>
+
+                    {selectedUser && (
+                        <div className="bg-emerald-950/20 border border-emerald-500/20 p-6 rounded-[2rem] flex items-center justify-between animate-fade-in">
+                            <div className="flex items-center gap-4">
+                                <div className="p-3 bg-emerald-500/10 rounded-xl text-emerald-500"><ShieldCheckIcon className="h-5 w-5" /></div>
+                                <div>
+                                    <p className="text-[9px] font-black text-emerald-500 uppercase tracking-widest">Recipient Identified</p>
+                                    <p className="text-xl font-black text-white uppercase tracking-tighter">{selectedUser.name}</p>
+                                    <p className="text-[9px] text-gray-500 font-mono mt-1">{selectedUser.publicKey || selectedUser.id}</p>
+                                </div>
+                            </div>
+                            <button onClick={() => { setSelectedUser(null); setTargetAddress(''); setSearchQuery(''); }} className="text-gray-500 hover:text-white p-2">✕</button>
+                        </div>
+                    )}
+
+                    <div className="space-y-4">
+                        <label className="label-caps !text-[9px] text-gray-500">Volume Transfer</label>
+                        <div className="relative">
+                            <input type="number" value={amount} onChange={e => setAmount(e.target.value)} className="w-full bg-black border-none p-10 rounded-[3rem] text-white text-7xl font-black font-mono text-center outline-none" placeholder="0.00" />
+                            <div className="absolute inset-y-0 right-10 flex items-center pointer-events-none text-gray-800 font-black text-2xl uppercase">UBT</div>
+                        </div>
+                    </div>
+
+                    {!isUnlocked ? (
+                        <div className="p-8 bg-red-950/20 border border-red-900/30 rounded-[3rem] text-center space-y-4">
+                            <AlertTriangleIcon className="h-8 w-8 text-red-500 mx-auto" />
+                            <p className="text-xs text-red-400 font-black uppercase tracking-widest">Authority Session Locked</p>
+                            <p className="text-[10px] text-gray-500 leading-relaxed uppercase">You must tap the Key Icon in the top HUD and enter your PIN to authorize asset dispatches.</p>
+                        </div>
+                    ) : (
+                        <button onClick={handleDispatch} disabled={isProcessing || !amount || (!selectedUser && mode === 'registry')} className="w-full py-8 bg-brand-gold text-slate-950 font-black rounded-[2.5rem] active:scale-95 shadow-glow-gold uppercase tracking-[0.4em] text-xs transition-all disabled:opacity-20 flex justify-center items-center gap-4">
+                            {isProcessing ? <LoaderIcon className="h-6 w-6 animate-spin"/> : <>Finalize Atomic Dispatch <ShieldCheckIcon className="h-5 w-5"/></>}
+                        </button>
+                    )}
+                    
+                    {logs.length > 0 && (
+                        <div className="p-6 bg-black rounded-3xl border border-white/5 font-mono text-[9px] text-emerald-500/60 space-y-2">
+                            {logs.map((l, i) => <div key={i}>{l}</div>)}
+                        </div>
+                    )}
                 </div>
             </div>
         </div>

@@ -1,5 +1,5 @@
 
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
 
@@ -16,8 +16,8 @@ interface ErrorBoundaryState {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  /* Fix: Explicitly declare state property to ensure visibility to the type checker and resolve line 24 error */
+// Fix: Import Component directly to ensure setState and props are correctly resolved by the type checker
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = {
     hasError: false,
     error: null,
@@ -36,7 +36,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   /* Capture lifecycle errors and trigger the error state */
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error, errorInfo);
-    /* Fix: setState is correctly identified via React.Component inheritance resolving line 40 error */
+    // Fix: setState is now correctly identified via Component inheritance resolving line 40 error
     this.setState({ 
       hasError: true,
       error, 
@@ -49,7 +49,6 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   };
 
   public render(): ReactNode {
-    /* Fix: state is correctly identified via React.Component inheritance resolving line 53 error */
     const { hasError, error } = this.state;
 
     if (hasError) {
@@ -80,7 +79,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       );
     }
 
-    /* Fix: props is correctly identified via React.Component inheritance resolving line 84 error */
+    // Fix: props is correctly identified via Component inheritance resolving line 84 error
     return this.props.children;
   }
 }

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Admin, Agent, Member, Broadcast, Report, User, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PendingUbtPurchase, MultiSigProposal } from '../types';
 import { api } from '../services/apiService';
@@ -24,8 +25,10 @@ import { GenesisNodeFlow } from './GenesisNodeFlow';
 import { useToast } from '../contexts/ToastContext';
 import { MessageSquareIcon } from './icons/MessageSquareIcon';
 import { PlusIcon } from './icons/PlusIcon';
+import { KeyIcon } from './icons/KeyIcon';
+import { PinVaultLogin } from './PinVaultLogin';
+import { useAuth } from '../contexts/AuthContext';
 
-// Official Admin Terminal Sequence
 type AdminView = 'ops' | 'stream' | 'treasury' | 'dispatch' | 'oracle' | 'registrar' | 'justice' | 'ledger' | 'identity';
 
 export const AdminDashboard: React.FC<{
@@ -48,22 +51,24 @@ export const AdminDashboard: React.FC<{
   const [pendingPurchases, setPendingPurchases] = useState<PendingUbtPurchase[]>([]);
   const [msProposals, setMsProposals] = useState<MultiSigProposal[]>([]);
   const [isUpgrading, setIsUpgrading] = useState(false);
+  const [isUnlocking, setIsUnlocking] = useState(false);
   const [isNewPostModalOpen, setIsNewPostModalOpen] = useState(false);
   const { addToast } = useToast();
+  const { unlockSovereignSession } = useAuth();
 
+  const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
   const hasVault = cryptoService.hasVault();
 
   useEffect(() => {
-    // Authority surveillance listeners
-    const unsubUsers = api.listenForAllUsers(user, setAllUsers, (err) => console.error("Identity Sync Denied:", err));
-    const unsubMembers = api.listenForAllMembers(user, setMembers, (err) => console.error("Registry Sync Denied:", err));
-    const unsubAgents = api.listenForAllAgents(user, setAgents, (err) => console.error("Agent Sync Denied:", err));
-    const unsubPending = api.listenForPendingMembers(user, setPendingMembers, (err) => console.error("Pending Sync Denied:", err));
-    const unsubReports = api.listenForReports(user, setReports, (err) => console.error("Justice Sync Denied:", err));
-    const unsubPayouts = api.listenForPayoutRequests(user, setPayouts, (err) => console.error("Payout Sync Denied:", err));
-    const unsubVentures = api.listenForVentures(user, setVentures, (err) => console.error("Venture Sync Denied:", err));
-    const unsubCvp = api.listenForCVP(user, setCvp, (err) => console.error("Economy Sync Denied:", err));
-    const unsubOracle = api.listenForPendingPurchases(setPendingPurchases, (err) => console.error("Bridge Sync Denied:", err));
+    const unsubUsers = api.listenForAllUsers(user, setAllUsers, (err) => console.error(err));
+    const unsubMembers = api.listenForAllMembers(user, setMembers, (err) => console.error(err));
+    const unsubAgents = api.listenForAllAgents(user, setAgents, (err) => console.error(err));
+    const unsubPending = api.listenForPendingMembers(user, setPendingMembers, (err) => console.error(err));
+    const unsubReports = api.listenForReports(user, setReports, (err) => console.error(err));
+    const unsubPayouts = api.listenForPayoutRequests(user, setPayouts, (err) => console.error(err));
+    const unsubVentures = api.listenForVentures(user, setVentures, (err) => console.error(err));
+    const unsubCvp = api.listenForCVP(user, setCvp, (err) => console.error(err));
+    const unsubOracle = api.listenForPendingPurchases(setPendingPurchases, (err) => console.error(err));
     const unsubMultisig = api.listenForMultiSigProposals(setMsProposals);
     api.getBroadcasts().then(setBroadcasts).catch(console.error);
 
@@ -86,11 +91,6 @@ export const AdminDashboard: React.FC<{
     } catch (err) {
         addToast("Handshake Failed.", "error");
     }
-  };
-
-  const handlePostCreated = (ccapAwarded: number) => {
-    addToast('Admin Dispatch confirmed on ledger.', 'success');
-    setIsNewPostModalOpen(false);
   };
 
   const TabButton: React.FC<{label: string, count?: number, isActive: boolean, onClick: () => void, icon: React.ReactNode}> = ({ label, count, isActive, onClick, icon }) => (
@@ -166,20 +166,14 @@ export const AdminDashboard: React.FC<{
               <div className="space-y-4">
                   <h1 className="text-5xl sm:text-6xl font-black text-white tracking-tighter uppercase leading-none gold-text">Authority HUD</h1>
                   <div className="flex items-center gap-4">
-                       <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-glow-matrix"></div>
-                       <p className="label-caps !text-white !text-[9px] !tracking-[0.4em]">Root Identity Verified</p>
+                       <div className={`w-2.5 h-2.5 rounded-full animate-pulse shadow-glow-matrix ${isUnlocked ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
+                       <p className="label-caps !text-white !text-[9px] !tracking-[0.4em]">{isUnlocked ? 'Root Identity Verified' : 'Local Node Locked'}</p>
+                       {!isUnlocked && hasVault && (
+                           <button onClick={() => setIsUnlocking(true)} className="ml-4 p-2 bg-brand-gold text-slate-950 rounded-xl shadow-glow-gold hover:scale-105 transition-all cursor-pointer">
+                               <KeyIcon className="h-4 w-4" />
+                           </button>
+                       )}
                   </div>
-              </div>
-              
-              <div className="hidden xl:flex gap-10 border-l border-white/10 pl-10 pb-2">
-                 <div>
-                    <p className="text-[7px] font-black text-gray-600 uppercase tracking-widest mb-1">Common Ledger Volume</p>
-                    <p className="text-sm font-black text-white font-mono">15.0M UBT</p>
-                 </div>
-                 <div>
-                    <p className="text-[7px] font-black text-gray-600 uppercase tracking-widest mb-1">Network Citizens</p>
-                    <p className="text-sm font-black text-emerald-500 font-mono">{allUsers.length || 'Indexing...'}</p>
-                 </div>
               </div>
           </div>
 
@@ -188,7 +182,7 @@ export const AdminDashboard: React.FC<{
                   <TabButton label="Ops" icon={<LayoutDashboardIcon/>} isActive={view === 'ops'} onClick={() => setView('ops')} />
                   <TabButton label="Stream" icon={<MessageSquareIcon/>} isActive={view === 'stream'} onClick={() => setView('stream')} />
                   <TabButton label="Treasury" icon={<LockIcon/>} isActive={view === 'treasury'} count={msProposals.length} onClick={() => setView('treasury')} />
-                  <TabButton label="Dispatch" icon={<ArrowUpRightIcon/>} isActive={view === 'dispatch'} onClick={() => setView('dispatch')} />
+                  <TabButton label="Dispatch" icon={<PlusIcon/>} isActive={view === 'dispatch'} onClick={() => setView('dispatch')} />
                   <TabButton label="Oracle" icon={<DollarSignIcon/>} isActive={view === 'oracle'} count={pendingPurchases.length} onClick={() => setView('oracle')} />
                   <TabButton label="Registrar" icon={<DatabaseIcon/>} isActive={view === 'registrar'} onClick={() => setView('registrar')} />
                   <TabButton label="Justice" icon={<ScaleIcon/>} isActive={view === 'justice'} count={reports.filter(r => r.status === 'new').length} onClick={() => setView('justice')} />
@@ -210,19 +204,26 @@ export const AdminDashboard: React.FC<{
           </div>
       </div>
 
+      {isUnlocking && (
+          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl">
+              <div className="w-full max-w-md relative">
+                  <PinVaultLogin 
+                    onUnlock={(data, pin) => { unlockSovereignSession(data, pin); setIsUnlocking(false); }} 
+                    onReset={() => { setIsUnlocking(false); setIsUpgrading(true); }} 
+                  />
+                  <button onClick={() => setIsUnlocking(false)} className="absolute -top-16 right-0 text-white/40 hover:text-white uppercase text-[10px] font-black p-4">✕ Close</button>
+              </div>
+          </div>
+      )}
+
       {isNewPostModalOpen && (
           <NewPostModal 
               isOpen={isNewPostModalOpen} 
               onClose={() => setIsNewPostModalOpen(false)} 
               user={user} 
-              onPostCreated={handlePostCreated} 
+              onPostCreated={() => { setIsNewPostModalOpen(false); addToast("Broadcast ledgered.", "success"); }} 
           />
       )}
     </div>
   );
 };
-
-// Internal icon for specific terminals
-const ArrowUpRightIcon = (props: any) => (
-  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><line x1="7" y1="17" x2="17" y2="7"></line><polyline points="7 7 17 7 17 17"></polyline></svg>
-);
