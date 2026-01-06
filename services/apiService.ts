@@ -347,7 +347,6 @@ export const api = {
     listenForActivity: (circle: string, cb: (a: Activity[]) => void, err?: any): Unsubscribe => onSnapshot(query(activityCollection, where('causerCircle', '==', circle), orderBy('timestamp', 'desc'), limit(10)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), err),
     listenForAllUsers: (admin: User, cb: (u: User[]) => void, err?: any): Unsubscribe => onSnapshot(usersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), err),
     listenForAllMembers: (admin: User, cb: (m: Member[]) => void, err?: any): Unsubscribe => onSnapshot(membersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
-    /* Fixed: Changed Unsnapshot to Unsubscribe to resolve undefined type error */
     listenForAllAgents: (admin: User, cb: (a: Agent[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('role', '==', 'agent')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Agent))), err),
     listenForPendingMembers: (admin: User, cb: (m: Member[]) => void, err?: any): Unsubscribe => onSnapshot(query(membersCollection, where('payment_status', '==', 'pending_verification')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err),
     listenForReports: (admin: User, cb: (r: any[]) => void, err?: any): Unsubscribe => onSnapshot(collection(db, 'reports'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), err),
@@ -355,7 +354,6 @@ export const api = {
     listenForPendingPurchases: (cb: (p: PendingUbtPurchase[]) => void, err?: any): Unsubscribe => onSnapshot(query(pendingPurchasesCollection, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), err),
     listenForUserVentures: (uid: string, cb: (v: any[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('ownerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), err),
     listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(query(payoutsCollection, where('userId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
-    /* Fixed: Replaced doc with d in referred users listener to fix undefined name error on line 357 */
     listenForReferredUsers: (uid: string, cb: (u: PublicUserProfile[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('referrerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile))), err),
     listenForProposals: (cb: (p: Proposal[]) => void, err?: any): Unsubscribe => onSnapshot(query(proposalsCollection, orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Proposal))), err),
     listenToResources: (circle: string, cb: (r: CitizenResource[]) => void): Unsubscribe => onSnapshot(circle === 'ANY' ? resourcesCollection : query(resourcesCollection, where('circle', '==', circle)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource)))),
@@ -420,7 +418,7 @@ export const api = {
     processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
         await runTransaction(db, async (t) => {
             const econRef = doc(globalsCollection, 'economy');
-            const receiverRef = rid ? doc(usersCollection, rid) : null;
+            const receiverRef = (rid && rid !== 'EXTERNAL_NODE') ? doc(usersCollection, rid) : null;
             
             const [econSnap, receiverSnap] = await Promise.all([
                 t.get(econRef), 
@@ -430,15 +428,20 @@ export const api = {
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
             
             let enrichedTx = { ...tx, priceAtSync: currentPrice };
+            
+            // PRIORITY: Use provided receiverPublicKey from UI if available
             if (receiverSnap?.exists()) {
                 const rData = receiverSnap.data();
                 if (rData?.publicKey) enrichedTx.receiverPublicKey = rData.publicKey;
+            } else if (tx.receiverPublicKey) {
+                // Keep the UBT- prefix address provided by the admin
+                enrichedTx.receiverPublicKey = tx.receiverPublicKey;
             } else if (rid === 'EXTERNAL_NODE' || !rid) {
-                enrichedTx.receiverPublicKey = `EXTERNAL_NODE:${tx.id.substring(0,8)}`;
+                enrichedTx.receiverPublicKey = `ANONYMOUS_ANCHOR:${tx.id.substring(0,8)}`;
             }
 
             t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
-            if (receiverRef && rid !== 'EXTERNAL_NODE') t.update(receiverRef, { ubtBalance: increment(amt) });
+            if (receiverRef) t.update(receiverRef, { ubtBalance: increment(amt) });
             t.set(doc(ledgerCollection, tx.id), { ...enrichedTx, serverTimestamp: serverTimestamp() });
         });
         sovereignService.dispatchTransaction(tx).catch(console.error);

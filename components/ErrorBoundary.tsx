@@ -1,5 +1,5 @@
 
-import React, { ErrorInfo, ReactNode } from 'react';
+import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
 
@@ -16,8 +16,8 @@ interface ErrorBoundaryState {
 /**
  * Sovereign Error Boundary - Protocol Breach Containment
  */
-/* Fixed: Explicitly extending React.Component with typed props and state to ensure inherited properties like setState and props are correctly resolved by the TypeScript compiler */
-export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoundaryState> {
+/* Fixed: Explicitly extending Component with typed props and state to ensure inherited properties like setState and props are correctly resolved */
+export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   public state: ErrorBoundaryState = {
     hasError: false,
     error: null,

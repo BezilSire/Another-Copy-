@@ -100,9 +100,11 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     };
 
     const resolveDisplayAddress = (id: string, pk?: string) => {
-        if (pk) return pk;
+        // PRIORITY: Always show public key if it starts with UBT-
+        if (pk && pk.startsWith('UBT-')) return pk;
+        
         const sysAddrs: Record<string, string> = { 
-            'GENESIS': 'UBT-GENESIS-VAULT', 
+            'GENESIS': 'UBT-GENESIS-ROOT', 
             'FLOAT': 'UBT-LIQUIDITY-POOL', 
             'SYSTEM': 'UBT-PROTOCOL-ORACLE',
             'SUSTENANCE': 'UBT-SUSTENANCE-VAULT',
@@ -132,7 +134,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                             type="text" 
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="Search by Address / Tx Hash..."
+                            placeholder="Search by Address (UBT-...) / Tx Hash..."
                             className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-11 pr-4 text-sm text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all !p-3"
                         />
                     </form>
@@ -182,22 +184,22 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                 {/* TRANSACTION LIST */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="p-6 border-b border-slate-100 flex items-center justify-between">
-                        <h3 className="font-bold text-slate-900">
-                            {view === 'account' ? 'Transaction History' : 'Recent Transactions'}
+                        <h3 className="font-bold text-slate-900 uppercase tracking-tighter">
+                            {view === 'account' ? 'Node Event History' : 'Verifiable Protocol Stream'}
                         </h3>
-                        <span className="text-xs text-slate-500 font-medium">{filteredTransactions.length} blocks synced</span>
+                        <span className="text-xs text-slate-500 font-medium">{filteredTransactions.length} blocks indexed</span>
                     </div>
 
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead>
                                 <tr className="bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                                    <th className="px-6 py-4">Transaction Sig</th>
+                                    <th className="px-6 py-4">Block Sig</th>
                                     <th className="px-6 py-4">Status</th>
-                                    <th className="px-6 py-4">Timestamp</th>
-                                    <th className="px-6 py-4">From (Address)</th>
-                                    <th className="px-6 py-4">To (Address)</th>
-                                    <th className="px-6 py-4 text-right">Value</th>
+                                    <th className="px-6 py-4">Temporal</th>
+                                    <th className="px-6 py-4">Origin Node</th>
+                                    <th className="px-6 py-4">Target Node</th>
+                                    <th className="px-6 py-4 text-right">Volume</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -216,7 +218,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                                         </td>
                                         <td className="px-6 py-4">
                                             <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full w-fit">
-                                                <ShieldCheckIcon className="h-3 w-3" /> Success
+                                                <ShieldCheckIcon className="h-3 w-3" /> Signed
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
@@ -225,7 +227,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                                         <td className="px-6 py-4">
                                             <button 
                                                 onClick={() => navigateAccount(tx.senderPublicKey || tx.senderId)}
-                                                className="text-blue-600 hover:text-blue-800 font-mono text-xs truncate max-w-[140px] block"
+                                                className="text-blue-600 hover:text-blue-800 font-mono text-xs truncate max-w-[160px] block"
                                             >
                                                 {resolveDisplayAddress(tx.senderId, tx.senderPublicKey)}
                                             </button>
@@ -233,7 +235,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                                         <td className="px-6 py-4">
                                             <button 
                                                 onClick={() => navigateAccount(tx.receiverPublicKey || tx.receiverId)}
-                                                className="text-blue-600 hover:text-blue-800 font-mono text-xs truncate max-w-[140px] block"
+                                                className="text-blue-600 hover:text-blue-800 font-mono text-xs truncate max-w-[160px] block"
                                             >
                                                 {resolveDisplayAddress(tx.receiverId, tx.receiverPublicKey)}
                                             </button>
@@ -252,7 +254,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                         {!isLoading && filteredTransactions.length === 0 && (
                             <div className="py-20 text-center space-y-3">
                                 <GlobeIcon className="h-12 w-12 text-slate-200 mx-auto" />
-                                <p className="text-slate-400 font-medium">No records found on current spectrum</p>
+                                <p className="text-slate-400 font-medium">No state changes found on current spectrum</p>
                             </div>
                         )}
                     </div>
