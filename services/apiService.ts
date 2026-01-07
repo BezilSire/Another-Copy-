@@ -119,7 +119,7 @@ export const api = {
             const chunk = uids.slice(i, i + 10);
             const q = query(usersCollection, where('__name__', 'in', chunk));
             const snapshot = await getDocs(q);
-            results.push(...snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as User)));
+            results.push(...snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User)));
         }
         return results;
     },
@@ -151,7 +151,8 @@ export const api = {
 
             t.update(senderRef, { [balKey]: increment(-transaction.amount) });
             t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
-            t.set(doc(ledgerCollection, transaction.id), { ...finalTx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+            // LAW: Transaction Signature is the Immutable Document ID
+            t.set(doc(ledgerCollection, transaction.signature), { ...finalTx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         }); 
         sovereignService.dispatchTransaction(transaction).catch(console.error);
     },
@@ -200,22 +201,46 @@ export const api = {
     },
 
     syncInternalVaults: async (admin: Admin, from: TreasuryVault, to: TreasuryVault, amt: number, reason: string) => {
-        const txId = `internal-${Date.now().toString(36)}`;
-        let tx;
+        const timestamp = Date.now();
+        const nonce = `internal-${timestamp.toString(36)}`;
+        // Internal protocol transfers still require a signed packet simulation
+        const payload = `${from.id}:${to.id}:${amt}:${timestamp}:${nonce}`;
+        const signature = `SIG_INTERNAL_${timestamp.toString(36)}`;
+        
         await runTransaction(db, async t => {
             const fromRef = doc(vaultsCollection, from.id);
             const toRef = doc(vaultsCollection, to.id);
             const econSnap = await t.get(doc(globalsCollection, 'economy'));
+            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+            
             t.update(fromRef, { balance: increment(-amt) });
             t.update(toRef, { balance: increment(amt) });
-            tx = { id: txId, senderId: from.id, receiverId: to.id, amount: amt, timestamp: Date.now(), reason, type: 'VAULT_SYNC', protocol_mode: 'MAINNET', senderPublicKey: admin.publicKey || "ROOT_AUTH", priceAtSync: econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001, serverTimestamp: serverTimestamp() };
-            t.set(doc(ledgerCollection, txId), tx);
+            
+            const tx: UbtTransaction = { 
+                id: signature, 
+                senderId: from.id, 
+                receiverId: to.id, 
+                amount: amt, 
+                timestamp, 
+                reason, 
+                type: 'VAULT_SYNC', 
+                protocol_mode: 'MAINNET', 
+                senderPublicKey: from.publicKey, 
+                receiverPublicKey: to.publicKey,
+                nonce,
+                signature,
+                hash: payload,
+                parentHash: 'INTERNAL_VAULT_SYNC',
+                priceAtSync: currentPrice
+            };
+            
+            t.set(doc(ledgerCollection, signature), { ...tx, serverTimestamp: serverTimestamp() });
         });
-        if (tx) sovereignService.dispatchTransaction(tx).catch(console.error);
     },
     
     approveUbtPurchase: async (admin: Admin, p: PendingUbtPurchase, sourceVaultId: string, txData: Partial<UbtTransaction>) => {
-        let finalTx: UbtTransaction | undefined;
+        if (!txData.signature) throw new Error("CRYPTOGRAPHIC_SIGNATURE_REQUIRED");
+
         await runTransaction(db, async t => {
             const purchaseRef = doc(pendingPurchasesCollection, p.id);
             const userRef = doc(usersCollection, p.userId);
@@ -231,22 +256,20 @@ export const api = {
             t.update(sourceRef, { balance: increment(-p.amountUbt) });
             t.update(econRef, { cvp_usd_backing: increment(p.amountUsd) }); 
 
-            const txId = txData.id || `bridge-${Date.now().toString(36)}`;
-            
             let receiverKey = "PROVISIONING";
             if (receiverSnap.exists() && receiverSnap.data()?.publicKey) {
                 receiverKey = receiverSnap.data()?.publicKey;
             }
 
-            finalTx = {
-                id: txId,
+            const finalTx: UbtTransaction = {
+                id: txData.signature!,
                 senderId: sourceVaultId,
                 receiverId: p.userId,
                 receiverPublicKey: receiverKey,
                 amount: p.amountUbt,
                 timestamp: txData.timestamp || Date.now(),
                 nonce: txData.nonce || "",
-                signature: txData.signature || "",
+                signature: txData.signature!,
                 hash: txData.hash || "",
                 senderPublicKey: admin.publicKey || "",
                 parentHash: 'BRIDGE_ROOT',
@@ -255,9 +278,8 @@ export const api = {
                 priceAtSync: currentPrice
             };
 
-            t.set(doc(ledgerCollection, txId), { ...finalTx, serverTimestamp: serverTimestamp() });
+            t.set(doc(ledgerCollection, txData.signature!), { ...finalTx, serverTimestamp: serverTimestamp() });
         });
-        if (finalTx) sovereignService.dispatchTransaction(finalTx).catch(console.error);
     },
     rejectUbtPurchase: (id: string) => updateDoc(doc(pendingPurchasesCollection, id), { status: 'REJECTED' }),
     getPublicUserProfile: async (uid: string): Promise<PublicUserProfile | null> => {
@@ -271,14 +293,14 @@ export const api = {
             const chunk = uids.slice(i, i + 10);
             const q = query(usersCollection, where('__name__', 'in', chunk));
             const snapshot = await getDocs(q);
-            results.push(...snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile)));
+            results.push(...snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile)));
         }
         return results;
     },
     searchUsers: async (queryStr: string, currentUser: User): Promise<PublicUserProfile[]> => {
         const q = query(usersCollection, where('name_lowercase', '>=', queryStr.toLowerCase()), where('name_lowercase', '<=', queryStr.toLowerCase() + '\uf8ff'), limit(15));
         const snapshot = await getDocs(q);
-        return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile)).filter(u => u.id !== currentUser.id);
+        return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile)).filter(u => u.id !== currentUser.id);
     },
     resolveNodeIdentity: async (identifier: string): Promise<PublicUserProfile | null> => {
         if (!identifier) return null;
@@ -294,7 +316,7 @@ export const api = {
             if (userDoc.exists()) return { id: userDoc.id, ...userDoc.data() } as PublicUserProfile;
             
             const vaultDoc = await getDoc(doc(vaultsCollection, identifier));
-            if (vaultDoc.exists()) return { id: vaultDoc.id, name: vaultDoc.data()?.name, role: 'admin', circle: 'TREASURY' } as any;
+            if (vaultDoc.exists()) return { id: vaultDoc.id, name: vaultDoc.data()?.name, ubtBalance: vaultDoc.data()?.balance, role: 'admin', circle: 'TREASURY' } as any;
         } catch (e) {}
         return null;
     },
@@ -418,7 +440,7 @@ export const api = {
     processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
         await runTransaction(db, async (t) => {
             const econRef = doc(globalsCollection, 'economy');
-            const receiverRef = (rid && rid !== 'EXTERNAL_NODE') ? doc(usersCollection, rid) : null;
+            const receiverRef = rid ? doc(usersCollection, rid) : null;
             
             const [econSnap, receiverSnap] = await Promise.all([
                 t.get(econRef), 
@@ -428,21 +450,17 @@ export const api = {
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
             
             let enrichedTx = { ...tx, priceAtSync: currentPrice };
-            
-            // PRIORITY: Use provided receiverPublicKey from UI if available
             if (receiverSnap?.exists()) {
                 const rData = receiverSnap.data();
                 if (rData?.publicKey) enrichedTx.receiverPublicKey = rData.publicKey;
-            } else if (tx.receiverPublicKey) {
-                // Keep the UBT- prefix address provided by the admin
-                enrichedTx.receiverPublicKey = tx.receiverPublicKey;
             } else if (rid === 'EXTERNAL_NODE' || !rid) {
-                enrichedTx.receiverPublicKey = `ANONYMOUS_ANCHOR:${tx.id.substring(0,8)}`;
+                enrichedTx.receiverPublicKey = `EXTERNAL_NODE:${tx.id.substring(0,8)}`;
             }
 
             t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
-            if (receiverRef) t.update(receiverRef, { ubtBalance: increment(amt) });
-            t.set(doc(ledgerCollection, tx.id), { ...enrichedTx, serverTimestamp: serverTimestamp() });
+            if (receiverRef && rid !== 'EXTERNAL_NODE') t.update(receiverRef, { ubtBalance: increment(amt) });
+            // LAW: Use Signature as document key
+            t.set(doc(ledgerCollection, tx.signature), { ...enrichedTx, serverTimestamp: serverTimestamp() });
         });
         sovereignService.dispatchTransaction(tx).catch(console.error);
     },
@@ -688,13 +706,14 @@ export const api = {
             t.update(toRef, { balance: increment(data.amount) });
             t.update(ref, { signatures: newSigs, status: 'executed' });
             
-            const txId = `multisig-exec-${Date.now().toString(36)}`;
+            const timestamp = Date.now();
+            const txId = `multisig-exec-${timestamp.toString(36)}`;
             const tx = { 
                 id: txId, 
                 senderId: data.fromVaultId, 
                 receiverId: data.toVaultId, 
                 amount: data.amount, 
-                timestamp: Date.now(), 
+                timestamp, 
                 reason: `MultiSig: ${data.reason}`, 
                 type: 'VAULT_SYNC', 
                 protocol_mode: 'MAINNET', 
@@ -736,7 +755,8 @@ export const api = {
             const econSnap = await t.get(econRef);
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
             t.update(receiverRef, { credibility_score: increment(5), vouchCount: increment(1) });
-            t.set(doc(ledgerCollection, transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+            // LAW: Signature is document key
+            t.set(doc(ledgerCollection, transaction.signature), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         });
         sovereignService.dispatchTransaction(transaction).catch(console.error);
     },
@@ -769,7 +789,7 @@ export const api = {
     
     requestCommissionPayout: (a: Agent, name: string, phone: string, amount: number) => addDoc(payoutsCollection, { userId: a.id, userName: a.name, type: 'referral', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp() }),
 
-    addComment: (pid: string, data: any, coll: 'posts' | 'proposals' = 'posts') => {
+    addComment: (pid: string, data: any, coll: 'posts' | 'proposals') => {
         const batch = writeBatch(db);
         const commentRef = doc(collection(db, coll, pid, 'comments'));
         batch.set(commentRef, { ...data, timestamp: serverTimestamp() });
@@ -819,7 +839,7 @@ export const api = {
     getVentureMembers: async (count: number) => {
         const q = query(usersCollection, where('isLookingForPartners', '==', true), limit(count));
         const s = await getDocs(q);
-        return { users: s.docs.map(doc => ({ id: doc.id, ...doc.data() } as PublicUserProfile)) };
+        return { users: s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile)) };
     },
 
     unfollowUser: async (uid: string, tid: string) => {

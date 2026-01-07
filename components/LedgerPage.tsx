@@ -57,7 +57,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
         const val = searchQuery.trim();
         if (!val) return;
         
-        if (val.startsWith('UBT-') || val.length < 20) {
+        if (val.startsWith('UBT-') || val.length < 32) {
             setTargetValue(val);
             setView('account');
         } else {
@@ -100,9 +100,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
     };
 
     const resolveDisplayAddress = (id: string, pk?: string) => {
-        // PRIORITY: Always show public key if it starts with UBT-
         if (pk && pk.startsWith('UBT-')) return pk;
-        
         const sysAddrs: Record<string, string> = { 
             'GENESIS': 'UBT-GENESIS-ROOT', 
             'FLOAT': 'UBT-LIQUIDITY-POOL', 
@@ -116,7 +114,6 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
 
     return (
         <div className="min-h-screen bg-white text-slate-900 font-sans selection:bg-blue-100">
-            {/* SOLSCAN-STYLE NAV - WHITE THEME */}
             <nav className="bg-white border-b border-slate-200 sticky top-0 z-50 shadow-sm">
                 <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between gap-8">
                     <button onClick={() => { setView('ledger'); setAccountData(null); setTargetValue(''); }} className="flex items-center gap-3 group">
@@ -134,7 +131,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                             type="text" 
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
-                            placeholder="Search by Address (UBT-...) / Tx Hash..."
+                            placeholder="Search Signature / Node Address..."
                             className="w-full bg-slate-50 border border-slate-200 rounded-xl py-2.5 pl-11 pr-4 text-sm text-slate-900 focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all !p-3"
                         />
                     </form>
@@ -143,7 +140,6 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
 
             <main className="max-w-7xl mx-auto px-4 py-8 space-y-6">
                 
-                {/* ACCOUNT VIEW HEADER */}
                 {view === 'account' && (
                     <div className="space-y-6 animate-fade-in">
                         <button onClick={() => setView('ledger')} className="flex items-center gap-2 text-slate-500 hover:text-blue-600 text-sm font-medium transition-colors">
@@ -163,11 +159,10 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                                         </div>
                                     </div>
                                     <h2 className="text-3xl font-bold text-slate-900">{accountData?.name || 'Resolving Node...'}</h2>
-                                    <p className="text-slate-500 text-sm uppercase font-bold tracking-widest">{accountData?.role || 'Citizen'} | {accountData?.circle || 'Global'} Circle</p>
                                 </div>
 
                                 <div className="bg-slate-50 rounded-2xl p-6 border border-slate-100 flex flex-col justify-center min-w-[240px]">
-                                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Balance</p>
+                                    <p className="text-slate-500 text-[10px] font-bold uppercase tracking-widest mb-1">Mirror Balance</p>
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-3xl font-black text-slate-900">
                                             {isLoading ? '...' : (accountData?.ubtBalance?.toLocaleString() || '0.00')}
@@ -181,53 +176,46 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                     </div>
                 )}
 
-                {/* TRANSACTION LIST */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                     <div className="p-6 border-b border-slate-100 flex items-center justify-between">
                         <h3 className="font-bold text-slate-900 uppercase tracking-tighter">
-                            {view === 'account' ? 'Node Event History' : 'Verifiable Protocol Stream'}
+                            {view === 'account' ? 'Node Event History' : 'Cryptographic Event Stream'}
                         </h3>
-                        <span className="text-xs text-slate-500 font-medium">{filteredTransactions.length} blocks indexed</span>
+                        <span className="text-xs text-slate-500 font-medium font-mono">{filteredTransactions.length} BLOCKS INDEXED</span>
                     </div>
 
                     <div className="overflow-x-auto">
                         <table className="w-full text-left">
                             <thead>
                                 <tr className="bg-slate-50/50 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
-                                    <th className="px-6 py-4">Block Sig</th>
-                                    <th className="px-6 py-4">Status</th>
-                                    <th className="px-6 py-4">Temporal</th>
+                                    <th className="px-6 py-4">Protocol Signature (Ed25519)</th>
                                     <th className="px-6 py-4">Origin Node</th>
                                     <th className="px-6 py-4">Target Node</th>
+                                    <th className="px-6 py-4">Temporal</th>
                                     <th className="px-6 py-4 text-right">Volume</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {isLoading ? (
                                     <tr>
-                                        <td colSpan={6} className="py-20 text-center">
+                                        <td colSpan={5} className="py-20 text-center">
                                             <LoaderIcon className="h-8 w-8 animate-spin text-blue-600 mx-auto opacity-20" />
                                         </td>
                                     </tr>
                                 ) : filteredTransactions.map((tx) => (
                                     <tr key={tx.id} className="hover:bg-slate-50 transition-colors text-sm">
                                         <td className="px-6 py-4">
-                                            <button onClick={() => { setTargetValue(tx.id); setView('transaction'); }} className="text-blue-600 hover:text-blue-800 font-medium truncate max-w-[120px] block">
-                                                {tx.id}
-                                            </button>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <span className="flex items-center gap-1.5 text-[10px] font-bold uppercase text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-full w-fit">
-                                                <ShieldCheckIcon className="h-3 w-3" /> Signed
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 text-slate-500 whitespace-nowrap">
-                                            {formatTimeAgo(tx.timestamp)}
+                                            <div className="flex items-center gap-2">
+                                                <ShieldCheckIcon className="h-3.5 w-3.5 text-emerald-500" />
+                                                <button onClick={() => { setTargetValue(tx.id); setView('transaction'); }} className="text-blue-600 hover:text-blue-800 font-mono text-[11px] truncate max-w-[200px] block font-bold">
+                                                    {tx.signature}
+                                                </button>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <button 
                                                 onClick={() => navigateAccount(tx.senderPublicKey || tx.senderId)}
-                                                className="text-blue-600 hover:text-blue-800 font-mono text-xs truncate max-w-[160px] block"
+                                                className="text-slate-600 hover:text-blue-600 font-mono text-[10px] truncate max-w-[140px] block"
                                             >
                                                 {resolveDisplayAddress(tx.senderId, tx.senderPublicKey)}
                                             </button>
@@ -235,15 +223,18 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                                         <td className="px-6 py-4">
                                             <button 
                                                 onClick={() => navigateAccount(tx.receiverPublicKey || tx.receiverId)}
-                                                className="text-blue-600 hover:text-blue-800 font-mono text-xs truncate max-w-[160px] block"
+                                                className="text-slate-600 hover:text-blue-600 font-mono text-[10px] truncate max-w-[140px] block"
                                             >
                                                 {resolveDisplayAddress(tx.receiverId, tx.receiverPublicKey)}
                                             </button>
                                         </td>
+                                        <td className="px-6 py-4 text-slate-500 whitespace-nowrap text-[11px] uppercase font-bold">
+                                            {formatTimeAgo(tx.timestamp)}
+                                        </td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex flex-col items-end">
                                                 <span className="font-bold text-slate-900">{tx.amount.toLocaleString()} UBT</span>
-                                                <span className="text-xs text-slate-500 font-medium">≈ ${ubtToUsd(tx.amount)}</span>
+                                                <span className="text-[10px] text-slate-500 font-bold">≈ ${ubtToUsd(tx.amount)}</span>
                                             </div>
                                         </td>
                                     </tr>
@@ -254,7 +245,7 @@ export const LedgerPage: React.FC<{ initialTarget?: { type: 'tx' | 'address', va
                         {!isLoading && filteredTransactions.length === 0 && (
                             <div className="py-20 text-center space-y-3">
                                 <GlobeIcon className="h-12 w-12 text-slate-200 mx-auto" />
-                                <p className="text-slate-400 font-medium">No state changes found on current spectrum</p>
+                                <p className="text-slate-400 font-medium">No cryptographic activity found on this spectrum</p>
                             </div>
                         )}
                     </div>

@@ -19,8 +19,8 @@ import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { TrashIcon } from './icons/TrashIcon';
 import { PlusIcon } from './icons/PlusIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
-
-const LOOKING_FOR_LIST = ['Co-founder', 'Business Partner', 'Investor', 'Mentor', 'Advisor', 'Employee', 'Freelancer'];
+// Added missing LoaderIcon import
+import { LoaderIcon } from './icons/LoaderIcon';
 
 const StatCard: React.FC<{ title: string; value: string | number; icon: React.ReactNode; description: string }> = ({ title, value, icon, description }) => (
     <div className="module-frame bg-slate-900/60 p-6 rounded-[2rem] border-white/5 hover:border-white/10 transition-all">
@@ -64,17 +64,8 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
         bio: currentUser.bio || '',
         profession: currentUser.profession || '',
         skills: (currentUser.skills || []).join(', '),
-        awards: currentUser.awards || '',
-        interests: (currentUser.interests || []).join(', '),
-        passions: (currentUser.passions || []).join(', '),
-        gender: currentUser.gender || '',
-        age: currentUser.age || '',
-        isLookingForPartners: currentUser.isLookingForPartners || false,
-        lookingFor: currentUser.lookingFor || [] as string[],
-        businessIdea: currentUser.businessIdea || '',
         id_card_number: currentUser.id_card_number || '',
-        circle: currentUser.circle || '',
-        socialLinks: currentUser.socialLinks || [] as { title: string; url: string }[]
+        circle: currentUser.circle || ''
     });
     
     useEffect(() => {
@@ -82,13 +73,9 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
             name: currentUser.name || '', phone: currentUser.phone || '', address: currentUser.address || '',
             bio: currentUser.bio || '', profession: currentUser.profession || '', 
             skills: (currentUser.skills || []).join(', '),
-            awards: currentUser.awards || '', interests: (currentUser.interests || []).join(', '), passions: (currentUser.passions || []).join(', '),
-            gender: currentUser.gender || '', age: currentUser.age || '',
-            isLookingForPartners: currentUser.isLookingForPartners || false, lookingFor: currentUser.lookingFor || [],
-            businessIdea: currentUser.businessIdea || '',
+            interests: (currentUser.interests || []).join(', '),
             id_card_number: currentUser.id_card_number || '',
-            circle: currentUser.circle || '',
-            socialLinks: currentUser.socialLinks || []
+            circle: currentUser.circle || ''
         });
     }, [currentUser]);
     
@@ -100,13 +87,17 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
     const referralLink = `${window.location.origin}?ref=${currentUser.referralCode}`;
 
     const handleSave = async () => {
-        if (!currentUser.member_id) return;
         setIsSaving(true);
         try {
             const skillsAsArray = (editData.skills || '').split(',').map(s => s.trim()).filter(Boolean);
             const userUpdateData = { ...editData, skills: skillsAsArray, skills_lowercase: skillsAsArray.map(s => s.toLowerCase()) };
-            const memberUpdateData = { ...editData, skills: skillsAsArray, national_id: editData.id_card_number };
-            await api.updateMemberAndUserProfile(currentUser.id, currentUser.member_id, userUpdateData as any, memberUpdateData as any);
+            
+            if (currentUser.member_id) {
+                const memberUpdateData = { ...editData, skills: skillsAsArray, national_id: editData.id_card_number };
+                await api.updateMemberAndUserProfile(currentUser.id, currentUser.member_id, userUpdateData as any, memberUpdateData as any);
+            } else {
+                await onUpdateUser(userUpdateData as any);
+            }
             addToast('Identity Sync Successful.', 'success');
             setIsEditing(false);
         } catch (error: any) {
@@ -126,8 +117,42 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
     const skillsArray = useMemo(() => isEditing ? (editData.skills || '').split(',').map(s => s.trim()).filter(Boolean) : currentUser.skills || [], [isEditing, editData.skills, currentUser.skills]);
     const profileDataForMeter = isEditing ? editData : currentUser;
 
+    const renderEditView = () => (
+        <div className="module-frame glass-module p-10 rounded-[2.5rem] border-white/5 space-y-8 animate-fade-in">
+            <h3 className="label-caps !text-[10px] text-brand-gold border-b border-white/5 pb-4">Refining Identity Anchor</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div className="space-y-2">
+                    <label className="label-caps !text-[9px]">Node Name</label>
+                    <input value={editData.name} onChange={(e) => setEditData({...editData, name: e.target.value})} className="w-full bg-black border border-white/10 p-4 rounded-xl text-white font-bold" />
+                </div>
+                 <div className="space-y-2">
+                    <label className="label-caps !text-[9px]">Designation (Profession)</label>
+                    <input value={editData.profession} onChange={(e) => setEditData({...editData, profession: e.target.value})} className="w-full bg-black border border-white/10 p-4 rounded-xl text-white font-bold" />
+                </div>
+                <div className="space-y-2 col-span-full">
+                    <label className="label-caps !text-[9px]">Narrative (Bio)</label>
+                    <textarea value={editData.bio} onChange={(e) => setEditData({...editData, bio: e.target.value})} rows={4} className="w-full bg-black border border-white/10 rounded-xl p-4 text-white text-sm" />
+                </div>
+                 <div className="space-y-2">
+                    <label className="label-caps !text-[9px]">Capability Profile (Skills)</label>
+                    <input value={editData.skills} onChange={(e) => setEditData({...editData, skills: e.target.value})} className="w-full bg-black border border-white/10 rounded-xl p-4 text-white text-sm" placeholder="Marketing, Agriculture, Code..." />
+                </div>
+                 <div className="space-y-2">
+                    <label className="label-caps !text-[9px]">Circle (Location)</label>
+                    <input value={editData.circle} onChange={(e) => setEditData({...editData, circle: e.target.value.toUpperCase()})} className="w-full bg-black border border-white/10 rounded-xl p-4 text-white text-sm" placeholder="BULAWAYO" />
+                </div>
+            </div>
+            <div className="flex justify-end gap-4 border-t border-white/5 pt-8">
+                <button onClick={() => setIsEditing(false)} className="px-6 py-2 text-gray-500 font-black uppercase text-[10px]">Cancel</button>
+                <button onClick={handleSave} disabled={isSaving} className="px-10 py-4 bg-brand-gold text-slate-950 font-black rounded-xl uppercase tracking-widest text-[10px] shadow-glow-gold active:scale-95">
+                    {isSaving ? <LoaderIcon className="h-4 w-4 animate-spin"/> : 'Commit Sync'}
+                </button>
+            </div>
+        </div>
+    );
+
     const renderProfileView = () => (
-         <div className="mt-10 space-y-10">
+         <div className="mt-10 space-y-10 animate-fade-in">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <StatCard title="Node Reputation" value={currentUser.credibility_score || 100} icon={<ShieldCheckIcon className="h-6 w-6 text-emerald-500"/>} description="Based on peer signatures and activity." />
                 <StatCard title="Peer Vouches" value={currentUser.vouchCount || 0} icon={<TrendingUpIcon className="h-6 w-6 text-brand-gold"/>} description="Verified anchors from other citizens." />
@@ -177,7 +202,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
                 <div>
                     <h2 className="text-3xl sm:text-5xl font-black text-white uppercase tracking-tighter gold-text leading-none">{currentUser.name}</h2>
                     <p className="text-xl font-black text-emerald-400 tracking-tight uppercase mt-1">{currentUser.profession || "Sovereign Node"}</p>
-                    <p className="label-caps !text-[8px] !text-gray-600 mt-2 tracking-[0.4em]">{currentUser.circle} Circle</p>
+                    <p className="label-caps !text-[8px] !text-gray-600 mt-2 tracking-[0.4em]">{currentUser.circle || "GLOBAL"} Circle</p>
                 </div>
             </div>
             {!isEditing && (
@@ -188,7 +213,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
         </div>
         
         <div className="mt-12">
-            <ProfileCompletionMeter profileData={profileDataForMeter} role="member" />
+            <ProfileCompletionMeter profileData={profileDataForMeter as any} role="member" />
         </div>
       </div>
       
@@ -206,7 +231,7 @@ export const MemberProfile: React.FC<MemberProfileProps> = ({ currentUser, onUpd
       </div>
 
        <div className="mt-10">
-            {activeTab === 'profile' ? (isEditing ? null : renderProfileView()) : (
+            {activeTab === 'profile' ? (isEditing ? renderEditView() : renderProfileView()) : (
                 <div className="animate-fade-in">
                     <PostsFeed user={currentUser} authorId={currentUser.id} onViewProfile={onViewProfile} typeFilter={typeFilter} />
                 </div>
