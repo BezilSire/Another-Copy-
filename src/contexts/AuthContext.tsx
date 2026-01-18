@@ -49,6 +49,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
             setCurrentUser(userData);
             
+            // Sovereignty Persistence: Check if server has a vault we don't have locally
             const serverVault = (userData as any).encryptedVault;
             if (serverVault && !cryptoService.hasVault()) {
                 cryptoService.injectVault(serverVault);
@@ -187,11 +188,14 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const agentSignup = useCallback(async (credentials: AgentSignupCredentials) => {
     setIsProcessingAuth(true);
     try {
+      // Protocol Improvement: Ensure signet is active for provisioning
+      const mnemonic = cryptoService.generateMnemonic();
+      const keys = cryptoService.mnemonicToKeyPair(mnemonic);
+      const publicKey = keys.publicKey;
+
       const userCredential = await createUserWithEmailAndPassword(auth, credentials.email, credentials.password);
       const { user } = userCredential;
-      const pubKey = cryptoService.getPublicKey() || "";
 
-      /* Fixed: Added required distress_calls_available property */
       const newAgent: Omit<Agent, 'id'> = {
         name: credentials.name,
         email: credentials.email,
@@ -207,7 +211,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         hasCompletedInduction: true,
         commissionBalance: 0,
         referralEarnings: 0,
-        publicKey: pubKey,
+        publicKey: publicKey, // Immediate Provisioning
         distress_calls_available: 0,
       };
 
@@ -222,9 +226,13 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const publicMemberSignup = useCallback(async (memberData: NewPublicMemberData, password: string) => {
     setIsProcessingAuth(true);
     try {
+        // Protocol Improvement: Keys first
+        const mnemonic = cryptoService.generateMnemonic();
+        const keys = cryptoService.mnemonicToKeyPair(mnemonic);
+        const publicKey = keys.publicKey;
+
         const userCredential = await createUserWithEmailAndPassword(auth, memberData.email, password);
         const { user } = userCredential;
-        const pubKey = cryptoService.getPublicKey() || "";
 
         const batch = writeBatch(db);
         let referrerId = '';
@@ -265,7 +273,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             hasCompletedInduction: true,
             phone: '', address: '', circle: '', id_card_number: '',
             ubtBalance: 0, initialUbtStake: 0,
-            publicKey: pubKey,
+            publicKey: publicKey, // Immediate Provisioning
             createdAt: serverTimestamp(),
             lastSeen: serverTimestamp()
         });
@@ -295,7 +303,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         if (!isCompletingProfile) addToast('Identity updated.', 'success');
     } catch (error: any) {
         addToast('Update failed.', 'error');
-        // Fix: Re-throw the error so UI components know the operation didn't complete
         throw error;
     }
   }, [currentUser, addToast]);
