@@ -41,22 +41,22 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isProcessing, onS
         <div className="w-20 h-20 bg-black rounded-3xl border-2 border-brand-gold/50 flex items-center justify-center shadow-glow-gold mb-8">
             <LogoIcon className="h-12 w-12 text-brand-gold" />
         </div>
-        <h2 className="text-4xl font-black text-center text-white uppercase tracking-tighter gold-text leading-none">Identity</h2>
-        <p className="label-caps mt-3 !text-brand-gold !text-[10px] !tracking-[0.5em]">Protocol Authorization</p>
+        <h2 className="text-4xl font-black text-center text-white uppercase tracking-tighter gold-text leading-none">Log In</h2>
+        <p className="label-caps mt-3 !text-brand-gold !text-[10px] !tracking-[0.5em]">Enter your details</p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-8 relative z-10">
         <div className="space-y-3">
           <label className="label-caps pl-1 !text-white !font-black" htmlFor="email">
-            Node Identity (Email)
+            Email Address
           </label>
           <input
             id="email"
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl py-5 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all placeholder-gray-600 data-mono uppercase font-bold"
-            placeholder="NODE@PROTOCOL.ORG"
+            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl py-5 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all placeholder-gray-600 font-bold"
+            placeholder="YOUR@EMAIL.COM"
             required
             disabled={isProcessing}
           />
@@ -65,14 +65,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isProcessing, onS
         <div className="space-y-3">
           <div className="flex justify-between items-center px-1">
               <label className="label-caps !text-white !font-black" htmlFor="password">
-                Security Key
+                Password
               </label>
               <button
                 type="button"
                 onClick={onSwitchToForgotPassword}
                 className="text-[11px] font-black uppercase tracking-widest text-brand-gold hover:text-white transition-colors"
               >
-                Reset Access?
+                Forgot Password?
               </button>
           </div>
           <div className="relative group">
@@ -101,7 +101,7 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isProcessing, onS
           className="w-full py-6 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl transition-all active:scale-[0.98] shadow-glow-gold disabled:opacity-50 uppercase tracking-[0.4em] text-[12px] mt-4 flex justify-center items-center gap-3"
           disabled={isProcessing}
         >
-          {isProcessing ? "Verifying..." : "Authorize Entry"}
+          {isProcessing ? "Checking..." : "Log In Now"}
         </button>
       </form>
 
@@ -111,14 +111,14 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isProcessing, onS
             onClick={onSwitchToPublicSignup}
             className="text-[12px] font-black uppercase tracking-[0.4em] text-white hover:text-brand-gold transition-all text-center bg-white/5 py-4 rounded-2xl border border-white/5"
           >
-            Create Citizen Node
+            Create New Account
           </button>
           <button
             type="button"
             onClick={onSwitchToSignup}
             className="text-[10px] font-black uppercase tracking-[0.5em] text-gray-500 hover:text-white transition-colors text-center"
           >
-            Deploy Facilitator Agent
+            Become a Community Agent
           </button>
       </div>
     </div>

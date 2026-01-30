@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { LoginPage } from './LoginPage';
 import { SignupPage } from './SignupPage';
@@ -24,10 +25,10 @@ export const AuthPage: React.FC = () => {
     try {
         await cryptoService.saveVault({ mnemonic: m }, p);
         await unlockSovereignSession(data, p);
-        addToast("Identity Re-Anchored.", "success");
+        addToast("Account access restored.", "success");
         setView('login');
     } catch (err) {
-        addToast("Re-anchor failed.", "error");
+        addToast("Restoration failed.", "error");
     }
   };
 
@@ -42,40 +43,40 @@ export const AuthPage: React.FC = () => {
                         <div className="w-20 h-20 bg-black rounded-2xl border border-brand-gold/40 flex items-center justify-center shadow-glow-gold mb-6">
                             <LogoIcon className="h-12 w-12 text-brand-gold" />
                         </div>
-                        <h2 className="text-4xl font-black text-center text-white uppercase tracking-tighter gold-text leading-none">Access Node</h2>
-                        <p className="label-caps mt-3 !text-gray-500 !tracking-[0.4em]">Protocol Authorization</p>
+                        <h2 className="text-4xl font-black text-center text-white uppercase tracking-tighter gold-text leading-none">Welcome</h2>
+                        <p className="label-caps mt-3 !text-gray-500 !tracking-[0.4em]">Community Portal</p>
                     </div>
                     
                     <div className="flex flex-col gap-4 w-full relative z-10">
                         <button 
                             onClick={() => setView('login')} 
-                            className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[11px] shadow-glow-gold active:scale-95 transition-all hover:bg-brand-gold-light"
+                            className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.2em] text-[11px] shadow-glow-gold active:scale-95 transition-all hover:bg-brand-gold-light"
                         >
-                            Connect Node (Login)
+                            Log In to My Account
                         </button>
                         <button 
                             onClick={() => setView('genesis')} 
-                            className="w-full py-6 bg-white/5 border border-white/10 text-white font-black rounded-2xl uppercase tracking-[0.4em] text-[11px] hover:bg-white/10 active:scale-95 transition-all"
+                            className="w-full py-6 bg-white/5 border border-white/10 text-white font-black rounded-2xl uppercase tracking-[0.2em] text-[11px] hover:bg-white/10 active:scale-95 transition-all"
                         >
-                            Register New Node
+                            Create New Account
                         </button>
                         
                         <div className="mt-8 pt-8 border-t border-white/5 flex flex-col gap-4">
                             <button 
                                 onClick={() => setView('recovery')} 
-                                className="w-full flex items-center justify-center gap-3 py-5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-2xl text-[10px] font-black text-red-500 uppercase tracking-[0.3em] transition-all shadow-[0_0_20px_rgba(239,68,68,0.2)]"
+                                className="w-full flex items-center justify-center gap-3 py-5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-2xl text-[10px] font-black text-red-500 uppercase tracking-[0.3em] transition-all"
                             >
                                 <AlertTriangleIcon className="h-4 w-4" />
-                                Lazarus Protocol Recovery
+                                I Lost My Recovery Key
                             </button>
                             <p className="text-[8px] text-gray-600 text-center uppercase font-bold tracking-widest px-4 leading-relaxed">
-                                Use this if you lost your 12-word phrase or forgotten your local PIN.
+                                Use this if you lost your 12-word phrase or forgotten your PIN.
                             </p>
                         </div>
                     </div>
 
                     <div className="mt-12 text-center pb-2 relative z-10 border-t border-white/5 pt-8 w-full">
-                        <button onClick={() => setIsPolicyVisible(true)} className="text-[8px] font-black uppercase tracking-[0.6em] text-gray-700 hover:text-brand-gold transition-colors">Privacy & Compliance Protocol</button>
+                        <button onClick={() => setIsPolicyVisible(true)} className="text-[8px] font-black uppercase tracking-[0.6em] text-gray-700 hover:text-brand-gold transition-colors">Privacy & Terms</button>
                     </div>
                 </div>
             );

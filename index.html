@@ -1,14 +1,14 @@
+
 <!DOCTYPE html>
 <html lang="en" class="dark">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Ubuntium | Sovereign Protocol</title>
+  <title>Ubuntium | Community Hub</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/logo.svg" type="image/svg+xml">
-  <meta name="theme-color" content="#020617"/>
+  <meta name="theme-color" content="#0f172a"/>
   <link rel="stylesheet" href="https://rsms.me/inter/inter.css">
-  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@500;800&display=swap" rel="stylesheet">
   <script src="https://cdn.tailwindcss.com"></script>
   <script>
     tailwind.config = {
@@ -17,43 +17,30 @@
         extend: {
           fontFamily: {
             sans: ['Inter', 'sans-serif'],
-            mono: ['JetBrains Mono', 'monospace'],
           },
           colors: {
-            obsidian: {
-              DEFAULT: '#020617',
-              light: '#0f172a',
-              muted: '#1e293b'
+            midnight: {
+              DEFAULT: '#0f172a',
+              light: '#1e293b',
+              lighter: '#334155'
             },
-            gold: {
-              DEFAULT: '#D4AF37',
-              light: '#FFD76A',
-              dark: '#8C6C1E'
-            },
-            'brand-gold': {
-              DEFAULT: '#D4AF37',
-              light: '#FFD76A',
-              dark: '#8C6C1E'
-            },
-            'brand-matrix': '#00FF41'
+            brand: {
+              gold: '#D4AF37',
+              goldlight: '#FFD76A',
+              green: '#22c55e'
+            }
           },
           animation: {
-            'fade-in': 'fadeIn 0.4s ease-out forwards',
-            'pulse-soft': 'pulseSoft 4s infinite ease-in-out',
-            'spin-slow': 'spin 8s linear infinite',
-            'terminal-cursor': 'cursor 1s infinite',
-            'scan-move': 'scanMove 2s linear infinite'
+            'fade-in': 'fadeIn 0.3s ease-out forwards',
+            'slide-up': 'slideUp 0.4s ease-out forwards'
           },
           keyframes: {
-            fadeIn: { '0%': { opacity: 0, transform: 'translateY(10px)' }, '100%': { opacity: 1, transform: 'translateY(0)' } },
-            pulseSoft: { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0.8 } },
-            cursor: { '0%, 100%': { opacity: 1 }, '50%': { opacity: 0 } },
-            scanMove: { '0%': { transform: 'translateY(0)' }, '100%': { transform: 'translateY(256px)' } }
+            fadeIn: { '0%': { opacity: 0 }, '100%': { opacity: 1 } },
+            slideUp: { '0%': { transform: 'translateY(10px)', opacity: 0 }, '100%': { transform: 'translateY(0)', opacity: 1 } }
           },
           boxShadow: {
-            'glow-gold': '0 0 20px -5px rgba(212, 175, 55, 0.4)',
-            'glow-matrix': '0 0 20px -5px rgba(0, 255, 65, 0.3)',
-            'premium': '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
+            'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.3)',
+            'premium': '0 20px 40px -10px rgba(0, 0, 0, 0.5)'
           }
         },
       },
@@ -61,8 +48,8 @@
   </script>
   <style>
     body { 
-      background-color: #000000;
-      color: #f8fafc;
+      background-color: #020617;
+      color: #f1f5f9;
       overflow-x: hidden;
       -webkit-font-smoothing: antialiased;
     }
@@ -73,100 +60,55 @@
       flex-direction: column;
     }
 
-    .glass-card, .glass-module {
-      background: rgba(15, 23, 42, 0.6);
-      backdrop-filter: blur(12px);
-      -webkit-backdrop-filter: blur(12px);
-      border: 1px solid rgba(255, 255, 255, 0.05);
-    }
-
-    .gold-text {
-      background: linear-gradient(to bottom, #FFD76A, #D4AF37);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
+    .fintech-card {
+      background: #0f172a;
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 1.5rem;
     }
 
     .no-scrollbar::-webkit-scrollbar { display: none; }
     
-    .blueprint-grid {
-      background-image: linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
-                        linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
-      background-size: 40px 40px;
-    }
-
-    .corner-tl, .corner-tr, .corner-bl, .corner-br {
-        position: absolute;
-        width: 20px;
-        height: 20px;
-        border-color: rgba(255, 255, 255, 0.3);
-        pointer-events: none;
-    }
-    .corner-tl { top: 0; left: 0; border-top: 1px solid; border-left: 1px solid; }
-    .corner-tr { top: 0; right: 0; border-top: 1px solid; border-right: 1px solid; }
-    .corner-bl { bottom: 0; left: 0; border-bottom: 1px solid; border-left: 1px solid; }
-    .corner-br { bottom: 0; right: 0; border-bottom: 1px solid; border-right: 1px solid; }
-
     input, select, textarea {
-      background: #0f172a !important;
-      border: 2px solid rgba(255, 255, 255, 0.15) !important;
-      border-radius: 1rem !important;
-      padding: 1rem 1.25rem !important;
+      background: #1e293b !important;
+      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+      border-radius: 0.75rem !important;
+      padding: 0.75rem 1rem !important;
       color: white !important;
-      font-size: 1rem !important;
-      transition: all 0.2s ease-in-out !important;
+      font-size: 0.95rem !important;
+      transition: all 0.2s ease !important;
     }
 
     input:focus {
       border-color: #D4AF37 !important;
-      background: #1e293b !important;
       outline: none !important;
-      box-shadow: 0 0 15px rgba(212, 175, 55, 0.2) !important;
+      box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.2) !important;
     }
 
-    .label-caps {
-        font-family: 'JetBrains Mono', monospace;
+    .label-simple {
+        font-size: 0.75rem;
+        font-weight: 700;
         text-transform: uppercase;
-        letter-spacing: 0.3em;
-        font-size: 0.8rem;
-        font-weight: 800;
-        color: #ffffff !important;
-        opacity: 1 !important;
+        letter-spacing: 0.05em;
+        color: #94a3b8;
         display: block;
+        margin-bottom: 0.5rem;
     }
-    
-    .data-mono {
-        font-family: 'JetBrains Mono', monospace;
-    }
-
-    ::placeholder {
-        color: #475569 !important;
-        opacity: 1 !important;
-    }
-
-    .wysiwyg-content h1 { font-size: 1.5rem; font-weight: 800; margin-bottom: 0.5rem; color: #D4AF37; }
-    .wysiwyg-content h2 { font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: #D4AF37; }
-    .wysiwyg-content b, .wysiwyg-content strong { font-weight: 800; color: white; }
-    .wysiwyg-content i, .wysiwyg-content em { font-style: italic; }
-
-    .markdown-stream > *:first-child { margin-top: 0 !important; }
-    .markdown-stream > *:last-child { margin-bottom: 0 !important; }
-    .markdown-stream p { margin-bottom: 0.75rem; }
   </style>
 <script type="importmap">
 {
   "imports": {
-    "firebase/": "https://esm.sh/firebase@^12.7.0/",
-    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
-    "react": "https://esm.sh/react@^19.2.3",
-    "react/": "https://esm.sh/react@^19.2.3/",
-    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
-    "html5-qrcode": "https://esm.sh/html5-qrcode@^2.3.8",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
     "buffer": "https://esm.sh/buffer@^6.0.3",
+    "firebase/": "https://esm.sh/firebase@^12.8.0/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.38.0",
     "qrcode": "https://esm.sh/qrcode@^1.5.4",
-    "bip39": "https://esm.sh/bip39@^3.1.0",
     "tweetnacl": "https://esm.sh/tweetnacl@^1.0.3",
+    "bip39": "https://esm.sh/bip39@^3.1.0",
+    "html5-qrcode": "https://esm.sh/html5-qrcode@^2.3.8",
+    "vite": "https://esm.sh/vite@^7.3.1",
     "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2",
-    "vite": "https://esm.sh/vite@^7.3.0",
     "fs": "https://esm.sh/fs@^0.0.1-security",
     "path": "https://esm.sh/path@^0.12.7"
   }

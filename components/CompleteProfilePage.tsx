@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { User } from '../types';
 import { useToast } from '../contexts/ToastContext';
@@ -39,7 +40,7 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
     const missing = required.some(f => !(formData as any)[f]?.trim());
 
     if (missing) {
-      addToast('Enter all mandatory identity nodes.', 'error');
+      addToast('Please fill in all information.', 'error');
       return;
     }
 
@@ -56,12 +57,10 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
           circle: formData.circle,
           isProfileComplete: true
       };
-      // Logic: Wait for the identity to be anchored to the ledger
       await onProfileComplete(dataToSubmit);
-      addToast('Identity anchored to mainnet.', 'success');
+      addToast('Profile updated!', 'success');
     } catch (error: any) {
-      console.error("Protocol sync fail:", error);
-      // AuthContext handles specific "Update failed" toast, so we just reset local saving state
+      console.error("Profile save error:", error);
     } finally {
       setIsSaving(false);
     }
@@ -72,13 +71,12 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
         <div className="module-frame glass-module p-8 sm:p-12 rounded-[3.5rem] border-white/10 shadow-premium animate-fade-in relative overflow-hidden">
             <div className="corner-tl opacity-30"></div><div className="corner-tr opacity-30"></div>
             
-            {/* High-Visibility Bypass Action */}
             {onCancel && (
                 <button 
                     type="button"
                     onClick={onCancel}
                     className="absolute top-6 right-6 z-50 p-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl border border-red-500/20 transition-all cursor-pointer shadow-lg active:scale-90"
-                    title="Explore App First"
+                    title="Skip for now"
                 >
                     <XCircleIcon className="h-6 w-6" />
                 </button>
@@ -88,33 +86,33 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
                 <div className="w-20 h-20 bg-brand-gold/10 rounded-2xl flex items-center justify-center border border-brand-gold/20 mx-auto mb-6 shadow-glow-gold">
                     <ShieldCheckIcon className="h-10 w-10 text-brand-gold" />
                 </div>
-                <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text leading-none">Identity Anchor</h2>
-                <p className="text-[10px] text-gray-500 uppercase font-black tracking-[0.4em] mt-3">Finalizing Protocol Induction</p>
+                <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text leading-none">Your Profile</h2>
+                <p className="text-[10px] text-gray-500 uppercase font-black tracking-[0.4em] mt-3">Help people find you</p>
             </div>
 
             <ProfileCompletionMeter profileData={{ ...user, ...formData, skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean) }} role={user.role} />
 
             <form onSubmit={handleSubmit} className="space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <InputField label="Operational Node (Phone)" name="phone" value={formData.phone} onChange={handleChange} required placeholder="+263..." />
-                    <InputField label="Identity Seal (National ID)" name="id_card_number" value={formData.id_card_number} onChange={handleChange} required placeholder="ID_NUMBER" />
-                    <InputField label="Designation (Profession)" name="profession" value={formData.profession} onChange={handleChange} required placeholder="E.G. DEVELOPER" />
-                    <InputField label="Circle (Location)" name="circle" value={formData.circle} onChange={handleChange} required placeholder="E.G. HARARE" />
+                    <InputField label="Phone Number" name="phone" value={formData.phone} onChange={handleChange} required placeholder="+263..." />
+                    <InputField label="National ID Number" name="id_card_number" value={formData.id_card_number} onChange={handleChange} required placeholder="ID Number" />
+                    <InputField label="What is your job?" name="profession" value={formData.profession} onChange={handleChange} required placeholder="E.G. FARMER" />
+                    <InputField label="Your City/Town" name="circle" value={formData.circle} onChange={handleChange} required placeholder="E.G. HARARE" />
                 </div>
                 
                 <div className="space-y-2">
-                    <label className="label-caps !text-[9px]">Sovereign Residence</label>
+                    <label className="label-caps !text-[9px]">Home Address</label>
                     <input name="address" value={formData.address} onChange={handleChange} required className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white font-bold placeholder-gray-700" placeholder="FULL PHYSICAL ADDRESS" />
                 </div>
 
                 <div className="space-y-2">
-                    <label className="label-caps !text-[9px]">Capability Profile (Comma Separated)</label>
-                    <input name="skills" value={formData.skills} onChange={handleChange} className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white font-mono text-xs uppercase" placeholder="MARKETING, TRADING, AGRI..." />
+                    <label className="label-caps !text-[9px]">Your Skills (Separated by commas)</label>
+                    <input name="skills" value={formData.skills} onChange={handleChange} className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white font-mono text-xs uppercase" placeholder="FARMING, TRADING, MARKETING..." />
                 </div>
 
                 <div className="space-y-2">
-                    <label className="label-caps !text-[9px]">Citizen Narrative</label>
-                    <textarea name="bio" rows={4} value={formData.bio} onChange={handleChange} required className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white text-sm leading-relaxed" placeholder="Tell the community a little about your node purpose..."/>
+                    <label className="label-caps !text-[9px]">A little about you</label>
+                    <textarea name="bio" rows={4} value={formData.bio} onChange={handleChange} required className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white text-sm leading-relaxed" placeholder="Tell the community who you are..."/>
                 </div>
 
                 <div className="flex flex-col gap-4">
@@ -123,7 +121,7 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
                         disabled={isSaving || isProcessingAuth} 
                         className={`w-full py-6 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[12px] shadow-glow-gold transition-all active:scale-95 flex items-center justify-center gap-3 cursor-pointer ${isSaving || isProcessingAuth ? 'opacity-70 grayscale cursor-not-allowed' : ''}`}
                     >
-                        {isSaving || isProcessingAuth ? <LoaderIcon className="h-5 w-5 animate-spin" /> : "Complete Handshake"}
+                        {isSaving || isProcessingAuth ? <LoaderIcon className="h-5 w-5 animate-spin" /> : "Save Changes"}
                     </button>
                     
                     {onCancel && (
@@ -132,7 +130,7 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
                             onClick={onCancel}
                             className="w-full py-2 text-[10px] font-black text-gray-600 hover:text-white uppercase tracking-[0.3em] transition-colors"
                         >
-                            Skip for now & explore
+                            Skip for now
                         </button>
                     )}
                 </div>

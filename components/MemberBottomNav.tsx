@@ -1,12 +1,13 @@
+
 import React from 'react';
 import { HomeIcon } from './icons/HomeIcon';
-import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon';
 import { WalletIcon } from './icons/WalletIcon';
 import { TrendingUpIcon } from './icons/TrendingUpIcon';
-import { GlobeIcon } from './icons/GlobeIcon';
-import { DatabaseIcon } from './icons/DatabaseIcon';
+import { MessageSquareIcon } from './icons/MessageSquareIcon';
+import { AwardIcon } from './icons/AwardIcon';
+import { MoreHorizontalIcon } from './icons/MoreHorizontalIcon';
 
-type MemberView = 'home' | 'state' | 'ledger' | 'chats' | 'hub' | 'more' | 'wallet' | 'lab';
+type MemberView = 'home' | 'wallet' | 'hub' | 'chats' | 'earn' | 'more';
 
 interface MemberBottomNavProps {
     activeView: MemberView;
@@ -24,61 +25,58 @@ const NavItem: React.FC<{
 }> = ({ icon, label, isActive, onClick, hasNotification, special }) => (
     <button
         onClick={onClick}
-        className={`relative flex flex-col items-center justify-center flex-1 h-full transition-all duration-500 
-        ${isActive ? 'text-brand-gold' : 'text-white hover:opacity-80'}
+        className={`relative flex flex-col items-center justify-center flex-1 h-full transition-all duration-300 
+        ${isActive ? 'text-brand-gold' : 'text-slate-400 hover:text-white'}
         `}
     >
-        <div className={`p-1.5 sm:p-2 rounded-xl transition-all duration-500 ${isActive ? (special ? 'bg-brand-gold text-black shadow-glow-gold scale-110' : 'bg-brand-gold/10') : 'bg-transparent'}`}>
-          <span className="h-5 w-5 sm:h-6 sm:w-6 block">{icon}</span>
+        <div className={`p-1.5 rounded-xl transition-all duration-300 ${isActive ? (special ? 'bg-brand-gold text-slate-900 shadow-lg scale-110' : 'bg-white/5') : 'bg-transparent'}`}>
+          <span className="h-5 w-5 block">{icon}</span>
         </div>
-        <span className={`truncate text-[8px] sm:text-[9px] font-black uppercase tracking-[0.1em] mt-1 ${isActive ? 'opacity-100 text-brand-gold' : 'opacity-100 text-white'}`}>{label}</span>
-        {isActive && !special && (
-            <div className="absolute bottom-1 w-1 h-1 bg-brand-gold rounded-full shadow-[0_0_8px_#D4AF37]"></div>
-        )}
+        <span className={`text-[9px] font-bold mt-1 ${isActive ? 'opacity-100' : 'opacity-80'}`}>{label}</span>
         {hasNotification && !isActive && (
-            <span className="absolute top-2 right-1/2 translate-x-3 block w-2 h-2 bg-red-600 rounded-full border border-black animate-pulse"></span>
+            <span className="absolute top-2 right-1/2 translate-x-3 block w-2 h-2 bg-red-500 rounded-full border border-slate-900"></span>
         )}
     </button>
 );
 
 export const MemberBottomNav: React.FC<MemberBottomNavProps> = ({ activeView, setActiveView, unreadNotificationCount }) => {
     return (
-        <footer className="fixed bottom-0 left-0 right-0 z-40 px-2 pb-4 sm:pb-6">
-            <div className="max-w-xl mx-auto h-16 sm:h-20 bg-slate-900/95 backdrop-blur-2xl border border-white/10 rounded-[2rem] sm:rounded-[2.5rem] shadow-[0_20px_50px_rgba(0,0,0,1)] flex justify-around items-center px-1 relative overflow-hidden">
+        <footer className="fixed bottom-0 left-0 right-0 z-40 px-3 pb-6">
+            <div className="max-w-md mx-auto h-16 bg-slate-900/90 backdrop-blur-2xl border border-white/10 rounded-2xl shadow-premium flex justify-around items-center px-1">
                 <NavItem
                     icon={<HomeIcon className="h-full w-full" />}
-                    label="Oracle"
+                    label="Home"
                     isActive={activeView === 'home'}
                     onClick={() => setActiveView('home')}
                 />
                 <NavItem
-                    icon={<GlobeIcon className="h-full w-full" />}
-                    label="Ledger"
-                    isActive={activeView === 'ledger'}
-                    onClick={() => setActiveView('ledger')}
+                    icon={<WalletIcon className="h-full w-full" />}
+                    label="Wallet"
+                    isActive={activeView === 'wallet'}
+                    onClick={() => setActiveView('wallet')}
                 />
                 <NavItem
                     icon={<TrendingUpIcon className="h-full w-full" />}
-                    label="Pulse"
+                    label="Buy UBT"
                     isActive={activeView === 'hub'}
                     onClick={() => setActiveView('hub')}
                     special
                 />
                 <NavItem
-                    icon={<DatabaseIcon className="h-full w-full" />}
-                    label="Lab"
-                    isActive={activeView === 'lab'}
-                    onClick={() => setActiveView('lab')}
+                    icon={<MessageSquareIcon className="h-full w-full" />}
+                    label="Chat"
+                    isActive={activeView === 'chats'}
+                    onClick={() => setActiveView('chats')}
                 />
                 <NavItem
-                    icon={<WalletIcon className="h-full w-full" />}
-                    label="Vault"
-                    isActive={activeView === 'wallet'}
-                    onClick={() => setActiveView('wallet')}
+                    icon={<AwardIcon className="h-full w-full" />}
+                    label="Earn"
+                    isActive={activeView === 'earn'}
+                    onClick={() => setActiveView('earn')}
                 />
                 <NavItem
                     icon={<MoreHorizontalIcon className="h-full w-full" />}
-                    label="Sys"
+                    label="Menu"
                     isActive={activeView === 'more'}
                     onClick={() => setActiveView('more')}
                     hasNotification={unreadNotificationCount > 0}

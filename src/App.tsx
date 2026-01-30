@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { AgentDashboard } from './components/AgentDashboard';
 import { AdminDashboard } from './components/AdminDashboard';
@@ -16,22 +17,43 @@ import { LogoIcon } from './components/icons/LogoIcon';
 import { LoaderIcon } from './components/icons/LoaderIcon';
 import { cryptoService } from './services/cryptoService';
 import { RadarModal } from './components/RadarModal';
-import { VideoMeeting } from './components/VideoMeeting';
-import { GuestMeetingPage } from './components/GuestMeetingPage';
 import { LedgerPage } from './components/LedgerPage';
 
 const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [logs, setLogs] = useState<string[]>([]);
-  const sequence = ["> BOOTING UBUNTIUM_CORE_v5.2.1...", "> INITIALIZING CRYPTO_LAYER...", "> SYNCING_GLOBAL_DAG...", "> RESOLVING_SOVEREIGN_ID...", "> WELCOME CITIZEN."];
+  const sequence = [
+    "Welcome to Ubuntium...",
+    "Preparing your community dashboard...",
+    "Connecting to the network...",
+    "Securing your connection...",
+    "Ready."
+  ];
   useEffect(() => {
     let i = 0;
-    const interval = window.setInterval(() => { if (i < sequence.length) { setLogs(prev => [...prev, sequence[i]]); i++; } else { window.clearInterval(interval); setTimeout(onComplete, 300); } }, 60);
+    const interval = window.setInterval(() => { 
+        if (i < sequence.length) { 
+            setLogs(prev => [...prev, sequence[i]]); 
+            i++; 
+        } else { 
+            window.clearInterval(interval); 
+            setTimeout(onComplete, 300); 
+        } 
+    }, 100);
     return () => window.clearInterval(interval);
   }, [onComplete]);
   return (
-    <div className="fixed inset-0 z-[200] bg-black flex flex-col items-center justify-center p-8 font-mono text-brand-gold">
-      <div className="w-24 h-24 mb-16 relative"><LogoIcon className="h-full w-full text-brand-gold animate-pulse" /><div className="absolute inset-0 border border-brand-gold/20 rounded-full animate-ping scale-150 opacity-20"></div></div>
-      <div className="w-full max-w-xs space-y-2 border-l-2 border-brand-gold/30 pl-6"> {logs.map((log, idx) => ( <div key={idx} className="text-[10px] tracking-widest font-black uppercase text-brand-gold/90 animate-fade-in">{log}</div> ))} <div className="w-2.5 h-3.5 bg-brand-gold animate-terminal-cursor mt-2 shadow-[0_0_10px_#D4AF37]"></div> </div>
+    <div className="fixed inset-0 z-[200] bg-slate-950 flex flex-col items-center justify-center p-8 font-sans text-brand-gold">
+      <div className="w-24 h-24 mb-16 relative">
+        <LogoIcon className="h-full w-full text-brand-gold animate-pulse" />
+        <div className="absolute inset-0 border border-brand-gold/20 rounded-full animate-ping scale-150 opacity-20"></div>
+      </div>
+      <div className="w-full max-w-xs space-y-3">
+        {logs.map((log, idx) => (
+          <div key={idx} className="text-xs tracking-wide font-bold text-brand-gold/90 animate-fade-in text-center">
+            {log}
+          </div>
+        ))}
+      </div>
     </div>
   );
 };
@@ -39,25 +61,22 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
 const App: React.FC = () => {
   const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser } = useAuth();
   
-  // Rule: Detect Explorer Mode immediately to bypass all Auth delays
   const isExplorer = process.env.SITE_MODE === 'EXPLORER';
-
+  
   const [isBooting, setIsBooting] = useState(!isExplorer); 
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<Conversation | 'main' | null>(null);
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const [isRadarOpen, setIsRadarOpen] = useState(false);
-  const [activeMeetingId, setActiveMeetingId] = useState<string | null>(null);
   const [forceView, setForceView] = useState<string | null>(null);
-  
+
   const [hasSkippedProfile, setHasSkippedProfile] = useState(() => sessionStorage.getItem('ugc_skip_anchor') === 'true');
 
-  useEffect(() => {
-      const params = new URLSearchParams(window.location.search);
-      const joinId = params.get('join');
-      if (joinId) setActiveMeetingId(joinId);
-  }, []);
+  const handleSkipProfile = () => {
+      sessionStorage.setItem('ugc_skip_anchor', 'true');
+      setHasSkippedProfile(true);
+  };
 
   useEffect(() => {
     if (currentUser && !firebaseUser?.isAnonymous) {
@@ -72,11 +91,6 @@ const App: React.FC = () => {
       setIsLogoutConfirmOpen(false); 
       window.location.reload(); 
   };
-
-  const handleSkipProfile = () => {
-      sessionStorage.setItem('ugc_skip_anchor', 'true');
-      setHasSkippedProfile(true);
-  };
   
   const handleOpenChat = () => setChatTarget('main');
   const handleOpenMeet = () => setForceView('meeting');
@@ -84,19 +98,8 @@ const App: React.FC = () => {
   const handleViewProfile = (userId: string | null) => { setChatTarget(null); setViewingProfileId(userId); };
   
   const renderMainContent = () => {
-    // Protocol: Explorer Site Entry Point - Return immediately
-    if (isExplorer) {
-        return <LedgerPage />;
-    }
-
+    if (isExplorer) return <LedgerPage />;
     if (isBooting) return null;
-    
-    if (firebaseUser?.isAnonymous) {
-        if (activeMeetingId && currentUser) return <VideoMeeting user={currentUser} meetingId={activeMeetingId} isHost={false} onEnd={confirmLogout} />;
-        return <GuestMeetingPage meetingId={activeMeetingId || ''} />;
-    }
-
-    if (activeMeetingId && !firebaseUser && !isLoadingAuth) return <GuestMeetingPage meetingId={activeMeetingId} />;
     
     if (currentUser || firebaseUser) {
         const userToRender = currentUser || ({ 
@@ -108,7 +111,6 @@ const App: React.FC = () => {
             isProfileComplete: false
         } as any);
 
-        if (activeMeetingId) return <VideoMeeting user={userToRender} meetingId={activeMeetingId} isHost={false} onEnd={() => { setActiveMeetingId(null); window.history.pushState({}, '', window.location.pathname); }} />;
         if (chatTarget) return <ChatsPage user={userToRender} initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null} onClose={() => setChatTarget(null)} onViewProfile={handleViewProfile} onNewMessageClick={() => {}} onNewGroupClick={() => {}} />;
         if (viewingProfileId) return <div className="main-container py-10"><PublicProfile userId={viewingProfileId} currentUser={userToRender} onBack={() => setViewingProfileId(null)} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(userToRender, target); setViewingProfileId(null); setChatTarget(convo); } }} onViewProfile={(id) => setViewingProfileId(id)} isAdminView={userToRender.role === 'admin'} /></div>;
         
@@ -139,7 +141,7 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 <div className="space-y-4">
-                    <div className="text-[10px] uppercase font-black tracking-[0.5em] text-white/30 font-mono italic">Synchronizing_Protocol_State</div>
+                    <div className="text-[10px] uppercase font-black tracking-[0.5em] text-white/30 font-sans">Checking Security...</div>
                     <div className="w-48 h-1 bg-white/5 mx-auto rounded-full overflow-hidden">
                         <div className="h-full bg-brand-gold/40 animate-scan-move"></div>
                     </div>
@@ -152,9 +154,9 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="flex flex-col min-h-screen bg-black selection:bg-brand-gold/30">
-      {isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
-      {!isBooting && (
+    <div className={`flex flex-col min-h-screen selection:bg-brand-gold/30 bg-black`}>
+      {!isExplorer && isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
+      {(isExplorer || !isBooting) && (
           <div className="flex-1 flex flex-col animate-fade-in">
             { (currentUser || firebaseUser) && !firebaseUser?.isAnonymous && !isExplorer && (
                 <Header 
@@ -169,7 +171,7 @@ const App: React.FC = () => {
             )}
             <main className="flex-1">{renderMainContent()}</main>
             <ToastContainer />
-            <ConfirmationDialog isOpen={isLogoutConfirmOpen} onClose={() => setIsLogoutConfirmOpen(false)} onConfirm={confirmLogout} title="Disconnect Node" message="End your secure session with the global ledger?" confirmButtonText="Terminate" />
+            <ConfirmationDialog isOpen={isLogoutConfirmOpen} onClose={() => setIsLogoutConfirmOpen(false)} onConfirm={confirmLogout} title="Log Out" message="Are you sure you want to log out of your account?" confirmButtonText="Log Out" />
             {isRadarOpen && currentUser && <RadarModal isOpen={isRadarOpen} onClose={() => setIsRadarOpen(false)} currentUser={currentUser} onViewProfile={handleViewProfile} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(currentUser, target); setViewingProfileId(null); setChatTarget(convo); } }} />}
           </div>
       )}

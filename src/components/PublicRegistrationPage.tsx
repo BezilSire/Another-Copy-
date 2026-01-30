@@ -32,8 +32,6 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
     const { name, value } = e.target;
     if (name === 'referralCode') {
         setFormData(prev => ({ ...prev, [name]: value.toUpperCase() }));
-    } else if (name === 'email') {
-        setFormData(prev => ({ ...prev, [name]: value.toLowerCase() }));
     } else {
         setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -53,7 +51,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
             <div className="w-16 h-16 bg-black rounded-xl border border-brand-gold/40 flex items-center justify-center shadow-glow-gold mb-6">
                 <LogoIcon className="h-10 w-10 text-brand-gold" />
             </div>
-            <h2 className="text-3xl font-black text-center text-white tracking-tighter uppercase gold-text leading-none">Sign Up</h2>
+            <h2 className="text-3xl font-black text-center text-white tracking-tighter uppercase gold-text leading-none">Register</h2>
             <p className="label-caps mt-2 !text-brand-gold">Create your new account</p>
         </div>
 
@@ -81,8 +79,8 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     value={formData.email} 
                     onChange={handleChange} 
                     required 
-                    className="w-full bg-slate-950 border border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-1 focus:ring-brand-gold transition-all lowercase" 
-                    placeholder="yourname@gmail.com"
+                    className="w-full bg-slate-950 border border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-1 focus:ring-brand-gold transition-all" 
+                    placeholder="EMAIL@EXAMPLE.COM"
                     disabled={isProcessing}
                 />
             </div>

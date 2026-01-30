@@ -26,7 +26,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                 const newMnemonic = cryptoService.generateMnemonic();
                 setMnemonic(newMnemonic);
             } catch (error) {
-                console.error("CRITICAL_CORE_ERROR: Entropy generation failed.", error);
+                console.error("Security setup error:", error);
             } finally {
                 setIsGenerating(false);
             }
@@ -44,20 +44,20 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
             if (verifyInput.trim().toLowerCase() === words[verifyWordIndex]) {
                 setStep(3);
             } else {
-                alert("INTEGRITY_MISMATCH: Verification word incorrect. Re-examine your phrase.");
+                alert("The word doesn't match. Please check your list again.");
                 setVerifyInput('');
             }
         } else if (step === 3) {
             if (pin.length === 6 && pin === confirmPin) {
                 onComplete(mnemonic, pin);
             } else {
-                alert("PIN_ERROR: Sequences must be 6 digits and identical.");
+                alert("The PINs must be 6 digits and must match.");
             }
         }
     };
 
     return (
-        <div className="module-frame glass-module p-8 sm:p-12 rounded-[3rem] border-brand-gold/20 shadow-premium animate-fade-in max-w-2xl w-full relative z-50 pointer-events-auto">
+        <div className="module-frame glass-module p-8 sm:p-12 rounded-[3rem] border-brand-gold/20 shadow-premium animate-fade-in max-w-2xl w-full relative">
             <div className="corner-tl !border-brand-gold/40"></div><div className="corner-tr !border-brand-gold/40"></div><div className="corner-bl !border-brand-gold/40"></div><div className="corner-br !border-brand-gold/40"></div>
             
             <div className="flex flex-col items-center mb-10 text-center">
@@ -65,10 +65,10 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                     <ShieldCheckIcon className="h-8 w-8 text-brand-gold" />
                 </div>
                 <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text leading-none">
-                    {step === 1 ? 'Genesis Anchor' : step === 2 ? 'Verify Anchor' : 'Node Seal'}
+                    {step === 1 ? 'Your Golden Key' : step === 2 ? 'Double Check' : 'Your PIN'}
                 </h2>
                 <p className="label-caps mt-3 !text-gray-500 !text-[8px] !tracking-[0.4em]">
-                    {step === 1 ? 'Securing 12-Word Root Identity' : step === 2 ? 'Proving State Provenance' : 'Establishing Local Access Sequence'}
+                    {step === 1 ? 'Save these recovery words' : step === 2 ? 'Confirming your key' : 'Choose a personal code'}
                 </p>
             </div>
 
@@ -76,7 +76,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                 <div className="space-y-8 animate-fade-in">
                     <div className="bg-red-950/20 border border-red-500/20 p-5 rounded-2xl text-center">
                         <p className="text-[10px] text-red-500 font-black uppercase tracking-[0.2em] leading-loose">
-                            These 12 words are your <span className="text-white">Absolute Sovereign Identity</span>. Write them down offline. Loss results in permanent node lockout.
+                            Write these 12 words down on a piece of paper. If you ever lose access to your account, these words are the <span className="text-white">only way</span> to get back in.
                         </p>
                     </div>
                     
@@ -84,7 +84,7 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                         {isGenerating ? (
                             <div className="col-span-full flex flex-col items-center justify-center gap-4 py-12">
                                 <LoaderIcon className="h-10 w-10 animate-spin text-brand-gold opacity-50"/>
-                                <span className="label-caps !text-[8px] opacity-40">gathering_entropy...</span>
+                                <span className="label-caps !text-[8px] opacity-40">Creating your key...</span>
                             </div>
                         ) : words.map((w, i) => (
                             <div key={i} className="bg-black/40 border border-white/5 p-4 rounded-xl flex items-center gap-3 group hover:border-brand-gold/30 transition-all">
@@ -97,65 +97,65 @@ export const GenesisNodeFlow: React.FC<GenesisNodeFlowProps> = ({ onComplete, on
                     <button 
                         onClick={handleNextStep} 
                         disabled={isGenerating || !mnemonic}
-                        className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-3 disabled:opacity-20 cursor-pointer"
+                        className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all flex justify-center items-center gap-3 disabled:opacity-20"
                     >
-                        I Have Anchored My Phrase <ArrowRightIcon className="h-4 w-4"/>
+                        I've Written Them Down <ArrowRightIcon className="h-4 w-4"/>
                     </button>
                 </div>
             )}
 
             {step === 2 && (
                 <div className="space-y-10 animate-fade-in max-w-sm mx-auto text-center">
-                    <p className="text-gray-400 text-sm leading-relaxed uppercase font-black tracking-widest opacity-80">Enter word number <strong className="text-brand-gold">#{verifyWordIndex + 1}</strong> from your phrase to confirm storage.</p>
+                    <p className="text-gray-400 text-sm leading-relaxed uppercase font-black tracking-widest opacity-80">Enter word number <strong className="text-brand-gold">#{verifyWordIndex + 1}</strong> from your list.</p>
                     <input 
                         type="text" 
                         value={verifyInput}
                         onChange={e => setVerifyInput(e.target.value.toLowerCase().trim())}
                         className="w-full bg-slate-900 border-2 border-brand-gold/40 p-6 rounded-2xl text-white font-mono text-center text-2xl tracking-[0.3em] focus:ring-4 focus:ring-brand-gold/10 outline-none transition-all"
-                        placeholder="WORD..."
+                        placeholder="TYPE WORD..."
                         autoFocus
                         onKeyDown={(e) => e.key === 'Enter' && handleNextStep()}
                     />
-                    <button onClick={handleNextStep} disabled={!verifyInput} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.3em] text-[10px] shadow-glow-gold active:scale-95 transition-all cursor-pointer">
-                        Verify Anchor
+                    <button onClick={handleNextStep} disabled={!verifyInput} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.3em] text-[10px] shadow-glow-gold active:scale-95 transition-all">
+                        Check My Key
                     </button>
                 </div>
             )}
 
             {step === 3 && (
                 <div className="space-y-10 animate-fade-in max-w-sm mx-auto">
-                    <p className="text-gray-400 text-sm leading-relaxed text-center uppercase tracking-widest font-black opacity-80">Establish a <strong className="text-white">6-digit PIN</strong> for node access.</p>
+                    <p className="text-gray-400 text-sm leading-relaxed text-center uppercase tracking-widest font-black opacity-80">Choose a <strong className="text-white">6-digit PIN</strong> to open the app.</p>
                     
                     <div className="space-y-4">
                         <input 
-                            type="text" 
+                            type="password" 
                             inputMode="numeric"
                             maxLength={6}
                             value={pin}
                             onChange={e => setPin(e.target.value.replace(/\D/g, ''))}
-                            className="w-full bg-white border-2 border-white/10 rounded-2xl p-6 text-black text-center text-4xl font-black tracking-[0.5em] focus:ring-4 focus:ring-brand-gold/30 outline-none transition-all"
-                            placeholder="••••••"
+                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-4xl font-black tracking-[0.5em] focus:border-brand-gold outline-none transition-all"
+                            placeholder="000000"
                         />
                         <input 
-                            type="text" 
+                            type="password" 
                             inputMode="numeric"
                             maxLength={6}
                             value={confirmPin}
                             onChange={e => setConfirmPin(e.target.value.replace(/\D/g, ''))}
-                            className="w-full bg-white border-2 border-white/10 rounded-2xl p-6 text-black text-center text-4xl font-black tracking-[0.5em] focus:ring-4 focus:ring-brand-gold/30 outline-none transition-all"
-                            placeholder="CONFIRM"
+                            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl p-6 text-brand-gold text-center text-4xl font-black tracking-[0.5em] focus:border-brand-gold outline-none transition-all"
+                            placeholder="RE-TYPE"
                             onKeyDown={(e) => e.key === 'Enter' && pin.length === 6 && handleNextStep()}
                         />
                     </div>
 
-                    <button onClick={handleNextStep} disabled={pin.length !== 6 || pin !== confirmPin} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.3em] text-[10px] shadow-glow-gold active:scale-95 transition-all cursor-pointer">
-                        Initialize Node Anchor
+                    <button onClick={handleNextStep} disabled={pin.length !== 6 || pin !== confirmPin} className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-3xl uppercase tracking-[0.3em] text-[10px] shadow-glow-gold active:scale-95 transition-all">
+                        Finish Setup
                     </button>
                 </div>
             )}
 
-            <button onClick={onBack} className="w-full mt-10 text-[9px] font-black text-gray-700 hover:text-white uppercase tracking-[0.5em] transition-colors cursor-pointer">
-                Cancel Initialization
+            <button onClick={onBack} className="w-full mt-10 text-[9px] font-black text-gray-700 hover:text-white uppercase tracking-[0.5em] transition-colors">
+                Cancel
             </button>
         </div>
     );
