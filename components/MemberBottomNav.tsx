@@ -25,14 +25,14 @@ const NavItem: React.FC<{
 }> = ({ icon, label, isActive, onClick, hasNotification, special }) => (
     <button
         onClick={onClick}
-        className={`relative flex flex-col items-center justify-center flex-1 h-full transition-all duration-300 
+        className={`relative flex flex-col items-center justify-center flex-1 h-full transition-all duration-300 font-sans
         ${isActive ? 'text-brand-gold' : 'text-slate-400 hover:text-white'}
         `}
     >
         <div className={`p-1.5 rounded-xl transition-all duration-300 ${isActive ? (special ? 'bg-brand-gold text-slate-900 shadow-lg scale-110' : 'bg-white/5') : 'bg-transparent'}`}>
           <span className="h-5 w-5 block">{icon}</span>
         </div>
-        <span className={`text-[9px] font-bold mt-1 ${isActive ? 'opacity-100' : 'opacity-80'}`}>{label}</span>
+        <span className={`text-[10px] font-bold mt-1 tracking-tight ${isActive ? 'opacity-100' : 'opacity-80'}`}>{label}</span>
         {hasNotification && !isActive && (
             <span className="absolute top-2 right-1/2 translate-x-3 block w-2 h-2 bg-red-500 rounded-full border border-slate-900"></span>
         )}
@@ -57,7 +57,7 @@ export const MemberBottomNav: React.FC<MemberBottomNavProps> = ({ activeView, se
                 />
                 <NavItem
                     icon={<TrendingUpIcon className="h-full w-full" />}
-                    label="Buy UBT"
+                    label="Buy"
                     isActive={activeView === 'hub'}
                     onClick={() => setActiveView('hub')}
                     special

@@ -36,27 +36,27 @@ export const AuthPage: React.FC = () => {
     switch(view) {
         case 'selector':
             return (
-                <div className="module-frame glass-module p-10 sm:p-16 rounded-[3rem] border-white/10 shadow-2xl flex flex-col items-center animate-fade-in max-w-md w-full relative overflow-hidden">
+                <div className="module-frame glass-module p-10 sm:p-16 rounded-[3rem] border-white/10 shadow-2xl flex flex-col items-center animate-fade-in max-w-md w-full relative overflow-hidden font-sans">
                     <div className="corner-tl"></div><div className="corner-tr"></div><div className="corner-bl"></div><div className="corner-br"></div>
                     
                     <div className="flex flex-col items-center mb-12 relative z-10">
-                        <div className="w-20 h-20 bg-black rounded-2xl border border-brand-gold/40 flex items-center justify-center shadow-glow-gold mb-6">
-                            <LogoIcon className="h-12 w-12 text-brand-gold" />
+                        <div className="w-16 h-16 bg-slate-900 rounded-2xl border border-brand-gold/30 flex items-center justify-center mb-6 shadow-lg">
+                            <LogoIcon className="h-10 w-10 text-brand-gold" />
                         </div>
-                        <h2 className="text-4xl font-black text-center text-white uppercase tracking-tighter gold-text leading-none">Welcome</h2>
-                        <p className="label-caps mt-3 !text-gray-500 !tracking-[0.4em]">Community Portal</p>
+                        <h2 className="text-4xl font-bold text-center text-white tracking-tight leading-none">Welcome</h2>
+                        <p className="text-sm font-semibold text-slate-500 mt-2">Community Hub</p>
                     </div>
                     
                     <div className="flex flex-col gap-4 w-full relative z-10">
                         <button 
                             onClick={() => setView('login')} 
-                            className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.2em] text-[11px] shadow-glow-gold active:scale-95 transition-all hover:bg-brand-gold-light"
+                            className="w-full py-5 bg-brand-gold hover:bg-brand-goldlight text-slate-950 font-bold rounded-xl shadow-lg active:scale-95 transition-all text-sm"
                         >
-                            Log In to My Account
+                            Sign In
                         </button>
                         <button 
                             onClick={() => setView('genesis')} 
-                            className="w-full py-6 bg-white/5 border border-white/10 text-white font-black rounded-2xl uppercase tracking-[0.2em] text-[11px] hover:bg-white/10 active:scale-95 transition-all"
+                            className="w-full py-5 bg-white/5 border border-white/10 text-white font-bold rounded-xl hover:bg-white/10 active:scale-95 transition-all text-sm"
                         >
                             Create New Account
                         </button>
@@ -64,19 +64,19 @@ export const AuthPage: React.FC = () => {
                         <div className="mt-8 pt-8 border-t border-white/5 flex flex-col gap-4">
                             <button 
                                 onClick={() => setView('recovery')} 
-                                className="w-full flex items-center justify-center gap-3 py-5 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-2xl text-[10px] font-black text-red-500 uppercase tracking-[0.3em] transition-all"
+                                className="w-full flex items-center justify-center gap-3 py-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl text-xs font-bold text-red-500 transition-all"
                             >
                                 <AlertTriangleIcon className="h-4 w-4" />
-                                I Lost My Recovery Key
+                                I Lost My Access Key
                             </button>
-                            <p className="text-[8px] text-gray-600 text-center uppercase font-bold tracking-widest px-4 leading-relaxed">
-                                Use this if you lost your 12-word phrase or forgotten your PIN.
+                            <p className="text-xs text-slate-500 text-center font-medium leading-relaxed px-4">
+                                Use this if you lost your 12-word recovery phrase or forgotten your PIN.
                             </p>
                         </div>
                     </div>
 
                     <div className="mt-12 text-center pb-2 relative z-10 border-t border-white/5 pt-8 w-full">
-                        <button onClick={() => setIsPolicyVisible(true)} className="text-[8px] font-black uppercase tracking-[0.6em] text-gray-700 hover:text-brand-gold transition-colors">Privacy & Terms</button>
+                        <button onClick={() => setIsPolicyVisible(true)} className="text-xs font-bold text-slate-600 hover:text-brand-gold transition-colors">Privacy & Guidelines</button>
                     </div>
                 </div>
             );
@@ -98,7 +98,7 @@ export const AuthPage: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col justify-center items-center relative min-h-screen w-full overflow-hidden py-10 bg-black">
+    <div className="flex-1 flex flex-col justify-center items-center relative min-h-screen w-full overflow-hidden py-10 bg-black font-sans">
         <div className="absolute inset-0 blueprint-grid opacity-[0.03] pointer-events-none"></div>
         <div className="flex-1 flex items-center justify-center z-10 w-full px-4">
             {renderContent()}

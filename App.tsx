@@ -22,11 +22,11 @@ import { LedgerPage } from './components/LedgerPage';
 const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
   const [logs, setLogs] = useState<string[]>([]);
   const sequence = [
-    "Welcome to Ubuntium...",
-    "Preparing your dashboard...",
-    "Connecting to the network...",
-    "Securing your session...",
-    "Ready."
+    "Welcome to Ubuntium",
+    "Connecting to community network",
+    "Establishing secure connection",
+    "Synchronizing your dashboard",
+    "Ready"
   ];
   useEffect(() => {
     let i = 0;
@@ -38,18 +38,18 @@ const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
             window.clearInterval(interval); 
             setTimeout(onComplete, 300); 
         } 
-    }, 100);
+    }, 400);
     return () => window.clearInterval(interval);
   }, [onComplete]);
   return (
     <div className="fixed inset-0 z-[200] bg-slate-950 flex flex-col items-center justify-center p-8 font-sans text-brand-gold">
-      <div className="w-24 h-24 mb-16 relative">
+      <div className="w-20 h-20 mb-12 relative">
         <LogoIcon className="h-full w-full text-brand-gold animate-pulse" />
         <div className="absolute inset-0 border border-brand-gold/20 rounded-full animate-ping scale-150 opacity-20"></div>
       </div>
       <div className="w-full max-w-xs space-y-3">
         {logs.map((log, idx) => (
-          <div key={idx} className="text-xs tracking-wide font-bold text-brand-gold/90 animate-fade-in text-center">
+          <div key={idx} className="text-sm font-bold text-white/90 animate-fade-in text-center">
             {log}
           </div>
         ))}
@@ -76,7 +76,6 @@ const App: React.FC = () => {
   const handleSkipProfile = () => {
       sessionStorage.setItem('ugc_skip_anchor', 'true');
       setHasSkippedProfile(true);
-      setForceView('home');
   };
 
   useEffect(() => {
@@ -115,8 +114,7 @@ const App: React.FC = () => {
         if (chatTarget) return <ChatsPage user={userToRender} initialTarget={chatTarget === 'main' ? null : chatTarget as Conversation | null} onClose={() => setChatTarget(null)} onViewProfile={handleViewProfile} onNewMessageClick={() => {}} onNewGroupClick={() => {}} />;
         if (viewingProfileId) return <div className="main-container py-10"><PublicProfile userId={viewingProfileId} currentUser={userToRender} onBack={() => setViewingProfileId(null)} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(userToRender, target); setViewingProfileId(null); setChatTarget(convo); } }} onViewProfile={(id) => setViewingProfileId(id)} isAdminView={userToRender.role === 'admin'} /></div>;
         
-        // Option 2: Progressive Security - Allow users to see the feed even if profile isn't complete
-        if (!userToRender.isProfileComplete && !firebaseUser?.isAnonymous && !hasSkippedProfile && forceView === 'profile') {
+        if (!userToRender.isProfileComplete && !firebaseUser?.isAnonymous && !hasSkippedProfile) {
             return (
                 <div className="main-container py-12">
                     <CompleteProfilePage 
@@ -135,7 +133,7 @@ const App: React.FC = () => {
     
     if (isLoadingAuth || isProcessingAuth) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-screen bg-black p-10 text-center animate-fade-in">
+            <div className="flex flex-col items-center justify-center min-h-screen bg-black p-10 text-center animate-fade-in font-sans">
                 <div className="relative mb-8">
                     <LoaderIcon className="h-14 w-14 animate-spin text-brand-gold opacity-40" />
                     <div className="absolute inset-0 flex items-center justify-center">
@@ -143,7 +141,7 @@ const App: React.FC = () => {
                     </div>
                 </div>
                 <div className="space-y-4">
-                    <div className="text-[10px] uppercase font-black tracking-[0.5em] text-white/30 font-sans">Connecting...</div>
+                    <div className="text-sm font-bold text-white/50">Establishing connection...</div>
                     <div className="w-48 h-1 bg-white/5 mx-auto rounded-full overflow-hidden">
                         <div className="h-full bg-brand-gold/40 animate-scan-move"></div>
                     </div>
@@ -156,7 +154,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`flex flex-col min-h-screen selection:bg-brand-gold/30 bg-black`}>
+    <div className={`flex flex-col min-h-screen selection:bg-brand-gold/30 bg-black font-sans`}>
       {!isExplorer && isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
       {(isExplorer || !isBooting) && (
           <div className="flex-1 flex flex-col animate-fade-in">
@@ -173,7 +171,7 @@ const App: React.FC = () => {
             )}
             <main className="flex-1">{renderMainContent()}</main>
             <ToastContainer />
-            <ConfirmationDialog isOpen={isLogoutConfirmOpen} onClose={() => setIsLogoutConfirmOpen(false)} onConfirm={confirmLogout} title="Log Out" message="Are you sure you want to log out of your community account?" confirmButtonText="Log Out" />
+            <ConfirmationDialog isOpen={isLogoutConfirmOpen} onClose={() => setIsLogoutConfirmOpen(false)} onConfirm={confirmLogout} title="Log Out" message="Are you sure you want to log out of your account?" confirmButtonText="Log Out" />
             {isRadarOpen && currentUser && <RadarModal isOpen={isRadarOpen} onClose={() => setIsRadarOpen(false)} currentUser={currentUser} onViewProfile={handleViewProfile} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(currentUser, target); setViewingProfileId(null); setChatTarget(convo); } }} />}
           </div>
       )}

@@ -33,7 +33,7 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
     if (name === 'referralCode') {
         setFormData(prev => ({ ...prev, [name]: value.toUpperCase() }));
     } else if (name === 'email') {
-        setFormData(prev => ({ ...prev, [name]: value.toLowerCase() }));
+        setFormData(prev => ({ ...prev, [name]: value.toLowerCase().trim() }));
     } else {
         setFormData(prev => ({ ...prev, [name]: value }));
     }
@@ -46,20 +46,18 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
   };
   
   return (
-    <div className="module-frame glass-module p-8 sm:p-12 rounded-[3.5rem] border-white/10 relative overflow-hidden shadow-2xl w-full max-w-md animate-fade-in">
-        <div className="corner-tl"></div><div className="corner-tr"></div><div className="corner-bl"></div><div className="corner-br"></div>
-
-        <div className="flex flex-col items-center mb-8 relative z-10 pt-4">
-            <div className="w-16 h-16 bg-black rounded-xl border border-brand-gold/40 flex items-center justify-center shadow-glow-gold mb-6">
+    <div className="module-frame glass-module p-8 sm:p-12 rounded-[2.5rem] border-white/10 relative overflow-hidden shadow-2xl w-full max-w-md animate-fade-in">
+        <div className="flex flex-col items-center mb-8 pt-4">
+            <div className="w-16 h-16 bg-slate-900 rounded-2xl border border-brand-gold/30 flex items-center justify-center mb-6 shadow-lg">
                 <LogoIcon className="h-10 w-10 text-brand-gold" />
             </div>
-            <h2 className="text-3xl font-black text-center text-white tracking-tighter uppercase gold-text leading-none">Sign Up</h2>
-            <p className="label-caps mt-2 !text-brand-gold">Create your new account</p>
+            <h2 className="text-3xl font-bold text-center text-white leading-none">Join the Network</h2>
+            <p className="text-slate-400 text-sm mt-2 font-medium">Create your community profile</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
-            <div className="space-y-2">
-                <label className="label-caps pl-1 !text-white" htmlFor="full_name">Your Full Name</label>
+        <form onSubmit={handleSubmit} className="space-y-5 relative z-10">
+            <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-400 pl-1" htmlFor="full_name">Full Name</label>
                 <input 
                     type="text" 
                     name="full_name" 
@@ -67,13 +65,13 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     value={formData.full_name} 
                     onChange={handleChange} 
                     required 
-                    className="w-full bg-slate-950 border border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-1 focus:ring-brand-gold transition-all" 
-                    placeholder="ENTER YOUR FULL NAME"
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl py-4 px-5 text-white font-medium" 
+                    placeholder="First Last"
                     disabled={isProcessing}
                 />
             </div>
-            <div className="space-y-2">
-                <label className="label-caps pl-1 !text-white" htmlFor="email">Email Address</label>
+            <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-400 pl-1" htmlFor="email">Email Address</label>
                 <input 
                     type="email" 
                     name="email" 
@@ -81,21 +79,21 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                     value={formData.email} 
                     onChange={handleChange} 
                     required 
-                    className="w-full bg-slate-950 border border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-1 focus:ring-brand-gold transition-all lowercase" 
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl py-4 px-5 text-white font-medium lowercase" 
                     placeholder="yourname@gmail.com"
                     disabled={isProcessing}
                 />
             </div>
-            <div className="space-y-2">
-                <label className="label-caps pl-1 !text-white" htmlFor="password">Choose a Password</label>
+            <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-400 pl-1" htmlFor="password">Create Password</label>
                 <div className="relative">
                     <input
                         id="password"
                         type={isPasswordVisible ? 'text' : 'password'}
                         value={password}
                         onChange={(e) => setPassword(e.target.value)}
-                        className="w-full bg-slate-950 border border-white/10 rounded-xl py-4 px-6 text-white text-base pr-12 focus:outline-none focus:ring-1 focus:ring-brand-gold transition-all"
-                        placeholder="MIN. 6 CHARACTERS"
+                        className="w-full bg-slate-900 border border-white/10 rounded-xl py-4 px-5 text-white font-medium pr-12"
+                        placeholder="At least 6 characters"
                         required
                         minLength={6}
                         disabled={isProcessing}
@@ -105,40 +103,40 @@ export const PublicRegistrationPage: React.FC<PublicRegistrationPageProps> = ({ 
                         onClick={() => setIsPasswordVisible((prev) => !prev)}
                         className="absolute inset-y-0 right-0 px-4 flex items-center text-gray-500 hover:text-brand-gold transition-colors"
                     >
-                        {isPasswordVisible ? <EyeOffIcon className="h-6 w-6" /> : <EyeIcon className="h-6 w-6" />}
+                        {isPasswordVisible ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
                     </button>
                 </div>
             </div>
             
-            <div className="space-y-2">
-                <label className="label-caps pl-1 !text-white" htmlFor="referralCode">Referral Code (Optional)</label>
+            <div className="space-y-1.5">
+                <label className="text-xs font-bold text-slate-400 pl-1" htmlFor="referralCode">Referral Code (Optional)</label>
                 <input 
                     type="text" 
                     name="referralCode" 
                     id="referralCode" 
                     value={formData.referralCode} 
                     onChange={handleChange} 
-                    className="w-full bg-slate-950 border border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-1 focus:ring-brand-gold transition-all font-mono" 
+                    className="w-full bg-slate-900 border border-white/10 rounded-xl py-4 px-5 text-white font-bold" 
                     placeholder="CODE-XXXXX"
                     disabled={isProcessing}
                 />
             </div>
             
-            <div className="flex flex-col gap-4 pt-4">
+            <div className="flex flex-col gap-3 pt-4">
                 <button 
                     type="submit" 
                     disabled={isProcessing} 
-                    className="w-full py-6 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-2xl transition-all active:scale-[0.98] shadow-glow-gold disabled:opacity-50 uppercase tracking-[0.2em] text-[11px]"
+                    className="w-full py-4 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg disabled:opacity-50 text-sm"
                 >
-                    {isProcessing ? 'CREATING...' : 'Create My Account'}
+                    {isProcessing ? 'Registering...' : 'Sign Up'}
                 </button>
                 <button
                     type="button"
                     onClick={onBackToLogin}
                     disabled={isProcessing}
-                    className="text-[11px] font-black uppercase tracking-[0.3em] text-white/50 hover:text-white transition-colors py-2 text-center"
+                    className="text-xs font-bold text-slate-500 hover:text-white transition-colors py-2 text-center"
                 >
-                    Back to Log In
+                    Already have an account? Log In
                 </button>
             </div>
         </form>

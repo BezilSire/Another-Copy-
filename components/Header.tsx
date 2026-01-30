@@ -32,8 +32,8 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, o
               <LogoIcon className="h-8 w-8 text-brand-gold" />
           </div>
           <div className="hidden lg:block">
-            <h1 className="text-xl font-black text-white tracking-tighter uppercase gold-text leading-none">Ubuntium</h1>
-            <p className="label-caps mt-1 !tracking-[0.5em] !text-[8px] opacity-50">Community Network</p>
+            <h1 className="text-xl font-bold text-white tracking-tight leading-none">Ubuntium</h1>
+            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mt-1">Community Network</p>
           </div>
         </div>
         
@@ -43,31 +43,31 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, o
                 {onVoteClick && (
                     <button 
                         onClick={onVoteClick} 
-                        className="flex items-center gap-3 px-4 sm:px-6 py-2.5 rounded-xl text-gray-400 hover:text-brand-gold hover:bg-brand-gold/5 transition-all group border-r border-white/5"
+                        className="flex items-center gap-3 px-4 sm:px-6 py-2.5 rounded-xl text-slate-400 hover:text-brand-gold hover:bg-brand-gold/5 transition-all group border-r border-white/5"
                         title="Governance"
                     >
                         <ScaleIcon className="h-5 w-5 group-hover:scale-110 transition-transform" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] hidden sm:block">Vote</span>
+                        <span className="text-xs font-bold uppercase hidden sm:block">Vote</span>
                     </button>
                 )}
                 {onChatClick && (
                     <button 
                         onClick={onChatClick} 
-                        className="flex items-center gap-3 px-4 sm:px-6 py-2.5 rounded-xl text-gray-400 hover:text-white hover:bg-white/5 transition-all group border-r border-white/5"
+                        className="flex items-center gap-3 px-4 sm:px-6 py-2.5 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-all group border-r border-white/5"
                         title="Comms Hub"
                     >
                         <MessageSquareIcon className="h-5 w-5 group-hover:scale-110 transition-transform" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] hidden sm:block">Chat</span>
+                        <span className="text-xs font-bold uppercase hidden sm:block">Chat</span>
                     </button>
                 )}
                 {onMeetClick && (
                     <button 
                         onClick={onMeetClick} 
-                        className="flex items-center gap-3 px-4 sm:px-6 py-2.5 rounded-xl text-gray-400 hover:text-brand-gold hover:bg-brand-gold/5 transition-all group"
+                        className="flex items-center gap-3 px-4 sm:px-6 py-2.5 rounded-xl text-slate-400 hover:text-brand-gold hover:bg-brand-gold/5 transition-all group"
                         title="Meeting Hub"
                     >
                         <VideoIcon className="h-5 w-5 group-hover:scale-110 transition-transform" />
-                        <span className="text-[10px] font-black uppercase tracking-[0.2em] hidden sm:block">Meet</span>
+                        <span className="text-xs font-bold uppercase hidden sm:block">Meet</span>
                     </button>
                 )}
              </div>
@@ -76,24 +76,24 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, o
 
         <div className="flex items-center space-x-6 flex-shrink-0">
           {!isOnline && (
-              <div className="flex items-center space-x-2 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-[8px] font-black text-red-500 uppercase tracking-widest animate-pulse data-mono">
+              <div className="flex items-center space-x-2 px-3 py-1.5 bg-red-500/10 border border-red-500/20 rounded-lg text-[10px] font-bold text-red-500 uppercase tracking-widest animate-pulse">
                   <WifiOffIcon className="h-3 w-3" />
                   <span>OFFLINE</span>
               </div>
           )}
 
           {user && (
-            <div className="flex items-center space-x-5">
+            <div className="flex items-center space-x-4">
               <div className="hidden xl:block text-right">
-                  <p className="label-caps !text-[7px] mb-0.5">Account ID</p>
-                  <p className="data-mono text-[10px] text-brand-gold opacity-80">{user.publicKey?.substring(0, 12)}...</p>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase mb-0.5">Account ID</p>
+                  <p className="text-[11px] font-bold text-brand-gold opacity-80">{user.publicKey?.substring(0, 12)}...</p>
               </div>
               <button onClick={() => onViewProfile(user.id)} className="focus:outline-none ring-1 ring-white/5 hover:ring-brand-gold/40 rounded-xl overflow-hidden p-0.5 transition-all bg-slate-900 shadow-xl">
-                  <UserCircleIcon className="h-10 w-10 text-slate-700 hover:text-white transition-colors" />
+                  <UserCircleIcon className="h-9 w-9 text-slate-700 hover:text-white transition-colors" />
               </button>
               <button 
                 onClick={onLogout} 
-                className="bg-red-500/5 hover:bg-red-500 hover:text-white border border-red-900/30 px-4 py-2 rounded-lg text-[9px] font-black text-red-600 uppercase tracking-widest transition-all active:scale-[0.9] data-mono"
+                className="bg-red-500/5 hover:bg-red-500 hover:text-white border border-red-900/30 px-4 py-2 rounded-lg text-xs font-bold text-red-600 uppercase tracking-wide transition-all active:scale-[0.9]"
               >
                 Log Out
               </button>

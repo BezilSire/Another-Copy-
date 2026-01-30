@@ -1,3 +1,4 @@
+
 import React, { ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
@@ -35,7 +36,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
   /* Capture lifecycle errors and trigger the error state */
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Handshake Failure Exception:', error, errorInfo);
-    // Explicitly use this.setState from React.Component
+    // Fix: Explicitly use this.setState from React.Component base class
     this.setState({ 
       hasError: true,
       error, 
@@ -78,7 +79,7 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       );
     }
 
-    // Access children through this.props inherited from React.Component
+    // Fix: Access children through this.props inherited from React.Component base class
     return this.props.children;
   }
 }

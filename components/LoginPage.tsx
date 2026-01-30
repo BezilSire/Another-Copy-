@@ -26,28 +26,26 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isProcessing, onS
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onLogin({ email: email.toLowerCase(), password });
+    await onLogin({ email: email.toLowerCase().trim(), password });
   };
 
   return (
-    <div className="module-frame glass-module p-8 sm:p-12 rounded-[3.5rem] border-white/20 relative overflow-hidden shadow-2xl w-full max-w-md animate-fade-in">
-      <div className="corner-tl !border-white/40"></div><div className="corner-tr !border-white/40"></div><div className="corner-bl !border-white/40"></div><div className="corner-br !border-white/40"></div>
-      
+    <div className="module-frame glass-module p-8 sm:p-12 rounded-[2.5rem] border-white/20 relative overflow-hidden shadow-2xl w-full max-w-md animate-fade-in">
       <button onClick={onBack} className="absolute top-8 left-8 text-white/60 hover:text-brand-gold transition-all">
           <ArrowLeftIcon className="h-6 w-6" />
       </button>
 
-      <div className="flex flex-col items-center mb-10 relative z-10 pt-4">
-        <div className="w-20 h-20 bg-black rounded-3xl border-2 border-brand-gold/50 flex items-center justify-center shadow-glow-gold mb-8">
-            <LogoIcon className="h-12 w-12 text-brand-gold" />
+      <div className="flex flex-col items-center mb-10 pt-4">
+        <div className="w-16 h-16 bg-slate-900 rounded-2xl border border-brand-gold/30 flex items-center justify-center mb-6 shadow-lg">
+            <LogoIcon className="h-10 w-10 text-brand-gold" />
         </div>
-        <h2 className="text-4xl font-black text-center text-white uppercase tracking-tighter gold-text leading-none">Log In</h2>
-        <p className="label-caps mt-3 !text-brand-gold !text-[10px] !tracking-[0.5em]">Enter your email and password</p>
+        <h2 className="text-3xl font-bold text-center text-white leading-none">Welcome Back</h2>
+        <p className="text-slate-400 text-sm mt-2 font-medium">Log in to your community account</p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-8 relative z-10">
-        <div className="space-y-3">
-          <label className="label-caps pl-1 !text-white !font-black" htmlFor="email">
+      <form onSubmit={handleSubmit} className="space-y-6">
+        <div className="space-y-2">
+          <label className="text-xs font-bold text-slate-400 pl-1" htmlFor="email">
             Email Address
           </label>
           <input
@@ -55,70 +53,70 @@ export const LoginPage: React.FC<LoginPageProps> = ({ onLogin, isProcessing, onS
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl py-5 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all placeholder-gray-600 font-bold lowercase"
+            className="w-full bg-slate-900 border border-white/10 rounded-xl py-4 px-5 text-white focus:outline-none focus:border-brand-gold transition-all placeholder-slate-600 font-medium lowercase"
             placeholder="yourname@gmail.com"
             required
             disabled={isProcessing}
           />
         </div>
 
-        <div className="space-y-3">
+        <div className="space-y-2">
           <div className="flex justify-between items-center px-1">
-              <label className="label-caps !text-white !font-black" htmlFor="password">
+              <label className="text-xs font-bold text-slate-400" htmlFor="password">
                 Password
               </label>
               <button
                 type="button"
                 onClick={onSwitchToForgotPassword}
-                className="text-[11px] font-black uppercase tracking-widest text-brand-gold hover:text-white transition-colors"
+                className="text-xs font-bold text-brand-gold hover:text-white transition-colors"
               >
-                Forgot Password?
+                Forgot?
               </button>
           </div>
-          <div className="relative group">
+          <div className="relative">
             <input
               id="password"
               type={isPasswordVisible ? 'text' : 'password'}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="w-full bg-slate-900 border-2 border-white/10 rounded-2xl py-5 px-6 text-white text-base pr-16 focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all placeholder-gray-600 font-bold"
-              placeholder="••••••••••••"
+              className="w-full bg-slate-900 border border-white/10 rounded-xl py-4 px-5 text-white pr-12 focus:outline-none focus:border-brand-gold transition-all placeholder-slate-600 font-medium"
+              placeholder="Your password"
               required
               disabled={isProcessing}
             />
             <button
               type="button"
               onClick={() => setIsPasswordVisible((prev) => !prev)}
-              className="absolute inset-y-0 right-0 px-5 flex items-center text-gray-500 hover:text-brand-gold transition-colors"
+              className="absolute inset-y-0 right-0 px-4 flex items-center text-gray-500 hover:text-brand-gold transition-colors"
             >
-              {isPasswordVisible ? <EyeOffIcon className="h-6 w-6" /> : <EyeIcon className="h-6 w-6" />}
+              {isPasswordVisible ? <EyeOffIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
             </button>
           </div>
         </div>
 
         <button
           type="submit"
-          className="w-full py-6 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl transition-all active:scale-[0.98] shadow-glow-gold disabled:opacity-50 uppercase tracking-[0.4em] text-[12px] mt-4 flex justify-center items-center gap-3"
+          className="w-full py-4 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-bold rounded-xl transition-all active:scale-[0.98] shadow-lg disabled:opacity-50 text-sm mt-2"
           disabled={isProcessing}
         >
-          {isProcessing ? "Checking..." : "Log In Now"}
+          {isProcessing ? "Connecting..." : "Log In"}
         </button>
       </form>
 
-      <div className="mt-12 pt-10 border-t border-white/10 flex flex-col gap-8 relative z-10">
+      <div className="mt-10 pt-8 border-t border-white/5 flex flex-col gap-4">
           <button
             type="button"
             onClick={onSwitchToPublicSignup}
-            className="text-[12px] font-black uppercase tracking-[0.4em] text-white hover:text-brand-gold transition-all text-center bg-white/5 py-4 rounded-2xl border border-white/5"
+            className="text-sm font-bold text-white hover:text-brand-gold transition-all text-center bg-white/5 py-3 rounded-xl border border-white/5"
           >
             Create New Account
           </button>
           <button
             type="button"
             onClick={onSwitchToSignup}
-            className="text-[10px] font-black uppercase tracking-[0.5em] text-gray-500 hover:text-white transition-colors text-center"
+            className="text-xs font-semibold text-slate-500 hover:text-white transition-colors text-center"
           >
-            Become a Community Agent
+            Become an Agent
           </button>
       </div>
     </div>
