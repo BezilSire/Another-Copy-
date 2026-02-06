@@ -110,6 +110,8 @@ export const api = {
     },
     updateUser: (uid: string, data: Partial<User>) => setDoc(doc(db, 'users', uid), data, { merge: true }),
     
+    setUserStatus: (uid: string, status: User['status']) => updateDoc(doc(db, 'users', uid), { status }),
+
     getUsersByUids: async (uids: string[]): Promise<User[]> => {
         if (uids.length === 0) return [];
         const results: User[] = [];
@@ -148,8 +150,9 @@ export const api = {
             }
 
             t.update(senderRef, { [balKey]: increment(-transaction.amount) });
-            t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
-            t.set(doc(ledgerCollection, transaction.id), { ...finalTx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+            // Fix: Use set with merge true for receiver to ensure balance reflects regardless of doc state
+            t.set(receiverRef, { ubtBalance: increment(transaction.amount) }, { merge: true });
+            t.set(doc(ledgerCollection, transaction.signature || transaction.id), { ...finalTx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         }); 
         sovereignService.dispatchTransaction(transaction).catch(console.error);
     },
@@ -225,11 +228,12 @@ export const api = {
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
 
             t.update(purchaseRef, { status: 'VERIFIED', verifiedAt: serverTimestamp() });
-            t.update(userRef, { ubtBalance: increment(p.amountUbt) });
+            // Use set with merge true for improved stability
+            t.set(userRef, { ubtBalance: increment(p.amountUbt) }, { merge: true });
             t.update(sourceRef, { balance: increment(-p.amountUbt) });
             t.update(econRef, { cvp_usd_backing: increment(p.amountUsd) }); 
 
-            const txId = txData.id || `bridge-${Date.now().toString(36)}`;
+            const txId = txData.id || txData.signature || `bridge-${Date.now().toString(36)}`;
             
             let receiverKey = "PROVISIONING";
             if (receiverSnap.exists() && receiverSnap.data()?.publicKey) {
@@ -345,6 +349,7 @@ export const api = {
     listenForUserVentures: (uid: string, cb: (v: any[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'ventures'), where('ownerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), err),
     listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err?: any): Unsubscribe => onSnapshot(query(payoutsCollection, where('userId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err),
     listenForReferredUsers: (uid: string, cb: (u: PublicUserProfile[]) => void, err?: any): Unsubscribe => onSnapshot(query(usersCollection, where('referrerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile))), err),
+    listenForReferredUsersByCode: (code: string, cb: (u: User[]) => void): Unsubscribe => onSnapshot(query(usersCollection, where('referredBy', '==', code)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), console.error),
     listenForProposals: (cb: (p: Proposal[]) => void, err?: any): Unsubscribe => onSnapshot(query(proposalsCollection, orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Proposal))), err),
     listenToResources: (circle: string, cb: (r: CitizenResource[]) => void): Unsubscribe => onSnapshot(circle === 'ANY' ? resourcesCollection : query(resourcesCollection, where('circle', '==', circle)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource)))),
     listenToTribunals: (cb: (d: Dispute[]) => void): Unsubscribe => onSnapshot(query(disputesCollection, where('status', '==', 'TRIBUNAL')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Dispute)))),
@@ -389,11 +394,6 @@ export const api = {
             await updateDoc(doc(postsCollection, id), { upvotes: upvotes.includes(uid) ? arrayRemove(uid) : arrayUnion(uid) });
         }
     },
-    fetchPinnedPosts: async (isAdmin: boolean): Promise<Post[]> => {
-        const q = query(postsCollection, where('isPinned', '==', true));
-        const s = await getDocs(q);
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as Post));
-    },
     fetchRegularPosts: async (count: number, filter: string, isAdmin: boolean, startAfterDoc?: DocumentSnapshot<DocumentData>, currentUser?: User) => {
         let q;
         if (filter === 'all' || filter === 'foryou') q = query(postsCollection, orderBy('date', 'desc'), limit(count));
@@ -426,16 +426,11 @@ export const api = {
             }
 
             t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
-            if (receiverRef && rid !== 'EXTERNAL_NODE') t.update(receiverRef, { ubtBalance: increment(amt) });
-            // LAW: Use Signature as document key
-            t.set(doc(ledgerCollection, tx.signature), { ...enrichedTx, serverTimestamp: serverTimestamp() });
+            // Use set with merge: true for stability
+            if (receiverRef && rid !== 'EXTERNAL_NODE') t.set(receiverRef, { ubtBalance: increment(amt) }, { merge: true });
+            t.set(doc(ledgerCollection, tx.signature || tx.id), { ...enrichedTx, serverTimestamp: serverTimestamp() });
         });
         sovereignService.dispatchTransaction(tx).catch(console.error);
-    },
-
-    getPublicLedger: async (l: number = 200) => {
-        const s = await getDocs(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)));
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
     },
 
     sendDistressPost: async (u: User, content: string) => {
@@ -605,7 +600,8 @@ export const api = {
             const userRef = doc(usersCollection, uid);
             const userSnap = await t.get(userRef);
             if (!userSnap.exists()) return;
-            t.update(userRef, { ubtBalance: increment(amount) });
+            // Use set with merge true for improved reliability
+            t.set(userRef, { ubtBalance: increment(amount) }, { merge: true });
             const txId = `admin-${Date.now().toString(36)}`;
             tx = { id: txId, senderId: 'SYSTEM', receiverId: uid, amount: Math.abs(amount), timestamp: Date.now(), reason, type: amount > 0 ? 'credit' : 'debit', protocol_mode: 'MAINNET', serverTimestamp: serverTimestamp() };
             t.set(doc(ledgerCollection, txId), tx);
@@ -722,9 +718,9 @@ export const api = {
             const econRef = doc(globalsCollection, 'economy');
             const econSnap = await t.get(econRef);
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
-            t.update(receiverRef, { credibility_score: increment(5), vouchCount: increment(1) });
-            // LAW: Signature is document key
-            t.set(doc(ledgerCollection, transaction.signature), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+            // Use set with merge true for improved reliability
+            t.set(receiverRef, { credibility_score: increment(5), vouchCount: increment(1) }, { merge: true });
+            t.set(doc(ledgerCollection, transaction.signature || transaction.id), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         });
         sovereignService.dispatchTransaction(transaction).catch(console.error);
     },

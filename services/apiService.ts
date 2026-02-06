@@ -150,8 +150,8 @@ export const api = {
             }
 
             t.update(senderRef, { [balKey]: increment(-transaction.amount) });
-            t.update(receiverRef, { ubtBalance: increment(transaction.amount) });
-            // LAW: Transaction Signature is the Immutable Document ID
+            // Fix: Use set with merge true for receiver to ensure balance reflects even if profile doc is fresh
+            t.set(receiverRef, { ubtBalance: increment(transaction.amount) }, { merge: true });
             t.set(doc(ledgerCollection, transaction.signature), { ...finalTx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         }); 
         sovereignService.dispatchTransaction(transaction).catch(console.error);
@@ -165,45 +165,9 @@ export const api = {
         return Array.from(new Map(res.map(i => [i.id, i])).values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
     },
 
-    applyForExecutive: async (candidateData: Omit<Candidate, 'id' | 'voteCount' | 'votes' | 'createdAt' | 'status'>) => {
-        return addDoc(candidatesCollection, {
-            ...candidateData,
-            voteCount: 0,
-            votes: [],
-            status: 'applying',
-            createdAt: serverTimestamp()
-        });
-    },
-
-    deleteCandidate: (candidateId: string) => deleteDoc(doc(candidatesCollection, candidateId)),
-
-    voteForCandidate: (candidateId: string, voterId: string) => runTransaction(db, async t => {
-        const ref = doc(candidatesCollection, candidateId);
-        const snap = await t.get(ref);
-        if (!snap.exists()) throw new Error("Candidate node lost.");
-        const data = snap.data() as Candidate;
-        if (data.votes.includes(voterId)) throw new Error("DUPLICATE_SIGNATURE");
-        
-        const newVoteCount = (data.voteCount || 0) + 1;
-        const newStatus = newVoteCount >= 20 ? 'mandated' : 'applying';
-        
-        t.update(ref, { 
-            votes: arrayUnion(voterId), 
-            voteCount: increment(1),
-            status: newStatus
-        });
-    }),
-
-    listenForCandidates: (cb: (c: Candidate[]) => void): Unsubscribe => {
-        return onSnapshot(query(candidatesCollection, orderBy('voteCount', 'desc')), s => {
-            cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Candidate)));
-        });
-    },
-
     syncInternalVaults: async (admin: Admin, from: TreasuryVault, to: TreasuryVault, amt: number, reason: string) => {
         const timestamp = Date.now();
         const nonce = `internal-${timestamp.toString(36)}`;
-        // Internal protocol transfers still require a signed packet simulation
         const payload = `${from.id}:${to.id}:${amt}:${timestamp}:${nonce}`;
         const signature = `SIG_INTERNAL_${timestamp.toString(36)}`;
         
@@ -239,7 +203,7 @@ export const api = {
     },
     
     approveUbtPurchase: async (admin: Admin, p: PendingUbtPurchase, sourceVaultId: string, txData: Partial<UbtTransaction>) => {
-        if (!txData.signature) throw new Error("CRYPTOGRAPHIC_SIGNATURE_REQUIRED");
+        if (!txData.signature && !txData.id) throw new Error("CRYPTOGRAPHIC_ID_REQUIRED");
 
         await runTransaction(db, async t => {
             const purchaseRef = doc(pendingPurchasesCollection, p.id);
@@ -252,7 +216,8 @@ export const api = {
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
 
             t.update(purchaseRef, { status: 'VERIFIED', verifiedAt: serverTimestamp() });
-            t.update(userRef, { ubtBalance: increment(p.amountUbt) });
+            // Fix: Use set with merge true to ensure balance reflects accurately for all user states
+            t.set(userRef, { ubtBalance: increment(p.amountUbt) }, { merge: true });
             t.update(sourceRef, { balance: increment(-p.amountUbt) });
             t.update(econRef, { cvp_usd_backing: increment(p.amountUsd) }); 
 
@@ -262,14 +227,14 @@ export const api = {
             }
 
             const finalTx: UbtTransaction = {
-                id: txData.signature!,
+                id: txData.id || txData.signature!,
                 senderId: sourceVaultId,
                 receiverId: p.userId,
                 receiverPublicKey: receiverKey,
                 amount: p.amountUbt,
                 timestamp: txData.timestamp || Date.now(),
                 nonce: txData.nonce || "",
-                signature: txData.signature!,
+                signature: txData.signature || "",
                 hash: txData.hash || "",
                 senderPublicKey: admin.publicKey || "",
                 parentHash: 'BRIDGE_ROOT',
@@ -278,14 +243,97 @@ export const api = {
                 priceAtSync: currentPrice
             };
 
-            t.set(doc(ledgerCollection, txData.signature!), { ...finalTx, serverTimestamp: serverTimestamp() });
+            t.set(doc(ledgerCollection, finalTx.id), { ...finalTx, serverTimestamp: serverTimestamp() });
         });
     },
-    rejectUbtPurchase: (id: string) => updateDoc(doc(pendingPurchasesCollection, id), { status: 'REJECTED' }),
+
+    processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
+        await runTransaction(db, async (t) => {
+            const econRef = doc(globalsCollection, 'economy');
+            const receiverRef = rid ? doc(usersCollection, rid) : null;
+            
+            const [econSnap, receiverSnap] = await Promise.all([
+                t.get(econRef), 
+                receiverRef ? t.get(receiverRef) : Promise.resolve(null)
+            ]);
+
+            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+            
+            let enrichedTx = { ...tx, priceAtSync: currentPrice };
+            if (receiverSnap?.exists()) {
+                const rData = receiverSnap.data();
+                if (rData?.publicKey) enrichedTx.receiverPublicKey = rData.publicKey;
+            } else if (rid === 'EXTERNAL_NODE' || !rid) {
+                enrichedTx.receiverPublicKey = `EXTERNAL_NODE:${tx.id.substring(0,8)}`;
+            }
+
+            t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
+            // Fix: Use set with merge: true to effectively update node balance regardless of doc state
+            if (receiverRef && rid !== 'EXTERNAL_NODE') t.set(receiverRef, { ubtBalance: increment(amt) }, { merge: true });
+            t.set(doc(ledgerCollection, tx.signature), { ...enrichedTx, serverTimestamp: serverTimestamp() });
+        });
+        sovereignService.dispatchTransaction(tx).catch(console.error);
+    },
+
+    updateUserUbt: async (admin: Admin, uid: string, amount: number, reason: string) => {
+        let tx;
+        await runTransaction(db, async t => {
+            const userRef = doc(usersCollection, uid);
+            const econSnap = await t.get(doc(globalsCollection, 'economy'));
+            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+            
+            t.set(userRef, { ubtBalance: increment(amount) }, { merge: true });
+            const txId = `admin-${Date.now().toString(36)}`;
+            tx = { id: txId, senderId: 'SYSTEM', receiverId: uid, amount: Math.abs(amount), timestamp: Date.now(), reason, type: amount > 0 ? 'credit' : 'debit', protocol_mode: 'MAINNET', priceAtSync: currentPrice, serverTimestamp: serverTimestamp() };
+            t.set(doc(ledgerCollection, txId), tx);
+        });
+        if (tx) sovereignService.dispatchTransaction(tx).catch(console.error);
+    },
+
+    getPublicLedger: async (l: number = 200) => {
+        const s = await getDocs(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)));
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
+    },
+
+    startChat: async (u: User, t: PublicUserProfile): Promise<Conversation> => {
+        const id = [u.id, t.id].sort().join('_');
+        const snap = await getDoc(doc(conversationsCollection, id));
+        if (snap.exists()) return { id: snap.id, ...snap.data() } as Conversation;
+        const data = { members: [u.id, t.id], memberNames: { [u.id]: u.name, [t.id]: t.name }, lastMessage: "Handshake established", lastMessageTimestamp: serverTimestamp(), lastMessageSenderId: u.id, readBy: [u.id], isGroup: false };
+        await setDoc(doc(conversationsCollection, id), data);
+        return { id, ...data } as Conversation;
+    },
+    markConversationAsRead: (id: string, uid: string) => updateDoc(doc(conversationsCollection, id), { readBy: arrayUnion(uid) }),
+
+    getGroupMembers: async (uids: string[]): Promise<MemberUser[]> => {
+        const users = await api.getUsersByUids(uids);
+        return users as MemberUser[];
+    },
+
+    // Fix: Added resolveNodeIdentity for ledger page and admin dispatch
+    resolveNodeIdentity: async (identifier: string): Promise<PublicUserProfile | null> => {
+        if (!identifier) return null;
+        try {
+            const userDoc = await getDoc(doc(usersCollection, identifier));
+            if (userDoc.exists()) return { id: userDoc.id, ...userDoc.data() } as PublicUserProfile;
+            const vaultDoc = await getDoc(doc(vaultsCollection, identifier));
+            if (vaultDoc.exists()) return { id: vaultDoc.id, name: vaultDoc.data()?.name, ubtBalance: vaultDoc.data()?.balance, role: 'admin', circle: 'TREASURY' } as any;
+            
+            // Search by publicKey if identifier is not an ID
+            const q = query(usersCollection, where('publicKey', '==', identifier), limit(1));
+            const snap = await getDocs(q);
+            if (!snap.empty) return { id: snap.docs[0].id, ...snap.docs[0].data() } as PublicUserProfile;
+        } catch (e) {}
+        return null;
+    },
+
+    // Fix: Added getPublicUserProfile for profile views
     getPublicUserProfile: async (uid: string): Promise<PublicUserProfile | null> => {
         const userDoc = await getDoc(doc(usersCollection, uid));
         return userDoc.exists() ? { id: userDoc.id, ...userDoc.data() } as PublicUserProfile : null;
     },
+
+    // Fix: Added getPublicUserProfilesByUids for list views
     getPublicUserProfilesByUids: async (uids: string[]): Promise<PublicUserProfile[]> => {
         if (uids.length === 0) return [];
         const results: PublicUserProfile[] = [];
@@ -297,30 +345,18 @@ export const api = {
         }
         return results;
     },
+
+    // Fix: Added searchUsers for directory and dispatching
     searchUsers: async (queryStr: string, currentUser: User): Promise<PublicUserProfile[]> => {
         const q = query(usersCollection, where('name_lowercase', '>=', queryStr.toLowerCase()), where('name_lowercase', '<=', queryStr.toLowerCase() + '\uf8ff'), limit(15));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile)).filter(u => u.id !== currentUser.id);
     },
-    resolveNodeIdentity: async (identifier: string): Promise<PublicUserProfile | null> => {
-        if (!identifier) return null;
-        try {
-            // First check if it's a public key
-            if (identifier.startsWith('UBT-')) {
-                const q = query(usersCollection, where('publicKey', '==', identifier), limit(1));
-                const snap = await getDocs(q);
-                if (!snap.empty) return { id: snap.docs[0].id, ...snap.docs[0].data() } as PublicUserProfile;
-            }
 
-            const userDoc = await getDoc(doc(usersCollection, identifier));
-            if (userDoc.exists()) return { id: userDoc.id, ...userDoc.data() } as PublicUserProfile;
-            
-            const vaultDoc = await getDoc(doc(vaultsCollection, identifier));
-            if (vaultDoc.exists()) return { id: vaultDoc.id, name: vaultDoc.data()?.name, ubtBalance: vaultDoc.data()?.balance, role: 'admin', circle: 'TREASURY' } as any;
-        } catch (e) {}
-        return null;
-    },
+    // Fix: Added rejectUbtPurchase for Oracle administration
+    rejectUbtPurchase: (id: string) => updateDoc(doc(pendingPurchasesCollection, id), { status: 'REJECTED' }),
 
+    // Fix: Added meeting hub methods
     createMeeting: async (u: User, title: string, expiresAt: Date): Promise<string> => {
         const id = Math.floor(100000 + Math.random() * 900000).toString();
         await setDoc(doc(meetingsCollection, id), {
@@ -328,7 +364,7 @@ export const api = {
             createdAt: serverTimestamp(),
             expiresAt: Timestamp.fromDate(expiresAt),
             participants: {
-                [u.id]: { uid: u.id, name: u.name, isVideoOn: true, isMicOn: true, isSpeaking: false, role: u.role, joinedAt: Date.now() }
+                [u.id]: { uid: u.id, name: u.name, isVideoOn: true, isMicOn: true, isSpeaking: false, role: u.role, joinedAt: Date.now(), isOnStage: true }
             }
         });
         return id;
@@ -358,6 +394,35 @@ export const api = {
         });
     },
     deleteMeeting: (id: string) => deleteDoc(doc(meetingsCollection, id)),
+
+    // Fix: Added governance candidacy methods
+    applyForExecutive: async (candidateData: Omit<Candidate, 'id' | 'voteCount' | 'votes' | 'createdAt' | 'status'>) => {
+        return addDoc(candidatesCollection, {
+            ...candidateData,
+            voteCount: 0,
+            votes: [],
+            status: 'applying',
+            createdAt: serverTimestamp()
+        });
+    },
+    deleteCandidate: (candidateId: string) => deleteDoc(doc(candidatesCollection, candidateId)),
+    voteForCandidate: (candidateId: string, voterId: string) => runTransaction(db, async t => {
+        const ref = doc(candidatesCollection, candidateId);
+        const snap = await t.get(ref);
+        if (!snap.exists()) throw new Error("Candidate node lost.");
+        const data = snap.data() as Candidate;
+        if (data.votes.includes(voterId)) throw new Error("DUPLICATE_SIGNATURE");
+        t.update(ref, { 
+            votes: arrayUnion(voterId), 
+            voteCount: increment(1),
+            status: (data.voteCount || 0) + 1 >= 20 ? 'mandated' : 'applying'
+        });
+    }),
+    listenForCandidates: (cb: (c: Candidate[]) => void): Unsubscribe => {
+        return onSnapshot(query(candidatesCollection, orderBy('voteCount', 'desc')), s => {
+            cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Candidate)));
+        });
+    },
 
     listenForGlobalEconomy: (cb: (e: GlobalEconomy | null) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(doc(globalsCollection, 'economy'), s => cb(s.exists() ? s.data() as GlobalEconomy : null), err),
     listenToVaults: (cb: (v: TreasuryVault[]) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(vaultsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), err),
@@ -421,11 +486,6 @@ export const api = {
             await updateDoc(doc(postsCollection, id), { upvotes: upvotes.includes(uid) ? arrayRemove(uid) : arrayUnion(uid) });
         }
     },
-    fetchPinnedPosts: async (isAdmin: boolean): Promise<Post[]> => {
-        const q = query(postsCollection, where('isPinned', '==', true));
-        const s = await getDocs(q);
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as Post));
-    },
     fetchRegularPosts: async (count: number, filter: string, isAdmin: boolean, startAfterDoc?: DocumentSnapshot<DocumentData>, currentUser?: User) => {
         let q;
         if (filter === 'all' || filter === 'foryou') q = query(postsCollection, orderBy('date', 'desc'), limit(count));
@@ -437,60 +497,12 @@ export const api = {
     },
     togglePinPost: (admin: User, id: string, pin: boolean) => updateDoc(doc(postsCollection, id), { isPinned: pin }),
 
-    processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
-        await runTransaction(db, async (t) => {
-            const econRef = doc(globalsCollection, 'economy');
-            const receiverRef = rid ? doc(usersCollection, rid) : null;
-            
-            const [econSnap, receiverSnap] = await Promise.all([
-                t.get(econRef), 
-                receiverRef ? t.get(receiverRef) : Promise.resolve(null)
-            ]);
-
-            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
-            
-            let enrichedTx = { ...tx, priceAtSync: currentPrice };
-            if (receiverSnap?.exists()) {
-                const rData = receiverSnap.data();
-                if (rData?.publicKey) enrichedTx.receiverPublicKey = rData.publicKey;
-            } else if (rid === 'EXTERNAL_NODE' || !rid) {
-                enrichedTx.receiverPublicKey = `EXTERNAL_NODE:${tx.id.substring(0,8)}`;
-            }
-
-            t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
-            if (receiverRef && rid !== 'EXTERNAL_NODE') t.update(receiverRef, { ubtBalance: increment(amt) });
-            // LAW: Use Signature as document key
-            t.set(doc(ledgerCollection, tx.signature), { ...enrichedTx, serverTimestamp: serverTimestamp() });
-        });
-        sovereignService.dispatchTransaction(tx).catch(console.error);
-    },
-
-    getPublicLedger: async (l: number = 200) => {
-        const s = await getDocs(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)));
-        return s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
-    },
-
     sendDistressPost: async (u: User, content: string) => {
         return addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress', commentCount: 0, repostCount: 0 });
     },
 
-    startChat: async (u: User, t: PublicUserProfile): Promise<Conversation> => {
-        const id = [u.id, t.id].sort().join('_');
-        const snap = await getDoc(doc(conversationsCollection, id));
-        if (snap.exists()) return { id: snap.id, ...snap.data() } as Conversation;
-        const data = { members: [u.id, t.id], memberNames: { [u.id]: u.name, [t.id]: t.name }, lastMessage: "Handshake established", lastMessageTimestamp: serverTimestamp(), lastMessageSenderId: u.id, readBy: [u.id], isGroup: false };
-        await setDoc(doc(conversationsCollection, id), data);
-        return { id, ...data } as Conversation;
-    },
-    markConversationAsRead: (id: string, uid: string) => updateDoc(doc(conversationsCollection, id), { readBy: arrayUnion(uid) }),
-
     createGroupChat: async (name: string, members: string[], memberNames: {[key: string]: string}) => {
         return addDoc(conversationsCollection, { name, members, memberNames, lastMessage: "Group established", lastMessageTimestamp: serverTimestamp(), lastMessageSenderId: 'SYSTEM', readBy: [], isGroup: true });
-    },
-
-    getGroupMembers: async (uids: string[]): Promise<MemberUser[]> => {
-        const users = await api.getUsersByUids(uids);
-        return users as MemberUser[];
     },
 
     updateGroupMembers: async (cid: string, members: string[], memberNames: {[key: string]: string}) => {
@@ -635,11 +647,12 @@ export const api = {
         let tx;
         await runTransaction(db, async t => {
             const userRef = doc(usersCollection, uid);
-            const userSnap = await t.get(userRef);
-            if (!userSnap.exists()) return;
-            t.update(userRef, { ubtBalance: increment(amount) });
+            const econSnap = await t.get(doc(globalsCollection, 'economy'));
+            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
+            
+            t.set(userRef, { ubtBalance: increment(amount) }, { merge: true });
             const txId = `admin-${Date.now().toString(36)}`;
-            tx = { id: txId, senderId: 'SYSTEM', receiverId: uid, amount: Math.abs(amount), timestamp: Date.now(), reason, type: amount > 0 ? 'credit' : 'debit', protocol_mode: 'MAINNET', serverTimestamp: serverTimestamp() };
+            tx = { id: txId, senderId: 'SYSTEM', receiverId: uid, amount: Math.abs(amount), timestamp: Date.now(), reason, type: amount > 0 ? 'credit' : 'debit', protocol_mode: 'MAINNET', priceAtSync: currentPrice, serverTimestamp: serverTimestamp() };
             t.set(doc(ledgerCollection, txId), tx);
         });
         if (tx) sovereignService.dispatchTransaction(tx).catch(console.error);
@@ -754,8 +767,8 @@ export const api = {
             const econRef = doc(globalsCollection, 'economy');
             const econSnap = await t.get(econRef);
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
-            t.update(receiverRef, { credibility_score: increment(5), vouchCount: increment(1) });
-            // LAW: Signature is document key
+            // Ensure document exists via set with merge true
+            t.set(receiverRef, { credibility_score: increment(5), vouchCount: increment(1) }, { merge: true });
             t.set(doc(ledgerCollection, transaction.signature), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
         });
         sovereignService.dispatchTransaction(transaction).catch(console.error);
