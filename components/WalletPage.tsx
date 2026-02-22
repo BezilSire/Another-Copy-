@@ -18,6 +18,7 @@ import { TrendingUpIcon } from './icons/TrendingUpIcon';
 import { HistoryIcon } from './icons/HistoryIcon';
 import { ProtocolReconciliation } from './ProtocolReconciliation';
 import { IdentityVault } from './IdentityVault';
+import QRCode from 'qrcode';
 
 export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
     const [transactions, setTransactions] = useState<UbtTransaction[]>([]);
@@ -26,9 +27,24 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
     const [activeTab, setActiveTab] = useState<'ledger' | 'nodes' | 'security'>('ledger');
     const [isSendOpen, setIsSendOpen] = useState(false);
     const [isScanOpen, setIsScanOpen] = useState(false);
+    const [isReceiveOpen, setIsReceiveOpen] = useState(false);
+    const [qrDataUrl, setQrDataUrl] = useState<string>('');
     const [isAuditOpen, setIsAuditOpen] = useState(false);
     const [isCopied, setIsCopied] = useState(false);
     const { addToast } = useToast();
+
+    useEffect(() => {
+        if (user.publicKey) {
+            QRCode.toDataURL(user.publicKey, {
+                width: 400,
+                margin: 2,
+                color: {
+                    dark: '#F27D26',
+                    light: '#00000000'
+                }
+            }).then(setQrDataUrl).catch(console.error);
+        }
+    }, [user.publicKey]);
 
     useEffect(() => {
         const unsubTx = api.listenForUserTransactions(user.id, (txs) => {
@@ -97,20 +113,27 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                         <button 
                             onClick={() => setIsSendOpen(true)}
-                            className="bg-brand-gold text-slate-950 py-4 rounded-xl font-bold flex items-center justify-center gap-2 transition-all active:scale-[0.95] shadow-lg"
+                            className="bg-brand-gold text-slate-950 py-4 rounded-xl font-bold flex flex-col items-center justify-center gap-1 transition-all active:scale-[0.95] shadow-lg"
                         >
                             <SendIcon className="h-5 w-5" />
-                            <span className="text-sm uppercase tracking-wide">Send Funds</span>
+                            <span className="text-[10px] uppercase tracking-widest">Send</span>
+                        </button>
+                        <button 
+                            onClick={() => setIsReceiveOpen(true)}
+                            className="bg-white/5 text-white py-4 rounded-xl border border-white/10 flex flex-col items-center justify-center gap-1 transition-all active:scale-[0.95] hover:bg-white/10"
+                        >
+                            <QrCodeIcon className="h-5 w-5" />
+                            <span className="text-[10px] uppercase tracking-widest">Receive</span>
                         </button>
                         <button 
                             onClick={() => setIsScanOpen(true)}
-                            className="bg-white/5 text-white py-4 rounded-xl border border-white/10 flex items-center justify-center gap-2 transition-all active:scale-[0.95] hover:bg-white/10"
+                            className="bg-white/5 text-white py-4 rounded-xl border border-white/10 flex flex-col items-center justify-center gap-1 transition-all active:scale-[0.95] hover:bg-white/10"
                         >
-                            <QrCodeIcon className="h-5 w-5" />
-                            <span className="text-sm uppercase tracking-wide">Scan Code</span>
+                            <TrendingUpIcon className="h-5 w-5" />
+                            <span className="text-[10px] uppercase tracking-widest">Scan</span>
                         </button>
                     </div>
                  </div>
@@ -221,6 +244,56 @@ export const WalletPage: React.FC<{ user: User }> = ({ user }) => {
             {isSendOpen && <SendUbtModal isOpen={isSendOpen} onClose={() => setIsSendOpen(false)} currentUser={user} onTransactionComplete={() => {}} />}
             {isScanOpen && <UBTScan currentUser={user} onTransactionComplete={() => {}} onClose={() => setIsScanOpen(false)} />}
             {isAuditOpen && <ProtocolReconciliation user={user} onClose={() => setIsAuditOpen(false)} />}
+
+            {isReceiveOpen && (
+                <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/90 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-slate-900 w-full max-w-md rounded-[2.5rem] p-8 border border-white/10 shadow-2xl relative">
+                        <button 
+                            onClick={() => setIsReceiveOpen(false)}
+                            className="absolute top-6 right-6 text-slate-500 hover:text-white transition-colors"
+                        >
+                            <HistoryIcon className="h-6 w-6 rotate-45" />
+                        </button>
+
+                        <div className="text-center space-y-6">
+                            <div className="space-y-2">
+                                <h3 className="text-2xl font-bold text-white">Receive UBT</h3>
+                                <p className="text-xs text-slate-400 font-medium">Show this code to receive assets</p>
+                            </div>
+
+                            <div className="bg-white p-4 rounded-3xl inline-block shadow-inner">
+                                {qrDataUrl ? (
+                                    <img src={qrDataUrl} alt="UBT QR Code" className="w-64 h-64" />
+                                ) : (
+                                    <div className="w-64 h-64 flex items-center justify-center">
+                                        <LoaderIcon className="h-8 w-8 animate-spin text-slate-300" />
+                                    </div>
+                                )}
+                            </div>
+
+                            <div 
+                                onClick={handleCopyAddress}
+                                className="bg-black/40 border border-white/10 p-4 rounded-2xl flex flex-col gap-1 cursor-pointer hover:border-brand-gold/50 transition-all group"
+                            >
+                                <div className="flex justify-between items-center px-1">
+                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Your Public Address</span>
+                                    {isCopied ? <ClipboardCheckIcon className="h-4 w-4 text-emerald-500" /> : <ClipboardIcon className="h-4 w-4 text-slate-500" />}
+                                </div>
+                                <p className="text-xs font-mono text-brand-gold break-all font-bold group-hover:text-white transition-colors">
+                                    {user.publicKey}
+                                </p>
+                            </div>
+
+                            <button 
+                                onClick={handleCopyAddress}
+                                className="w-full bg-brand-gold text-slate-950 py-4 rounded-xl font-bold uppercase tracking-widest text-xs shadow-lg active:scale-[0.98] transition-all"
+                            >
+                                Copy Address
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 };

@@ -66,7 +66,10 @@ export const AgentDashboard: React.FC<AgentDashboardProps> = ({ user, broadcasts
             const userStatusMap = new Map(userProfiles.map(u => [u.id, u.status]));
             const enrichedMembers = agentMembers.map(member => {
                 if (member.uid && userStatusMap.has(member.uid)) {
-                    return { ...member, status: userStatusMap.get(member.uid) };
+                    const status = userStatusMap.get(member.uid);
+                    if (status) {
+                        return { ...member, status };
+                    }
                 }
                 return member;
             });

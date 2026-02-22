@@ -6,9 +6,10 @@ import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
 interface SovereignUpgradeBannerProps {
   onUpgrade: () => void;
+  user: User;
 }
 
-export const SovereignUpgradeBanner: React.FC<SovereignUpgradeBannerProps> = ({ onUpgrade }) => {
+export const SovereignUpgradeBanner: React.FC<SovereignUpgradeBannerProps> = ({ onUpgrade, user }) => {
   return (
     <div className="mb-8 relative group cursor-pointer overflow-hidden rounded-[2rem] border border-brand-gold/30 shadow-glow-gold bg-slate-950/80 backdrop-blur-xl animate-pulse-soft" onClick={onUpgrade}>
       <div className="absolute inset-0 bg-gradient-to-r from-brand-gold/[0.05] to-transparent pointer-events-none"></div>

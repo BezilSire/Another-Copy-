@@ -19,51 +19,11 @@ import { cryptoService } from './services/cryptoService';
 import { RadarModal } from './components/RadarModal';
 import { LedgerPage } from './components/LedgerPage';
 
-const BootSequence: React.FC<{ onComplete: () => void }> = ({ onComplete }) => {
-  const [logs, setLogs] = useState<string[]>([]);
-  const sequence = [
-    "Welcome to Ubuntium...",
-    "Preparing your community dashboard...",
-    "Connecting to the network...",
-    "Securing your connection...",
-    "Ready."
-  ];
-  useEffect(() => {
-    let i = 0;
-    const interval = window.setInterval(() => { 
-        if (i < sequence.length) { 
-            setLogs(prev => [...prev, sequence[i]]); 
-            i++; 
-        } else { 
-            window.clearInterval(interval); 
-            setTimeout(onComplete, 300); 
-        } 
-    }, 100);
-    return () => window.clearInterval(interval);
-  }, [onComplete]);
-  return (
-    <div className="fixed inset-0 z-[200] bg-slate-950 flex flex-col items-center justify-center p-8 font-sans text-brand-gold">
-      <div className="w-24 h-24 mb-16 relative">
-        <LogoIcon className="h-full w-full text-brand-gold animate-pulse" />
-        <div className="absolute inset-0 border border-brand-gold/20 rounded-full animate-ping scale-150 opacity-20"></div>
-      </div>
-      <div className="w-full max-w-xs space-y-3">
-        {logs.map((log, idx) => (
-          <div key={idx} className="text-xs tracking-wide font-bold text-brand-gold/90 animate-fade-in text-center">
-            {log}
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
 const App: React.FC = () => {
   const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser } = useAuth();
   
   const isExplorer = process.env.SITE_MODE === 'EXPLORER';
   
-  const [isBooting, setIsBooting] = useState(!isExplorer); 
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
   const [chatTarget, setChatTarget] = useState<Conversation | 'main' | null>(null);
@@ -99,7 +59,6 @@ const App: React.FC = () => {
   
   const renderMainContent = () => {
     if (isExplorer) return <LedgerPage />;
-    if (isBooting) return null;
     
     if (currentUser || firebaseUser) {
         const userToRender = currentUser || ({ 
@@ -155,10 +114,8 @@ const App: React.FC = () => {
 
   return (
     <div className={`flex flex-col min-h-screen selection:bg-brand-gold/30 bg-black`}>
-      {!isExplorer && isBooting && <BootSequence onComplete={() => setIsBooting(false)} />}
-      {(isExplorer || !isBooting) && (
-          <div className="flex-1 flex flex-col animate-fade-in">
-            { (currentUser || firebaseUser) && !firebaseUser?.isAnonymous && !isExplorer && (
+      <div className="flex-1 flex flex-col animate-fade-in">
+        { (currentUser || firebaseUser) && !firebaseUser?.isAnonymous && !isExplorer && (
                 <Header 
                     user={currentUser || { name: 'Citizen', role: 'member' } as any} 
                     onLogout={() => setIsLogoutConfirmOpen(true)} 
@@ -173,8 +130,7 @@ const App: React.FC = () => {
             <ToastContainer />
             <ConfirmationDialog isOpen={isLogoutConfirmOpen} onClose={() => setIsLogoutConfirmOpen(false)} onConfirm={confirmLogout} title="Log Out" message="Are you sure you want to log out of your account?" confirmButtonText="Log Out" />
             {isRadarOpen && currentUser && <RadarModal isOpen={isRadarOpen} onClose={() => setIsRadarOpen(false)} currentUser={currentUser} onViewProfile={handleViewProfile} onStartChat={async (id) => { const target = await api.getPublicUserProfile(id); if (target) { const convo = await api.startChat(currentUser, target); setViewingProfileId(null); setChatTarget(convo); } }} />}
-          </div>
-      )}
+      </div>
     </div>
   );
 };

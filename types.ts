@@ -74,6 +74,8 @@ export interface User {
   dob?: string;
   /* Added id_card_number to satisfy profile completion components */
   id_card_number?: string;
+  initialUbtStake?: number;
+  sustenanceVouchers?: SustenanceVoucher[];
 }
 
 // Fixed: Added Admin and Agent interfaces extending User

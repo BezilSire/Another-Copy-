@@ -62,16 +62,16 @@ export const AdminDashboard: React.FC<{
   const hasVault = cryptoService.hasVault() || (user as any).encryptedVault;
 
   useEffect(() => {
-    const unsubUsers = api.listenForAllUsers(user, setAllUsers, (err) => console.error(err));
-    const unsubMembers = api.listenForAllMembers(user, setMembers, (err) => console.error(err));
-    const unsubAgents = api.listenForAllAgents(user, setAgents, (err) => console.error(err));
-    const unsubPending = api.listenForPendingMembers(user, setPendingMembers, (err) => console.error(err));
-    const unsubReports = api.listenForReports(user, setReports, (err) => console.error(err));
-    const unsubPayouts = api.listenForPayoutRequests(user, setPayouts, (err) => console.error(err));
-    const unsubVentures = api.listenForVentures(user, setVentures, (err) => console.error(err));
-    const unsubCvp = api.listenForCVP(user, setCvp, (err) => console.error(err));
-    const unsubOracle = api.listenForPendingPurchases(setPendingPurchases, (err) => console.error(err));
-    const unsubMultisig = api.listenForMultiSigProposals(setMsProposals);
+    const unsubUsers = api.listenForAllUsers(user, (u) => setAllUsers(u), (err: any) => console.error(err));
+    const unsubMembers = api.listenForAllMembers(user, (m) => setMembers(m), (err: any) => console.error(err));
+    const unsubAgents = api.listenForAllAgents(user, (a) => setAgents(a), (err: any) => console.error(err));
+    const unsubPending = api.listenForPendingMembers(user, (m) => setPendingMembers(m), (err: any) => console.error(err));
+    const unsubReports = api.listenForReports(user, (r) => setReports(r), (err: any) => console.error(err));
+    const unsubPayouts = api.listenForPayoutRequests(user, (p) => setPayouts(p), (err: any) => console.error(err));
+    const unsubVentures = api.listenForVentures(user, (v) => setVentures(v), (err: any) => console.error(err));
+    const unsubCvp = api.listenForCVP(user, (c) => setCvp(c), (err: any) => console.error(err));
+    const unsubOracle = api.listenForPendingPurchases((p) => setPendingPurchases(p), (err: any) => console.error(err));
+    const unsubMultisig = api.listenForMultiSigProposals((p) => setMsProposals(p));
     api.getBroadcasts().then(setBroadcasts).catch(console.error);
 
     return () => {

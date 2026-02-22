@@ -15,7 +15,8 @@ interface UserCardProps {
   isOnline?: boolean;
 }
 
-const StatusBadge: React.FC<{ status: User['status'] }> = ({ status }) => {
+const StatusBadge: React.FC<{ status?: User['status'] }> = ({ status }) => {
+  if (!status) return null;
   if (status === 'active') {
     return <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-bold bg-green-900/50 text-green-300 border border-green-700/50 uppercase tracking-wide shadow-sm">Verified</span>;
   }
