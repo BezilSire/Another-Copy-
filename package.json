@@ -8,6 +8,7 @@
     "dev": "vite",
     "prebuild": "node scripts/generate-icon-stubs.js",
     "build": "npm run prebuild && vite build",
+    "lint": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {

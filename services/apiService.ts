@@ -152,17 +152,20 @@ export const api = {
             t.update(senderRef, { [balKey]: increment(-transaction.amount) });
             // Fix: Use set with merge true for receiver to ensure balance reflects even if profile doc is fresh
             t.set(receiverRef, { ubtBalance: increment(transaction.amount) }, { merge: true });
-            t.set(doc(ledgerCollection, transaction.signature), { ...finalTx, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+            t.set(doc(ledgerCollection, transaction.signature), { 
+                ...finalTx, 
+                participants: [transaction.senderId, transaction.receiverId],
+                priceAtSync: currentPrice, 
+                serverTimestamp: serverTimestamp() 
+            });
         }); 
         sovereignService.dispatchTransaction(transaction).catch(console.error);
     },
 
     getUserLedger: async (uid: string) => {
-        const q1 = query(ledgerCollection, where('senderId', '==', uid));
-        const q2 = query(ledgerCollection, where('receiverId', '==', uid));
-        const [s1, s2] = await Promise.all([getDocs(q1), getDocs(q2)]);
-        const res = [...s1.docs, ...s2.docs].map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
-        return Array.from(new Map(res.map(i => [i.id, i])).values()).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+        const q = query(ledgerCollection, where('participants', 'array-contains', uid), orderBy('serverTimestamp', 'desc'), limit(100));
+        const s = await getDocs(q);
+        return s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
     },
 
     syncInternalVaults: async (admin: Admin, from: TreasuryVault, to: TreasuryVault, amt: number, reason: string) => {
@@ -198,7 +201,11 @@ export const api = {
                 priceAtSync: currentPrice
             };
             
-            t.set(doc(ledgerCollection, signature), { ...tx, serverTimestamp: serverTimestamp() });
+            t.set(doc(ledgerCollection, signature), { 
+                ...tx, 
+                participants: [from.id, to.id],
+                serverTimestamp: serverTimestamp() 
+            });
         });
     },
     
@@ -243,14 +250,25 @@ export const api = {
                 priceAtSync: currentPrice
             };
 
-            t.set(doc(ledgerCollection, finalTx.id), { ...finalTx, serverTimestamp: serverTimestamp() });
+            t.set(doc(ledgerCollection, finalTx.id), { 
+                ...finalTx, 
+                participants: [sourceVaultId, p.userId],
+                serverTimestamp: serverTimestamp() 
+            });
         });
     },
 
     processAdminHandshake: async (vid: string, rid: string | null, amt: number, tx: UbtTransaction) => {
+        // Protocol Protection: If rid is EXTERNAL_NODE but we have a receiverPublicKey, try to resolve it first
+        let finalRid = rid;
+        if (rid === 'EXTERNAL_NODE' && tx.receiverPublicKey && tx.receiverPublicKey.startsWith('UBT-')) {
+            const resolved = await api.getUserByPublicKey(tx.receiverPublicKey);
+            if (resolved) finalRid = resolved.id;
+        }
+
         await runTransaction(db, async (t) => {
             const econRef = doc(globalsCollection, 'economy');
-            const receiverRef = rid ? doc(usersCollection, rid) : null;
+            const receiverRef = finalRid && finalRid !== 'EXTERNAL_NODE' ? doc(usersCollection, finalRid) : null;
             
             const [econSnap, receiverSnap] = await Promise.all([
                 t.get(econRef), 
@@ -259,18 +277,24 @@ export const api = {
 
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
             
-            let enrichedTx = { ...tx, priceAtSync: currentPrice };
+            let enrichedTx = { ...tx, priceAtSync: currentPrice, receiverId: finalRid || 'EXTERNAL_NODE' };
             if (receiverSnap?.exists()) {
                 const rData = receiverSnap.data();
                 if (rData?.publicKey) enrichedTx.receiverPublicKey = rData.publicKey;
-            } else if (rid === 'EXTERNAL_NODE' || !rid) {
-                enrichedTx.receiverPublicKey = `EXTERNAL_NODE:${tx.id.substring(0,8)}`;
+            } else if (finalRid === 'EXTERNAL_NODE' || !finalRid) {
+                enrichedTx.receiverPublicKey = tx.receiverPublicKey || `EXTERNAL_NODE:${tx.id.substring(0,8)}`;
             }
 
             t.update(doc(vaultsCollection, vid), { balance: increment(-amt) });
             // Fix: Use set with merge: true to effectively update node balance regardless of doc state
-            if (receiverRef && rid !== 'EXTERNAL_NODE') t.set(receiverRef, { ubtBalance: increment(amt) }, { merge: true });
-            t.set(doc(ledgerCollection, tx.signature), { ...enrichedTx, serverTimestamp: serverTimestamp() });
+            if (receiverRef && finalRid !== 'EXTERNAL_NODE') {
+                t.set(receiverRef, { ubtBalance: increment(amt) }, { merge: true });
+            }
+            t.set(doc(ledgerCollection, tx.signature), { 
+                ...enrichedTx, 
+                participants: [vid, finalRid || 'EXTERNAL_NODE'],
+                serverTimestamp: serverTimestamp() 
+            });
         });
         sovereignService.dispatchTransaction(tx).catch(console.error);
     },
@@ -284,7 +308,19 @@ export const api = {
             
             t.set(userRef, { ubtBalance: increment(amount) }, { merge: true });
             const txId = `admin-${Date.now().toString(36)}`;
-            tx = { id: txId, senderId: 'SYSTEM', receiverId: uid, amount: Math.abs(amount), timestamp: Date.now(), reason, type: amount > 0 ? 'credit' : 'debit', protocol_mode: 'MAINNET', priceAtSync: currentPrice, serverTimestamp: serverTimestamp() };
+            tx = { 
+                id: txId, 
+                senderId: 'SYSTEM', 
+                receiverId: uid, 
+                participants: ['SYSTEM', uid],
+                amount: Math.abs(amount), 
+                timestamp: Date.now(), 
+                reason, 
+                type: amount > 0 ? 'credit' : 'debit', 
+                protocol_mode: 'MAINNET', 
+                priceAtSync: currentPrice, 
+                serverTimestamp: serverTimestamp() 
+            };
             t.set(doc(ledgerCollection, txId), tx);
         });
         if (tx) sovereignService.dispatchTransaction(tx).catch(console.error);
@@ -427,7 +463,8 @@ export const api = {
     listenForGlobalEconomy: (cb: (e: GlobalEconomy | null) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(doc(globalsCollection, 'economy'), s => cb(s.exists() ? s.data() as GlobalEconomy : null), err),
     listenToVaults: (cb: (v: TreasuryVault[]) => void, err?: (error: any) => void): Unsubscribe => onSnapshot(vaultsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), err),
     listenForNotifications: (uid: string, cb: (n: Notification[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'notifications'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Notification))), err),
-    listenForUserTransactions: (uid: string, cb: (txs: Transaction[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'transactions'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as any))), err),
+    listenForUserTransactions: (uid: string, cb: (txs: UbtTransaction[]) => void, err?: any): Unsubscribe => 
+        onSnapshot(query(ledgerCollection, where('participants', 'array-contains', uid), orderBy('serverTimestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction))), err),
     listenToUserVaults: (uid: string, cb: (v: any[]) => void): Unsubscribe => onSnapshot(query(collection(db, 'users', uid, 'vaults'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() }))), console.error),
     listenForConversations: (uid: string, cb: (c: Conversation[]) => void, err?: any): Unsubscribe => onSnapshot(query(conversationsCollection, where('members', 'array-contains', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Conversation))), err),
     listenForMessages: (cid: string, u: User, cb: (m: Message[]) => void, err?: any): Unsubscribe => onSnapshot(query(collection(db, conversationsCollection.path, cid, 'messages'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Message))), err),
@@ -466,7 +503,18 @@ export const api = {
             batch.set(doc(vaultsCollection, v.id), { ...v, publicKey: `UBT-VAULT-${v.id}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`, isLocked: false });
         }
         const txId = `mint-${Date.now().toString(36)}`;
-        const tx = { id: txId, senderId: 'SYSTEM', receiverId: 'GENESIS', amount: 15000000, timestamp: Date.now(), type: 'SYSTEM_MINT', protocol_mode: 'MAINNET', senderPublicKey: 'ROOT_PROTOCOL', serverTimestamp: serverTimestamp() };
+        const tx = { 
+            id: txId, 
+            senderId: 'SYSTEM', 
+            receiverId: 'GENESIS', 
+            participants: ['SYSTEM', 'GENESIS'],
+            amount: 15000000, 
+            timestamp: Date.now(), 
+            type: 'SYSTEM_MINT', 
+            protocol_mode: 'MAINNET', 
+            senderPublicKey: 'ROOT_PROTOCOL', 
+            serverTimestamp: serverTimestamp() 
+        };
         batch.set(doc(ledgerCollection, txId), tx);
         await batch.commit();
         sovereignService.dispatchTransaction(tx).catch(console.error);
@@ -643,21 +691,6 @@ export const api = {
         return updateDoc(doc(globalsCollection, 'economy'), data);
     },
 
-    updateUserUbt: async (admin: Admin, uid: string, amount: number, reason: string) => {
-        let tx;
-        await runTransaction(db, async t => {
-            const userRef = doc(usersCollection, uid);
-            const econSnap = await t.get(doc(globalsCollection, 'economy'));
-            const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
-            
-            t.set(userRef, { ubtBalance: increment(amount) }, { merge: true });
-            const txId = `admin-${Date.now().toString(36)}`;
-            tx = { id: txId, senderId: 'SYSTEM', receiverId: uid, amount: Math.abs(amount), timestamp: Date.now(), reason, type: amount > 0 ? 'credit' : 'debit', protocol_mode: 'MAINNET', priceAtSync: currentPrice, serverTimestamp: serverTimestamp() };
-            t.set(doc(ledgerCollection, txId), tx);
-        });
-        if (tx) sovereignService.dispatchTransaction(tx).catch(console.error);
-    },
-
     requestUbtRedemption: async (u: User, amount: number, usd: number, name: string, phone: string) => {
         const batch = writeBatch(db);
         batch.set(doc(payoutsCollection), { userId: u.id, userName: u.name, type: 'ccap_redemption', amount: usd, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp(), meta: { ubtRedeemed: amount } });
@@ -725,6 +758,7 @@ export const api = {
                 id: txId, 
                 senderId: data.fromVaultId, 
                 receiverId: data.toVaultId, 
+                participants: [data.fromVaultId, data.toVaultId],
                 amount: data.amount, 
                 timestamp, 
                 reason: `MultiSig: ${data.reason}`, 
@@ -769,7 +803,12 @@ export const api = {
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
             // Ensure document exists via set with merge true
             t.set(receiverRef, { credibility_score: increment(5), vouchCount: increment(1) }, { merge: true });
-            t.set(doc(ledgerCollection, transaction.signature), { ...transaction, priceAtSync: currentPrice, serverTimestamp: serverTimestamp() });
+            t.set(doc(ledgerCollection, transaction.signature), { 
+                ...transaction, 
+                participants: [transaction.senderId, transaction.receiverId],
+                priceAtSync: currentPrice, 
+                serverTimestamp: serverTimestamp() 
+            });
         });
         sovereignService.dispatchTransaction(transaction).catch(console.error);
     },

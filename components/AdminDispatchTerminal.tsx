@@ -107,7 +107,14 @@ export const AdminDispatchTerminal: React.FC<{ admin: Admin }> = ({ admin }) => 
                 protocol_mode: 'MAINNET'
             };
 
-            await api.processAdminHandshake(selectedVaultId, targetId, amt, tx);
+            let finalTargetId = targetId;
+            // Protocol Protection: If we only have an address but no resolved user, try one last time to resolve by public key
+            if (finalTargetId === 'EXTERNAL_NODE' && targetAddress.startsWith('UBT-')) {
+                const resolved = await api.getUserByPublicKey(targetAddress);
+                if (resolved) finalTargetId = resolved.id;
+            }
+
+            await api.processAdminHandshake(selectedVaultId, finalTargetId, amt, tx);
             addLog(`SYNC_COMPLETE: block ${signature.substring(0,16)}...`);
             addToast("Handshake complete. Ledger updated.", "success");
             setAmount('');
