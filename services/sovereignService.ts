@@ -68,7 +68,8 @@ export const sovereignService = {
         if (sysNodes.includes(tx.receiverId)) enrichedPacket.receiverPublicKey = `${tx.receiverId}_NODE`;
         if (sysNodes.includes(tx.senderId)) enrichedPacket.senderPublicKey = `${tx.senderId}_NODE`;
 
-        const path = `ledger/tx-${tx.timestamp || Date.now()}-${tx.id}.json`;
+        const sanitizedId = tx.id.replace(/\//g, '_');
+        const path = `ledger/tx-${tx.timestamp || Date.now()}-${sanitizedId}.json`;
         return await sovereignService.commitBlock(path, enrichedPacket, `Block Dispatch: ${tx.id}`);
     },
 
@@ -93,7 +94,8 @@ export const sovereignService = {
         for (const tx of firebaseTxs) {
             if (BLACKLISTED_SIGNATURES.includes(tx.id)) continue;
             
-            if (!existingIds.has(tx.id)) {
+            const sanitizedId = tx.id.replace(/\//g, '_');
+            if (!existingIds.has(sanitizedId)) {
                 let enrichedTx = { ...tx };
                 
                 // CRITICAL: Identity resolution protocol

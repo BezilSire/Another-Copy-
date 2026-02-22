@@ -180,7 +180,7 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                                     {(i + 1).toString().padStart(2, '0')}
                                 </span>
                                 <input
-                                    ref={el => inputRefs.current[i] = el}
+                                    ref={el => { inputRefs.current[i] = el; }}
                                     type="text"
                                     value={word}
                                     onChange={e => handleWordChange(e.target.value, i)}

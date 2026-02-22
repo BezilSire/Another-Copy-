@@ -49,7 +49,7 @@ import {
     Conversation, Message, Notification, Activity,
     PublicUserProfile, PayoutRequest, Transaction, Admin, UbtTransaction, TreasuryVault, PendingUbtPurchase,
     CitizenResource, Dispute, Meeting, GlobalEconomy, CommunityValuePool, Proposal, Venture, SustenanceCycle, SustenanceVoucher, Comment, Distribution, VentureEquityHolding,
-    RedemptionCycle, ParticipantStatus, RTCSignal, ICESignal, Candidate, MultiSigProposal, UserVault
+    RedemptionCycle, ParticipantStatus, RTCSignal, ICESignal, Candidate, MultiSigProposal, UserVault, Report
 } from '../types';
 
 const usersCollection = collection(db, 'users');
@@ -69,6 +69,8 @@ const meetingsCollection = collection(db, 'meetings');
 const candidatesCollection = collection(db, 'candidates');
 const broadcastsCollection = collection(db, 'broadcasts');
 const multisigCollection = collection(db, 'multisig_proposals');
+
+const sanitizeDocId = (id: string) => id.replace(/\//g, '_');
 
 export const api = {
     login: (email: string, password: string): Promise<FirebaseUser> => {
@@ -153,7 +155,7 @@ export const api = {
             t.update(senderRef, { [balKey]: increment(-transaction.amount) });
             // Fix: Use set with merge true for receiver to ensure balance reflects even if profile doc is fresh
             t.set(receiverRef, { ubtBalance: increment(transaction.amount) }, { merge: true });
-            t.set(doc(ledgerCollection, transaction.signature), { 
+            t.set(doc(ledgerCollection, sanitizeDocId(transaction.signature)), { 
                 ...finalTx, 
                 participants: [transaction.senderId, transaction.receiverId],
                 priceAtSync: currentPrice, 
@@ -206,7 +208,7 @@ export const api = {
                 priceAtSync: currentPrice
             };
             
-            t.set(doc(ledgerCollection, signature), { 
+            t.set(doc(ledgerCollection, sanitizeDocId(signature)), { 
                 ...tx, 
                 participants: [from.id, to.id],
                 serverTimestamp: serverTimestamp() 
@@ -255,7 +257,7 @@ export const api = {
                 priceAtSync: currentPrice
             };
 
-            t.set(doc(ledgerCollection, finalTx.id), { 
+            t.set(doc(ledgerCollection, sanitizeDocId(finalTx.id)), { 
                 ...finalTx, 
                 participants: [sourceVaultId, p.userId],
                 serverTimestamp: serverTimestamp() 
@@ -295,7 +297,7 @@ export const api = {
             if (receiverRef && finalRid !== 'EXTERNAL_NODE') {
                 t.set(receiverRef, { ubtBalance: increment(amt) }, { merge: true });
             }
-            t.set(doc(ledgerCollection, tx.signature), { 
+            t.set(doc(ledgerCollection, sanitizeDocId(tx.signature)), { 
                 ...enrichedTx, 
                 participants: [vid, finalRid || 'EXTERNAL_NODE'],
                 serverTimestamp: serverTimestamp() 
@@ -812,7 +814,7 @@ export const api = {
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
             // Ensure document exists via set with merge true
             t.set(receiverRef, { credibility_score: increment(5), vouchCount: increment(1) }, { merge: true });
-            t.set(doc(ledgerCollection, transaction.signature), { 
+            t.set(doc(ledgerCollection, sanitizeDocId(transaction.signature)), { 
                 ...transaction, 
                 participants: [transaction.senderId, transaction.receiverId],
                 priceAtSync: currentPrice, 

@@ -1,14 +1,10 @@
 
 import React, { useState } from 'react';
+import { LoginCredentials } from '../types';
 import { LogoIcon } from './icons/LogoIcon';
 import { EyeIcon } from './icons/EyeIcon';
 import { EyeOffIcon } from './icons/EyeOffIcon';
 import { ArrowLeftIcon } from './icons/ArrowLeftIcon';
-
-type LoginCredentials = {
-  email: string;
-  password?: string;
-};
 
 interface LoginPageProps {
   onLogin: (credentials: LoginCredentials) => Promise<void>;

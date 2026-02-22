@@ -470,6 +470,11 @@ export interface NewPublicMemberData {
     referralCode?: string;
 }
 
+export interface LoginCredentials {
+    email: string;
+    password: string;
+}
+
 // Fixed: Added missing Post interface
 export interface Post {
     id: string;

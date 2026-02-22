@@ -247,8 +247,8 @@ export const EarnPage: React.FC<EarnPageProps> = ({ user, onUpdateUser, onNaviga
                     <div>
                         <p className="text-xs font-bold text-slate-500 uppercase">Portfolio</p>
                         <p className="text-lg font-bold text-white mt-1">
-                            {user.ventureEquity?.length > 0 
-                                ? `${user.ventureEquity.length} active investments` 
+                            {(user.ventureEquity?.length ?? 0) > 0 
+                                ? `${user.ventureEquity?.length} active investments` 
                                 : 'No investments yet'}
                         </p>
                     </div>

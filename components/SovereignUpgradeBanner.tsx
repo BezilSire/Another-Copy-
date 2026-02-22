@@ -1,5 +1,6 @@
 
 import React from 'react';
+import { User } from '../types';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { ArrowRightIcon } from './icons/ArrowRightIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';

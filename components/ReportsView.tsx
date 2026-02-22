@@ -44,13 +44,13 @@ const ReportReviewModal: React.FC<{
                                 </blockquote>
                                 <div className="text-sm mt-2">
                                      <span className="font-semibold text-gray-400">Post Author: </span>
-                                     <button onClick={() => onViewProfile(report.postAuthorId)} className="text-white hover:underline">View Author's Profile</button>
+                                     <button onClick={() => onViewProfile(report.postAuthorId || '')} className="text-white hover:underline">View Author's Profile</button>
                                 </div>
                             </div>
                         </div>
                     </div>
                      <div className="bg-slate-800 border-t border-slate-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-                        <button onClick={() => onResolve(report.id, report.postId, report.postAuthorId)} className="w-full sm:w-auto inline-flex justify-center rounded-md px-4 py-2 bg-red-600 text-white hover:bg-red-700">Uphold & Penalize (-25)</button>
+                        <button onClick={() => onResolve(report.id, report.postId || '', report.postAuthorId || '')} className="w-full sm:w-auto inline-flex justify-center rounded-md px-4 py-2 bg-red-600 text-white hover:bg-red-700">Uphold & Penalize (-25)</button>
                         <button onClick={() => onDismiss(report.id)} className="mt-3 sm:mt-0 sm:mr-3 w-full sm:w-auto inline-flex justify-center rounded-md px-4 py-2 bg-slate-600 text-gray-300 hover:bg-slate-500">Dismiss Report</button>
                     </div>
                 </div>

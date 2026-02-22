@@ -6,10 +6,9 @@ import { useToast } from './ToastContext';
 import { api } from '../services/apiService';
 import { cryptoService, VaultData } from '../services/cryptoService';
 import { auth, db } from '../services/firebase';
-import { User, Agent, NewPublicMemberData } from '../types';
+import { User, Agent, NewPublicMemberData, LoginCredentials } from '../types';
 import { generateReferralCode, generateAgentCode } from '../utils';
 
-type LoginCredentials = { email: string; password: string };
 type AgentSignupCredentials = Pick<Agent, 'name' | 'email' | 'circle'> & { password: string };
 
 interface AuthContextType {
