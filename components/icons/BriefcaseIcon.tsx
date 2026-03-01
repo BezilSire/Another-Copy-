@@ -1,6 +1,6 @@
-import React from 'react';
+import React from "react";
 
-export const BriefcaseIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+export const BriefcaseIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width="24"
@@ -13,7 +13,8 @@ export const BriefcaseIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) =>
     strokeLinejoin="round"
     {...props}
   >
-    <rect x="2" y="7" width="20" height="14" rx="2" ry="2" />
-    <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16" />
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
   </svg>
 );

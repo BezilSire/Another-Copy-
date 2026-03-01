@@ -1,7 +1,6 @@
+import React from "react";
 
-import React from 'react';
-
-export const UserCircleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+export const UserCircleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width="24"
@@ -15,7 +14,7 @@ export const UserCircleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) =
     {...props}
   >
     <circle cx="12" cy="12" r="10" />
-    <circle cx="12" cy="10" r="3" />
-    <path d="M7 20.662V19a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v1.662" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
   </svg>
 );

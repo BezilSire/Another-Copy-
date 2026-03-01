@@ -1,6 +1,6 @@
-import React from 'react';
+import React from "react";
 
-export const SendIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+export const SendIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width="24"
@@ -13,7 +13,8 @@ export const SendIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     strokeLinejoin="round"
     {...props}
   >
-    <line x1="22" y1="2" x2="11" y2="13" />
-    <polygon points="22 2 15 22 11 13 2 9 22 2" />
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
   </svg>
 );

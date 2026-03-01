@@ -1,6 +1,6 @@
-import React from 'react';
+import React from "react";
 
-export const EyeIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+export const EyeIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width="24"
@@ -13,7 +13,8 @@ export const EyeIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     strokeLinejoin="round"
     {...props}
   >
-    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-    <circle cx="12" cy="12" r="3" />
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
   </svg>
 );

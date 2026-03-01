@@ -70,10 +70,10 @@ export const VerificationModal: React.FC<VerificationModalProps> = ({ isOpen, on
                 </div>
                 <div className="mt-4 space-y-4">
                     <h4 className="text-md font-semibold text-gray-200 border-b border-slate-700 pb-2">Submitted Details</h4>
-                    <DetailItem label="Full Name" value={member.full_name} />
-                    <DetailItem label="Email" value={member.email} />
-                    <DetailItem label="Phone" value={member.phone} />
-                    <DetailItem label="Circle" value={member.circle} />
+                    <DetailItem label="Full Name" value={member.full_name || 'N/A'} />
+                    <DetailItem label="Email" value={member.email || 'N/A'} />
+                    <DetailItem label="Phone" value={member.phone || 'N/A'} />
+                    <DetailItem label="Circle" value={member.circle || 'N/A'} />
                     <DetailItem label="Address" value={member.address ?? 'Not provided'} />
                     <DetailItem label="National ID" value={member.national_id ?? 'Not provided'} />
                     <DetailItem label="Date Submitted" value={(member.date_registered as Timestamp)?.toDate ? (member.date_registered as Timestamp).toDate().toLocaleString() : new Date(member.date_registered as any).toLocaleString()} />

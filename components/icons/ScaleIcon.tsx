@@ -1,6 +1,6 @@
-import React from 'react';
+import React from "react";
 
-export const ScaleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+export const ScaleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width="24"
@@ -13,12 +13,8 @@ export const ScaleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     strokeLinejoin="round"
     {...props}
   >
-    <path d="M16 16.5l4-4" />
-    <path d="M16 16.5l-4 4" />
-    <path d="M16 16.5h-12" />
-    <path d="M3 7.5h12" />
-    <path d="M8 7.5l4 4" />
-    <path d="M8 7.5l-4-4" />
-    <path d="M12 2v20" />
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
   </svg>
 );

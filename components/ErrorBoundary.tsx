@@ -1,85 +1,59 @@
-
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
 
-interface ErrorBoundaryProps {
-  children?: ReactNode;
+interface Props {
+  children: ReactNode;
 }
 
-interface ErrorBoundaryState {
+interface State {
   hasError: boolean;
-  error: Error | null;
-  errorInfo: ErrorInfo | null;
+  error?: Error;
 }
 
-/**
- * Sovereign Error Boundary - Protocol Breach Containment
- */
-/* Fix: Use Component directly from react import for reliable inheritance resolution */
-export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
-  public state: ErrorBoundaryState = {
-    hasError: false,
-    error: null,
-    errorInfo: null
+export class ErrorBoundary extends Component<Props, State> {
+  public state: State = {
+    hasError: false
   };
 
-  constructor(props: ErrorBoundaryProps) {
-    super(props);
+  public static getDerivedStateFromError(error: Error): State {
+    return { hasError: true, error };
   }
 
-  public static getDerivedStateFromError(error: Error): ErrorBoundaryState {
-    // Update state so the next render will show the fallback UI.
-    return { hasError: true, error, errorInfo: null };
-  }
-
-  /* Capture lifecycle errors and trigger the error state */
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-    console.error('Handshake Failure Exception:', error, errorInfo);
-    /* Fix: setState is now correctly identified via Component inheritance */
-    this.setState({ 
-      hasError: true,
-      error, 
-      errorInfo 
-    });
+    console.error('Uncaught error:', error, errorInfo);
   }
 
-  private handleReset = () => {
-    window.location.reload();
-  };
-
-  public render(): ReactNode {
-    const { hasError, error } = this.state;
-
-    if (hasError) {
+  public render() {
+    if (this.state.hasError) {
       return (
-        <div className="min-h-screen bg-black flex flex-col items-center justify-center p-6 text-center font-sans">
-          <div className="module-frame glass-module p-10 sm:p-16 rounded-[4rem] border-red-500/20 shadow-premium max-w-lg w-full relative overflow-hidden animate-fade-in">
-            <div className="w-24 h-24 bg-red-500/10 rounded-full border-2 border-red-500/20 flex items-center justify-center mx-auto mb-10">
-                <AlertTriangleIcon className="h-12 w-12 text-red-500 animate-pulse" />
-            </div>
-
-            <h2 className="text-3xl font-black text-white uppercase tracking-tighter leading-none mb-4">Protocol Breach</h2>
-            <p className="label-caps !text-[10px] !text-red-500/80 mb-8 !tracking-[0.4em]">Critical System Exception Detected</p>
+        <div className="min-h-screen bg-midnight flex items-center justify-center p-6 text-center font-sans">
+          <div className="max-w-md w-full bg-midnight-light border border-white/10 rounded-[3rem] p-10 shadow-premium relative overflow-hidden">
+            <div className="corner-tl !border-white/20"></div><div className="corner-tr !border-white/20"></div><div className="corner-bl !border-white/20"></div><div className="corner-br !border-white/20"></div>
             
-            <div className="bg-black/60 p-6 rounded-3xl border border-white/5 shadow-inner mb-10 text-left overflow-hidden">
-                <p className="data-mono text-[11px] text-red-400/80 break-words leading-relaxed">
-                    {error?.name}: {error?.message}
-                </p>
+            <div className="flex flex-col items-center">
+              <div className="w-20 h-20 bg-red-500/10 rounded-3xl border-2 border-red-500/30 flex items-center justify-center mb-8 shadow-glow-red">
+                <AlertTriangleIcon className="h-10 w-10 text-red-500" />
+              </div>
+              
+              <h2 className="text-3xl font-black text-white tracking-tighter uppercase leading-none mb-4">Protocol Fault</h2>
+              <p className="text-sm font-medium text-white/50 leading-relaxed mb-10 uppercase tracking-widest">
+                An unexpected state has been detected in the node.
+              </p>
+              
+              <button
+                onClick={() => window.location.reload()}
+                className="w-full py-6 bg-white/5 hover:bg-white/10 text-white font-black rounded-3xl transition-all active:scale-[0.98] border border-white/10 flex items-center justify-center gap-3 uppercase tracking-[0.3em] text-[11px]"
+              >
+                <RotateCwIcon className="h-5 w-5" />
+                Reboot Node
+              </button>
             </div>
-
-            <button 
-                onClick={this.handleReset}
-                className="w-full py-6 bg-white text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[11px] shadow-xl active:scale-95 transition-all flex justify-center items-center gap-3"
-            >
-                <RotateCwIcon className="h-4 w-4" /> Reset Protocol State
-            </button>
           </div>
         </div>
       );
     }
 
-    /* Fix: props.children is now correctly recognized as an inherited member */
     return this.props.children;
   }
 }

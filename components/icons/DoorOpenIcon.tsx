@@ -1,6 +1,6 @@
-import React from 'react';
+import React from "react";
 
-export const DoorOpenIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+export const DoorOpenIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width="24"
@@ -13,10 +13,8 @@ export const DoorOpenIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => 
     strokeLinejoin="round"
     {...props}
   >
-    <path d="M13 4h3a2 2 0 0 1 2 2v14" />
-    <path d="M2 20h3" />
-    <path d="M13 20h9" />
-    <path d="M10 12v.01" />
-    <path d="M13 4.562v16.157a1 1 0 0 1-1.242.97L5 20V5.562a2 2 0 0 1 .503-1.358L7.02 2.23a1 1 0 0 1 1.242.03L13 4.562Z" />
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
   </svg>
 );

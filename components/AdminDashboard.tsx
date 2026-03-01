@@ -1,242 +1,257 @@
-
 import React, { useState, useEffect } from 'react';
-import { Admin, Agent, Member, Broadcast, Report, User, PayoutRequest, Venture, CommunityValuePool, FilterType as PostFilterType, PendingUbtPurchase, MultiSigProposal } from '../types';
+import { Admin, User, GlobalEconomy, TreasuryVault, Notification, Activity, PayoutRequest, PendingUbtPurchase, Venture, CommunityValuePool, MultiSigProposal, Report } from '../types';
 import { api } from '../services/apiService';
-import { cryptoService } from '../services/cryptoService';
-import { LayoutDashboardIcon } from './icons/LayoutDashboardIcon';
-import { DollarSignIcon } from './icons/DollarSignIcon';
-import { UserCircleIcon } from './icons/UserCircleIcon';
-import { DatabaseIcon } from './icons/DatabaseIcon';
-import { Dashboard } from './Dashboard';
-import { LedgerPage } from './LedgerPage';
-import { AdminProfile } from './AdminProfile';
-import { PostsFeed } from './PostsFeed';
-import { NewPostModal } from './NewPostModal';
-import { TreasuryManager } from './TreasuryManager';
-import { LockIcon } from './icons/LockIcon';
-import { AdminDispatchTerminal } from './AdminDispatchTerminal';
-import { AdminOracleTerminal } from './AdminOracleTerminal';
-import { AdminRegistrarTerminal } from './AdminRegistrarTerminal';
-import { AdminJusticeTerminal } from './AdminJusticeTerminal';
-import { AdminUserManagement } from './AdminUserManagement';
-import { GlobeIcon } from './icons/GlobeIcon';
-import { ScaleIcon } from './icons/ScaleIcon';
-import { SovereignUpgradeBanner } from './SovereignUpgradeBanner';
-import { GenesisNodeFlow } from './GenesisNodeFlow';
 import { useToast } from '../contexts/ToastContext';
-import { MessageSquareIcon } from './icons/MessageSquareIcon';
-import { PlusIcon } from './icons/PlusIcon';
-import { KeyIcon } from './icons/KeyIcon';
-import { PinVaultLogin } from './PinVaultLogin';
-import { useAuth } from '../contexts/AuthContext';
+import { LayoutDashboardIcon } from './icons/LayoutDashboardIcon';
 import { UsersIcon } from './icons/UsersIcon';
+import { WalletIcon } from './icons/WalletIcon';
+import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
+import { BriefcaseIcon } from './icons/BriefcaseIcon';
+import { BellIcon } from './icons/BellIcon';
+import { TrendingUpIcon } from './icons/TrendingUpIcon';
+import { LoaderIcon } from './icons/LoaderIcon';
+import { RotateCwIcon } from './icons/RotateCwIcon';
+import { AdminUserManagement } from './AdminUserManagement';
+import { WalletAdminPage } from './WalletAdminPage';
+import { ProposalsAdminPage } from './ProposalsAdminPage';
+import { VenturesAdminPage } from './VenturesAdminPage';
+import { PayoutsAdminPage } from './PayoutsAdminPage';
+import { ReportsView } from './ReportsView';
 
-type AdminView = 'ops' | 'nodes' | 'stream' | 'treasury' | 'dispatch' | 'oracle' | 'registrar' | 'justice' | 'ledger' | 'identity';
-
-export const AdminDashboard: React.FC<{
+interface AdminDashboardProps {
   user: Admin;
-  onUpdateUser: (updatedUser: Partial<User>) => Promise<void>;
+  onUpdateUser: (data: Partial<User>) => Promise<void>;
   unreadCount: number;
   onOpenChat: () => void;
-  onViewProfile: (userId: string | null) => void;
-}> = ({ user, onUpdateUser, onViewProfile }) => {
-  const [view, setView] = useState<AdminView>('ops');
-  const [allUsers, setAllUsers] = useState<User[]>([]);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [agents, setAgents] = useState<Agent[]>([]);
-  const [pendingMembers, setPendingMembers] = useState<Member[]>([]);
-  const [reports, setReports] = useState<Report[]>([]);
-  const [payouts, setPayouts] = useState<PayoutRequest[]>([]);
-  const [ventures, setVentures] = useState<Venture[]>([]);
-  const [cvp, setCvp] = useState<CommunityValuePool | null>(null);
-  const [broadcasts, setBroadcasts] = useState<Broadcast[]>([]);
-  const [pendingPurchases, setPendingPurchases] = useState<PendingUbtPurchase[]>([]);
-  const [msProposals, setMsProposals] = useState<MultiSigProposal[]>([]);
-  const [isUpgrading, setIsUpgrading] = useState(false);
-  const [isUnlocking, setIsUnlocking] = useState(false);
-  const [isNewPostModalOpen, setIsNewPostModalOpen] = useState(false);
-  const { addToast } = useToast();
-  const { unlockSovereignSession, isSovereignLocked } = useAuth();
+  onViewProfile: (userId: string) => void;
+}
 
-  const isUnlocked = !isSovereignLocked;
-  const hasVault = cryptoService.hasVault() || (user as any).encryptedVault;
+type AdminView = 'overview' | 'users' | 'wallets' | 'governance' | 'ventures' | 'payouts' | 'reports';
+
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUser, unreadCount, onOpenChat, onViewProfile }) => {
+  const [activeView, setActiveView] = useState<AdminView>('overview');
+  const [economy, setEconomy] = useState<GlobalEconomy | null>(null);
+  const [vaults, setVaults] = useState<TreasuryVault[]>([]);
+  const [allUsers, setAllUsers] = useState<User[]>([]);
+  const [isReconciling, setIsReconciling] = useState(false);
+  const { addToast } = useToast();
 
   useEffect(() => {
-    const unsubUsers = api.listenForAllUsers(user, (u) => setAllUsers(u), (err: any) => console.error(err));
-    const unsubMembers = api.listenForAllMembers(user, (m) => setMembers(m), (err: any) => console.error(err));
-    const unsubAgents = api.listenForAllAgents(user, (a) => setAgents(a), (err: any) => console.error(err));
-    const unsubPending = api.listenForPendingMembers(user, (m) => setPendingMembers(m), (err: any) => console.error(err));
-    const unsubReports = api.listenForReports(user, (r) => setReports(r), (err: any) => console.error(err));
-    const unsubPayouts = api.listenForPayoutRequests(user, (p) => setPayouts(p), (err: any) => console.error(err));
-    const unsubVentures = api.listenForVentures(user, (v) => setVentures(v), (err: any) => console.error(err));
-    const unsubCvp = api.listenForCVP(user, (c) => setCvp(c), (err: any) => console.error(err));
-    const unsubOracle = api.listenForPendingPurchases((p) => setPendingPurchases(p), (err: any) => console.error(err));
-    const unsubMultisig = api.listenForMultiSigProposals((p) => setMsProposals(p));
-    api.getBroadcasts().then(setBroadcasts).catch(console.error);
+    const unsubEconomy = api.listenForGlobalEconomy(setEconomy);
+    const unsubVaults = api.listenToVaults(setVaults);
+    const unsubUsers = api.listenForAllUsers(user, setAllUsers);
 
     return () => {
-        unsubUsers(); unsubMembers(); unsubAgents(); unsubPending(); unsubReports();
-        unsubPayouts(); unsubVentures(); unsubCvp(); unsubOracle(); unsubMultisig();
+      unsubEconomy();
+      unsubVaults();
+      unsubUsers();
     };
   }, [user]);
 
-  const handleUpgradeComplete = async (mnemonic: string, pin: string) => {
+  const handleReconcile = async () => {
+    if (!window.confirm("Are you sure you want to reconcile all balances? This will recalculate every user's balance from the ledger. This is a heavy operation.")) return;
+    
+    setIsReconciling(true);
     try {
-        const encryptedVault = await cryptoService.saveVault({ mnemonic }, pin);
-        const pubKey = cryptoService.getPublicKey();
-        if (pubKey) {
-            await onUpdateUser({ publicKey: pubKey, encryptedVault } as any);
-        }
-        setIsUpgrading(false);
-        addToast("Authority Root Anchored.", "success");
-        window.location.reload();
-    } catch (err) {
-        addToast("Handshake Failed.", "error");
+      await api.reconcileAllBalances();
+      addToast("All balances have been reconciled successfully.", "success");
+    } catch (error) {
+      addToast("Reconciliation failed.", "error");
+    } finally {
+      setIsReconciling(false);
     }
   };
 
-  const TabButton: React.FC<{label: string, count?: number, isActive: boolean, onClick: () => void, icon: React.ReactNode}> = ({ label, count, isActive, onClick, icon }) => (
-    <button 
-        onClick={onClick} 
-        className={`group flex items-center gap-3 py-5 px-6 border-b-2 transition-all duration-300 whitespace-nowrap cursor-pointer
-            ${isActive 
-                ? 'border-brand-gold text-brand-gold bg-brand-gold/5 shadow-inner' 
-                : 'border-transparent text-gray-500 hover:text-gray-300 hover:bg-white/5'}
-        `}
-    >
-        <span className={`h-5 w-5 transition-transform duration-300 ${isActive ? 'scale-110' : 'opacity-50 group-hover:opacity-100'}`}>{icon}</span>
-        <span className="text-[11px] font-black uppercase tracking-[0.2em]">{label}</span>
-        {count !== undefined && count > 0 && (
-            <span className="bg-red-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-full shadow-lg animate-pulse">{count}</span>
-        )}
-    </button>
-  );
+  const renderContent = () => {
+    switch (activeView) {
+      case 'users': return <AdminUserManagement admin={user} users={allUsers} />;
+      case 'wallets': return <WalletAdminPage adminUser={user} allUsers={allUsers} />;
+      case 'governance': return <ProposalsAdminPage user={user} />;
+      case 'ventures': return <VenturesAdminPage user={user} ventures={[]} />;
+      case 'payouts': return <PayoutsAdminPage adminUser={user} payouts={[]} />;
+      case 'reports': return <ReportsView reports={[]} onViewProfile={onViewProfile} onResolve={async () => {}} onDismiss={async () => {}} />;
+      default:
+        return (
+          <div className="space-y-8 animate-fade-in">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-white/5 border border-white/10 p-6 rounded-[2.5rem] relative overflow-hidden group hover:bg-white/[0.08] transition-all">
+                <div className="corner-tl !border-white/20"></div><div className="corner-tr !border-white/20"></div><div className="corner-bl !border-white/20"></div><div className="corner-br !border-white/20"></div>
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-2">Total Users</p>
+                <p className="text-4xl font-black text-white leading-none">{allUsers.length}</p>
+                <UsersIcon className="absolute -bottom-4 -right-4 h-24 w-24 text-white/5 group-hover:text-white/10 transition-all" />
+              </div>
+              
+              <div className="bg-white/5 border border-white/10 p-6 rounded-[2.5rem] relative overflow-hidden group hover:bg-white/[0.08] transition-all">
+                <div className="corner-tl !border-white/20"></div><div className="corner-tr !border-white/20"></div><div className="corner-bl !border-white/20"></div><div className="corner-br !border-white/20"></div>
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-2">UBT Price</p>
+                <p className="text-4xl font-black text-brand-gold leading-none">${economy?.ubt_to_usd_rate.toFixed(4) || '0.0000'}</p>
+                <TrendingUpIcon className="absolute -bottom-4 -right-4 h-24 w-24 text-brand-gold/5 group-hover:text-brand-gold/10 transition-all" />
+              </div>
 
-  const renderActiveView = () => {
-    switch (view) {
-        case 'ops': 
-            return <Dashboard user={user} users={allUsers} agents={agents} members={members} pendingMembers={pendingMembers} reports={reports} broadcasts={broadcasts} payouts={payouts} ventures={ventures} cvp={cvp} onSendBroadcast={async (m) => { await api.sendBroadcast(user, m); }} />;
-        case 'nodes':
-            return <AdminUserManagement admin={user} users={allUsers} />;
-        case 'stream': 
-            return ( 
-                <div className="max-w-4xl mx-auto space-y-10 animate-fade-in">
-                    <div className="module-frame bg-slate-900/60 p-8 rounded-[3rem] border border-white/5 shadow-2xl flex flex-col sm:flex-row justify-between items-center gap-6 relative overflow-hidden">
-                        <div className="absolute inset-0 blueprint-grid opacity-[0.03] pointer-events-none"></div>
-                        <div className="relative z-10">
-                            <h3 className="text-2xl font-black text-white uppercase tracking-tighter">Global Activity</h3>
-                            <p className="label-caps !text-[8px] text-emerald-500 mt-2">Authority Surveillance Active</p>
+              <div className="bg-white/5 border border-white/10 p-6 rounded-[2.5rem] relative overflow-hidden group hover:bg-white/[0.08] transition-all">
+                <div className="corner-tl !border-white/20"></div><div className="corner-tr !border-white/20"></div><div className="corner-bl !border-white/20"></div><div className="corner-br !border-white/20"></div>
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-2">CVP Backing</p>
+                <p className="text-4xl font-black text-green-400 leading-none">${economy?.cvp_usd_backing.toLocaleString() || '0'}</p>
+                <ShieldCheckIcon className="absolute -bottom-4 -right-4 h-24 w-24 text-green-400/5 group-hover:text-green-400/10 transition-all" />
+              </div>
+
+              <div className="bg-white/5 border border-white/10 p-6 rounded-[2.5rem] relative overflow-hidden group hover:bg-white/[0.08] transition-all">
+                <div className="corner-tl !border-white/20"></div><div className="corner-tr !border-white/20"></div><div className="corner-bl !border-white/20"></div><div className="corner-br !border-white/20"></div>
+                <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em] mb-2">Treasury Balance</p>
+                <p className="text-4xl font-black text-white leading-none">{vaults.reduce((acc, v) => acc + v.balance, 0).toLocaleString()}</p>
+                <WalletIcon className="absolute -bottom-4 -right-4 h-24 w-24 text-white/5 group-hover:text-white/10 transition-all" />
+              </div>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 p-8 rounded-[3rem] relative overflow-hidden">
+              <div className="corner-tl !border-white/20"></div><div className="corner-tr !border-white/20"></div><div className="corner-bl !border-white/20"></div><div className="corner-br !border-white/20"></div>
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="text-2xl font-black text-white uppercase tracking-tighter leading-none">System Maintenance</h3>
+                <button 
+                  onClick={handleReconcile}
+                  disabled={isReconciling}
+                  className="flex items-center gap-3 px-6 py-3 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-2xl transition-all active:scale-[0.98] shadow-glow-gold disabled:opacity-50 uppercase tracking-widest text-[10px]"
+                >
+                  {isReconciling ? <LoaderIcon className="h-4 w-4 animate-spin" /> : <RotateCwIcon className="h-4 w-4" />}
+                  Reconcile All Balances
+                </button>
+              </div>
+              <p className="text-white/40 text-sm font-medium leading-relaxed max-w-2xl">
+                The reconciliation protocol recalculates all user balances by auditing the entire public ledger. Use this if users report balance discrepancies or after major protocol upgrades.
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+               <div className="bg-white/5 border border-white/10 p-8 rounded-[3rem] relative overflow-hidden">
+                  <div className="corner-tl !border-white/20"></div><div className="corner-tr !border-white/20"></div><div className="corner-bl !border-white/20"></div><div className="corner-br !border-white/20"></div>
+                  <h3 className="text-xl font-black text-white uppercase tracking-tighter leading-none mb-6">Treasury Vaults</h3>
+                  <div className="space-y-4">
+                    {vaults.map(vault => (
+                      <div key={vault.id} className="flex items-center justify-between p-4 bg-white/5 rounded-2xl border border-white/5 hover:bg-white/10 transition-all">
+                        <div>
+                          <p className="text-xs font-black text-white uppercase leading-none mb-1">{vault.name}</p>
+                          <p className="text-[10px] font-bold text-white/30 uppercase tracking-wider">{vault.id}</p>
                         </div>
-                        <button 
-                            onClick={() => setIsNewPostModalOpen(true)}
-                            className="relative z-10 px-8 py-4 bg-brand-gold text-slate-950 font-black rounded-2xl text-[10px] uppercase tracking-widest shadow-glow-gold active:scale-95 transition-all flex items-center gap-3 cursor-pointer"
-                        >
-                            <PlusIcon className="h-5 w-5" /> Social Dispatch
-                        </button>
-                    </div>
-                    <PostsFeed user={user} onViewProfile={onViewProfile as any} typeFilter="all" isAdminView />
-                </div>
-            );
-        case 'treasury':
-            return <TreasuryManager admin={user} />;
-        case 'dispatch':
-            return <AdminDispatchTerminal admin={user} />;
-        case 'oracle': 
-            return <AdminOracleTerminal purchases={pendingPurchases} admin={user} />;
-        case 'registrar':
-            return <AdminRegistrarTerminal admin={user} />;
-        case 'justice':
-            return <AdminJusticeTerminal admin={user} reports={reports} />;
-        case 'ledger':
-            return <LedgerPage />;
-        case 'identity':
-            return <AdminProfile user={user} onUpdateUser={onUpdateUser} />;
-        default: return null;
+                        <div className="text-right">
+                          <p className="text-lg font-black text-brand-gold leading-none">{vault.balance.toLocaleString()}</p>
+                          <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest">UBT</p>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+               </div>
+               
+               <div className="bg-white/5 border border-white/10 p-8 rounded-[3rem] relative overflow-hidden">
+                  <div className="corner-tl !border-white/20"></div><div className="corner-tr !border-white/20"></div><div className="corner-bl !border-white/20"></div><div className="corner-br !border-white/20"></div>
+                  <h3 className="text-xl font-black text-white uppercase tracking-tighter leading-none mb-6">Quick Actions</h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <button onClick={() => setActiveView('users')} className="p-6 bg-white/5 hover:bg-white/10 rounded-3xl border border-white/5 transition-all text-center group">
+                      <UsersIcon className="h-8 w-8 text-brand-gold mx-auto mb-3 group-hover:scale-110 transition-transform" />
+                      <p className="text-[10px] font-black text-white uppercase tracking-widest">Manage Users</p>
+                    </button>
+                    <button onClick={() => setActiveView('wallets')} className="p-6 bg-white/5 hover:bg-white/10 rounded-3xl border border-white/5 transition-all text-center group">
+                      <WalletIcon className="h-8 w-8 text-brand-gold mx-auto mb-3 group-hover:scale-110 transition-transform" />
+                      <p className="text-[10px] font-black text-white uppercase tracking-widest">Wallets & Price</p>
+                    </button>
+                    <button onClick={() => setActiveView('payouts')} className="p-6 bg-white/5 hover:bg-white/10 rounded-3xl border border-white/5 transition-all text-center group">
+                      <TrendingUpIcon className="h-8 w-8 text-brand-gold mx-auto mb-3 group-hover:scale-110 transition-transform" />
+                      <p className="text-[10px] font-black text-white uppercase tracking-widest">Payout Requests</p>
+                    </button>
+                    <button onClick={() => setActiveView('reports')} className="p-6 bg-white/5 hover:bg-white/10 rounded-3xl border border-white/5 transition-all text-center group">
+                      <BellIcon className="h-8 w-8 text-brand-gold mx-auto mb-3 group-hover:scale-110 transition-transform" />
+                      <p className="text-[10px] font-black text-white uppercase tracking-widest">System Reports</p>
+                    </button>
+                  </div>
+               </div>
+            </div>
+          </div>
+        );
     }
   };
-
-  if (isUpgrading) {
-      return (
-          <div className="flex-1 flex items-center justify-center p-6 bg-black min-h-screen">
-              <GenesisNodeFlow onComplete={handleUpgradeComplete} onBack={() => setIsUpgrading(false)} />
-          </div>
-      );
-  }
 
   return (
-    <div className="min-h-screen bg-black flex flex-col font-sans animate-fade-in">
-      <div className="bg-slate-950 border-b border-white/5 px-6 sm:px-10 lg:px-20 pt-12 pb-2 flex flex-col gap-10">
-          <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
-              <div className="space-y-4">
-                  <h1 className="text-5xl sm:text-6xl font-black text-white tracking-tighter uppercase leading-none gold-text">Authority HUD</h1>
-                  <div className="flex items-center gap-4">
-                       <div className={`w-2.5 h-2.5 rounded-full animate-pulse shadow-glow-matrix ${isUnlocked ? 'bg-emerald-500' : 'bg-red-500'}`}></div>
-                       <p className="label-caps !text-white !text-[9px] !tracking-[0.4em]">{isUnlocked ? 'Root Identity Verified' : 'Local Node Locked'}</p>
-                       {hasVault && (
-                           <button 
-                             onClick={() => isUnlocked ? addToast("Signature verified.", "info") : setIsUnlocking(true)} 
-                             className={`ml-4 p-2.5 rounded-xl shadow-lg hover:scale-110 transition-all cursor-pointer border
-                                ${isUnlocked 
-                                    ? 'bg-emerald-500/10 border-emerald-500 text-emerald-500 shadow-glow-matrix' 
-                                    : 'bg-brand-gold text-slate-950 border-brand-gold/50 shadow-glow-gold'}
-                             `}
-                             title={isUnlocked ? "Node Unlocked" : "Click to Unlock Node"}
-                           >
-                               <KeyIcon className="h-5 w-5" />
-                           </button>
-                       )}
-                  </div>
-              </div>
+    <div className="min-h-screen flex flex-col lg:flex-row bg-black text-white font-sans selection:bg-brand-gold/30">
+      {/* Sidebar Navigation */}
+      <nav className="w-full lg:w-72 bg-midnight-light border-r border-white/5 p-8 flex flex-col gap-10">
+        <div className="flex items-center gap-4 mb-4">
+          <div className="bg-brand-gold/10 p-2 rounded-xl border border-brand-gold/20">
+            <ShieldCheckIcon className="h-8 w-8 text-brand-gold" />
           </div>
-
-          <div className="w-full overflow-x-auto no-scrollbar">
-              <nav className="-mb-px flex space-x-2 min-w-max pb-2" aria-label="Tabs">
-                  <TabButton label="Ops" icon={<LayoutDashboardIcon/>} isActive={view === 'ops'} onClick={() => setView('ops')} />
-                  <TabButton label="Nodes" icon={<UsersIcon/>} isActive={view === 'nodes'} onClick={() => setView('nodes')} />
-                  <TabButton label="Stream" icon={<MessageSquareIcon/>} isActive={view === 'stream'} onClick={() => setView('stream')} />
-                  <TabButton label="Treasury" icon={<LockIcon/>} isActive={view === 'treasury'} count={msProposals.length} onClick={() => setView('treasury')} />
-                  <TabButton label="Dispatch" icon={<PlusIcon/>} isActive={view === 'dispatch'} onClick={() => setView('dispatch')} />
-                  <TabButton label="Oracle" icon={<DollarSignIcon/>} isActive={view === 'oracle'} count={pendingPurchases.length} onClick={() => setView('oracle')} />
-                  <TabButton label="Registrar" icon={<DatabaseIcon/>} isActive={view === 'registrar'} onClick={() => setView('registrar')} />
-                  <TabButton label="Justice" icon={<ScaleIcon/>} isActive={view === 'justice'} count={reports.filter(r => r.status === 'new').length} onClick={() => setView('justice')} />
-                  <TabButton label="Ledger" icon={<GlobeIcon/>} isActive={view === 'ledger'} onClick={() => setView('ledger')} />
-                  <TabButton label="Identity" icon={<UserCircleIcon/>} isActive={view === 'identity'} onClick={() => setView('identity')} />
-              </nav>
+          <div>
+            <h2 className="text-xl font-black tracking-tighter text-white uppercase leading-none">Admin</h2>
+            <p className="text-[10px] font-bold text-brand-gold tracking-[0.3em] uppercase opacity-60">Control Node</p>
           </div>
-      </div>
+        </div>
 
-      <div className="flex-1 px-4 sm:px-10 lg:px-20 py-12">
-          {!hasVault && (
-              <div className="mb-12">
-                  <SovereignUpgradeBanner onUpgrade={() => setIsUpgrading(true)} user={user} />
-              </div>
-          )}
+        <div className="flex flex-col gap-2">
+          <button 
+            onClick={() => setActiveView('overview')}
+            className={`flex items-center gap-4 px-6 py-4 rounded-2xl transition-all uppercase tracking-widest text-[10px] font-black ${activeView === 'overview' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
+          >
+            <LayoutDashboardIcon className="h-4 w-4" />
+            Overview
+          </button>
+          <button 
+            onClick={() => setActiveView('users')}
+            className={`flex items-center gap-4 px-6 py-4 rounded-2xl transition-all uppercase tracking-widest text-[10px] font-black ${activeView === 'users' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
+          >
+            <UsersIcon className="h-4 w-4" />
+            Users
+          </button>
+          <button 
+            onClick={() => setActiveView('wallets')}
+            className={`flex items-center gap-4 px-6 py-4 rounded-2xl transition-all uppercase tracking-widest text-[10px] font-black ${activeView === 'wallets' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
+          >
+            <WalletIcon className="h-4 w-4" />
+            Wallets
+          </button>
+          <button 
+            onClick={() => setActiveView('governance')}
+            className={`flex items-center gap-4 px-6 py-4 rounded-2xl transition-all uppercase tracking-widest text-[10px] font-black ${activeView === 'governance' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
+          >
+            <TrendingUpIcon className="h-4 w-4" />
+            Governance
+          </button>
+          <button 
+            onClick={() => setActiveView('ventures')}
+            className={`flex items-center gap-4 px-6 py-4 rounded-2xl transition-all uppercase tracking-widest text-[10px] font-black ${activeView === 'ventures' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
+          >
+            <BriefcaseIcon className="h-4 w-4" />
+            Ventures
+          </button>
+          <button 
+            onClick={() => setActiveView('payouts')}
+            className={`flex items-center gap-4 px-6 py-4 rounded-2xl transition-all uppercase tracking-widest text-[10px] font-black ${activeView === 'payouts' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
+          >
+            <TrendingUpIcon className="h-4 w-4" />
+            Payouts
+          </button>
+          <button 
+            onClick={() => setActiveView('reports')}
+            className={`flex items-center gap-4 px-6 py-4 rounded-2xl transition-all uppercase tracking-widest text-[10px] font-black ${activeView === 'reports' ? 'bg-brand-gold text-slate-950 shadow-glow-gold' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
+          >
+            <BellIcon className="h-4 w-4" />
+            Reports
+          </button>
+        </div>
 
-          <div className="min-h-[60vh] animate-fade-in">
-              {renderActiveView()}
+        <div className="mt-auto pt-8 border-t border-white/5">
+          <div className="flex items-center gap-3 p-4 bg-white/5 rounded-2xl border border-white/5">
+            <div className="h-8 w-8 rounded-full bg-brand-gold/20 flex items-center justify-center border border-brand-gold/30">
+              <ShieldCheckIcon className="h-4 w-4 text-brand-gold" />
+            </div>
+            <div className="text-left overflow-hidden">
+              <p className="text-[10px] font-black text-white leading-none uppercase truncate">{user.name}</p>
+              <p className="text-[8px] font-bold text-white/30 uppercase tracking-widest mt-1">Root Admin</p>
+            </div>
           </div>
-      </div>
+        </div>
+      </nav>
 
-      {isUnlocking && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 bg-black/95 backdrop-blur-2xl">
-              <div className="w-full max-w-md relative">
-                  <PinVaultLogin 
-                    onUnlock={(data, pin) => { unlockSovereignSession(data, pin); setIsUnlocking(false); }} 
-                    onReset={() => { setIsUnlocking(false); setIsUpgrading(true); }} 
-                  />
-                  <button onClick={() => setIsUnlocking(false)} className="absolute -top-16 right-0 text-white/40 hover:text-white uppercase text-[10px] font-black p-4 tracking-widest transition-colors">✕ Abort Handshake</button>
-              </div>
-          </div>
-      )}
-
-      {isNewPostModalOpen && (
-          <NewPostModal 
-              isOpen={isNewPostModalOpen} 
-              onClose={() => setIsNewPostModalOpen(false)} 
-              user={user} 
-              onPostCreated={() => { setIsNewPostModalOpen(false); addToast("Broadcast ledgered.", "success"); }} 
-          />
-      )}
+      {/* Main Content Area */}
+      <main className="flex-1 p-8 lg:p-12 overflow-y-auto no-scrollbar">
+        {renderContent()}
+      </main>
     </div>
   );
 };

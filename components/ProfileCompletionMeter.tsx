@@ -1,58 +1,42 @@
-
-import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { User, Member } from '../types';
-import { CheckCircleIcon } from './icons/CheckCircleIcon';
+import React from 'react';
+import { User } from '../types';
 
 interface ProfileCompletionMeterProps {
-  profileData: Partial<User & Member>;
-  role: 'admin' | 'agent' | 'member';
+  user: User;
 }
 
-export const ProfileCompletionMeter: React.FC<ProfileCompletionMeterProps> = ({ profileData, role }) => {
-  const completionPercentage = useMemo(() => {
-    let fieldsToCheck: (keyof (User & Member))[] = [];
-    
-    if (role === 'agent' || role === 'admin') {
-      fieldsToCheck = ['phone', 'address', 'bio', 'id_card_number'];
-    } else if (role === 'member') {
-      fieldsToCheck = ['phone', 'address', 'bio', 'profession', 'skills', 'id_card_number'];
-    }
+export const ProfileCompletionMeter: React.FC<ProfileCompletionMeterProps> = ({ user }) => {
+  const fields = [
+    { name: 'Name', value: user.name },
+    { name: 'Phone', value: user.phone },
+    { name: 'Address', value: user.address },
+    { name: 'Bio', value: user.bio },
+    { name: 'Skills', value: user.skills?.length },
+    { name: 'Interests', value: user.interests?.length },
+    { name: 'Public Key', value: user.publicKey },
+  ];
 
-    if (fieldsToCheck.length === 0) return 0;
-
-    const filledCount = fieldsToCheck.reduce<number>((count, field) => {
-      const value = profileData[field];
-      if (Array.isArray(value)) {
-        return count + (value.length > 0 ? 1 : 0);
-      }
-      return count + (value && String(value).trim() !== '' ? 1 : 0);
-    }, 0);
-
-    return Math.round((filledCount / fieldsToCheck.length) * 100);
-  }, [profileData, role]);
-
-  const barColor = completionPercentage === 100 ? 'bg-green-500' : 'bg-brand-gold';
+  const completed = fields.filter(f => f.value).length;
+  const percentage = Math.round((completed / fields.length) * 100);
 
   return (
-    <div className="my-6 p-5 bg-slate-900/50 rounded-2xl border border-white/5 font-sans">
-      <div className="flex justify-between items-center mb-3">
-        <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wide">Account Status</h4>
-        <div className="flex items-center space-x-2">
-            {completionPercentage === 100 && <CheckCircleIcon className="h-5 w-5 text-green-500" />}
-            <span className="text-lg font-bold text-white tracking-tight">{completionPercentage}% Complete</span>
+    <div className="space-y-4">
+      <div className="flex justify-between items-end">
+        <div>
+          <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] mb-1">Identity Sync Status</p>
+          <p className="text-2xl font-black text-white uppercase tracking-tighter leading-none">{percentage}%</p>
         </div>
+        <p className="text-[10px] font-black text-brand-gold uppercase tracking-widest">{completed}/{fields.length} Anchors</p>
       </div>
-      <div className="w-full bg-slate-800 rounded-full h-2">
-        <div
-          className={`${barColor} h-2 rounded-full transition-all duration-700 ease-out`}
-          style={{ width: `${completionPercentage}%` }}
+      <div className="h-3 bg-white/5 rounded-full overflow-hidden border border-white/10">
+        <div 
+          className="h-full bg-brand-gold shadow-glow-gold transition-all duration-1000 ease-out"
+          style={{ width: `${percentage}%` }}
         ></div>
       </div>
-       {completionPercentage < 100 && (
-          <p className="text-xs text-slate-500 mt-3 font-medium">
-              Adding more details helps community agents verify your account faster.
-          </p>
-      )}
+      <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest leading-relaxed">
+        Complete your identity anchors to unlock full protocol capabilities and increase your credibility score.
+      </p>
     </div>
   );
 };

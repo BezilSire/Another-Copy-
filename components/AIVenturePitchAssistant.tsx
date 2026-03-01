@@ -82,7 +82,7 @@ export const AIVenturePitchAssistant: React.FC<AIVenturePitchAssistantProps> = (
             setStep2Result(result);
             // Filter collaborators
             const collaborators = allVentureMembers.filter(member => 
-                result.requiredSkills.some(skill => 
+                result.requiredSkills.some((skill: string) => 
                     member.skills?.some(s => s.toLowerCase() === skill.toLowerCase())
                 )
             );
@@ -101,7 +101,7 @@ export const AIVenturePitchAssistant: React.FC<AIVenturePitchAssistantProps> = (
         setIsLoading(true);
         setPitchDeck(null);
         try {
-            const finalDeck = await generatePitchDeck(step1Result.detailedPlan, lookingFor);
+            const finalDeck = await generatePitchDeck(step1Result.detailedPlan);
             setPitchDeck(finalDeck);
             setStep(4);
         } catch (error) {
@@ -233,7 +233,7 @@ export const AIVenturePitchAssistant: React.FC<AIVenturePitchAssistantProps> = (
                             <div className="grid md:grid-cols-2 gap-4">{step2Result.personas.map((p, i) => <div key={i} className="bg-slate-900/50 p-4 rounded-lg border border-slate-700 space-y-2"><h4 className="font-bold text-white">{p.name}</h4><div><p className="text-xs text-gray-400">Demographics</p><p className="text-sm">{p.demographics}</p></div><div><p className="text-xs text-gray-400">Needs & Goals</p><p className="text-sm">{p.needs}</p></div><div><p className="text-xs text-gray-400">Pain Points</p><p className="text-sm">{p.painPoints}</p></div></div>)}</div>
                         </div>
                         <div><h3 className="font-semibold text-green-400 mb-2">Suggested Collaborators from the Commons</h3>
-                            {suggestedCollaborators.length > 0 ? <div className="grid md:grid-cols-2 gap-4">{suggestedCollaborators.map(m => <UserCard key={m.id} user={m} currentUser={user} onClick={() => {}} />)}</div> : <p className="text-center text-gray-400 p-4 bg-slate-900/50 rounded-lg">No members found matching the required skills: {step2Result.requiredSkills.join(', ')}.</p>}
+                            {suggestedCollaborators.length > 0 ? <div className="grid md:grid-cols-2 gap-4">{suggestedCollaborators.map(m => <UserCard key={m.id} user={m} onClick={() => {}} />)}</div> : <p className="text-center text-gray-400 p-4 bg-slate-900/50 rounded-lg">No members found matching the required skills: {step2Result.requiredSkills.join(', ')}.</p>}
                         </div>
                         <div className="pt-2 text-right">
                             <button onClick={handleStep3Submit} disabled={isLoading} className="inline-flex items-center px-6 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 font-semibold disabled:bg-slate-600">

@@ -80,7 +80,7 @@ export const ProjectLaunchpad: React.FC = () => {
         setIsLoading(true);
         setProject(null);
         try {
-            const result = await generateProjectIdea();
+            const result = await generateProjectIdea([], []); // Pass empty arrays for now
             setProject(result);
         } catch (error) {
             addToast(error instanceof Error ? error.message : 'Failed to generate project.', 'error');

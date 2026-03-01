@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 
 type Theme = 'light' | 'dark';
 
@@ -10,35 +10,21 @@ interface ThemeContextType {
 const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 
 export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  // Default to dark and let the effect handle the correct initial state.
-  const [theme, setTheme] = useState<Theme>('dark');
+  const [theme, setTheme] = useState<Theme>(() => {
+    const saved = localStorage.getItem('ugc_theme');
+    return (saved as Theme) || 'dark';
+  });
 
   useEffect(() => {
-    const storedTheme = localStorage.getItem('theme') as Theme | null;
-    const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    // Use stored theme, or system preference, or default to light.
-    const initialTheme = storedTheme || (prefersDark ? 'dark' : 'light');
-    setTheme(initialTheme);
-  }, []);
-
-  useEffect(() => {
-    const root = window.document.documentElement;
-    const metaThemeColor = document.querySelector('meta[name="theme-color"]');
-
-    root.classList.remove('light', 'dark');
-    root.classList.add(theme);
-    localStorage.setItem('theme', theme);
-    
+    localStorage.setItem('ugc_theme', theme);
     if (theme === 'dark') {
-      metaThemeColor?.setAttribute('content', '#1e293b'); // slate-800 for browser UI
+      document.documentElement.classList.add('dark');
     } else {
-      metaThemeColor?.setAttribute('content', '#ffffff'); // white for browser UI
+      document.documentElement.classList.remove('dark');
     }
   }, [theme]);
 
-  const toggleTheme = () => {
-    setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
-  };
+  const toggleTheme = () => setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
 
   return (
     <ThemeContext.Provider value={{ theme, toggleTheme }}>
@@ -47,10 +33,8 @@ export const ThemeProvider: React.FC<{ children: ReactNode }> = ({ children }) =
   );
 };
 
-export const useTheme = (): ThemeContextType => {
+export const useTheme = () => {
   const context = useContext(ThemeContext);
-  if (!context) {
-    throw new Error('useTheme must be used within a ThemeProvider');
-  }
+  if (!context) throw new Error('useTheme must be used within a ThemeProvider');
   return context;
 };

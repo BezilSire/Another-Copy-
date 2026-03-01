@@ -24,6 +24,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose, currentUser }
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [chat, setChat] = useState<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 640);
   
@@ -41,24 +42,28 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose, currentUser }
   
   useEffect(() => {
     if (isOpen) {
-      try {
-        const savedMessagesRaw = localStorage.getItem(CHAT_HISTORY_KEY);
-        if (savedMessagesRaw) {
-          const savedMessages = JSON.parse(savedMessagesRaw) as Message[];
-          setMessages(savedMessages);
-          initializeChat(mapMessagesToHistory(savedMessages));
-        } else {
+      const init = async () => {
+        try {
+          const systemInstruction = "You are the Ubuntium Assistant, a helpful AI guide for the Ubuntium Global Commons.";
+          const newChat = await initializeChat(systemInstruction);
+          setChat(newChat);
+
+          const savedMessagesRaw = localStorage.getItem(CHAT_HISTORY_KEY);
+          if (savedMessagesRaw) {
+            const savedMessages = JSON.parse(savedMessagesRaw) as Message[];
+            setMessages(savedMessages);
+          } else {
+            const initialMessage: Message = { author: 'bot', text: "Hello! I'm the Ubuntium Assistant. How can I help you today?" };
+            setMessages([initialMessage]);
+          }
+        } catch (error) {
           const initialMessage: Message = { author: 'bot', text: "Hello! I'm the Ubuntium Assistant. How can I help you today?" };
           setMessages([initialMessage]);
-          initializeChat();
         }
-      } catch (error) {
-        const initialMessage: Message = { author: 'bot', text: "Hello! I'm the Ubuntium Assistant. How can I help you today?" };
-        setMessages([initialMessage]);
-        initializeChat();
-      }
-      setInput('');
-      setIsLoading(false);
+        setInput('');
+        setIsLoading(false);
+      };
+      init();
     }
   }, [isOpen, CHAT_HISTORY_KEY]);
 
@@ -82,7 +87,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose, currentUser }
     setIsLoading(true);
 
     try {
-      const response = await getChatBotResponse(userMessage.text);
+      const response = await getChatBotResponse(chat, userMessage.text);
       const botMessage: Message = { author: 'bot', text: response };
       setMessages(prev => [...prev, botMessage]);
     } catch (error) {

@@ -131,33 +131,48 @@ export const api = {
         await runTransaction(db, async (t) => {
             const econRef = doc(globalsCollection, 'economy');
             const isFloatSender = ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(transaction.senderId);
+            const isFloatReceiver = ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(transaction.receiverId);
+            
+            // Protocol Protection: Resolve receiverId if it's EXTERNAL_NODE but we have a matching public key
+            let resolvedReceiverId = transaction.receiverId;
+            if (transaction.receiverId === 'EXTERNAL_NODE' && transaction.receiverPublicKey) {
+                const q = query(usersCollection, where('publicKey', '==', transaction.receiverPublicKey), limit(1));
+                const snap = await getDocs(q);
+                if (!snap.empty) resolvedReceiverId = snap.docs[0].id;
+            }
+
             const senderRef = isFloatSender ? doc(vaultsCollection, transaction.senderId) : doc(usersCollection, transaction.senderId);
-            const receiverRef = doc(usersCollection, transaction.receiverId);
+            const receiverRef = isFloatReceiver ? doc(vaultsCollection, resolvedReceiverId) : doc(usersCollection, resolvedReceiverId);
             
             const [econSnap, senderSnap, receiverSnap] = await Promise.all([t.get(econRef), t.get(senderRef), t.get(receiverRef)]);
             
             const currentPrice = econSnap.exists() ? econSnap.data()?.ubt_to_usd_rate : 0.001;
             const balKey = isFloatSender ? 'balance' : 'ubtBalance';
+            const recvBalKey = isFloatReceiver ? 'balance' : 'ubtBalance';
             const senderBal = senderSnap.data()?.[balKey] || 0;
             
             if (senderBal < transaction.amount) throw new Error("INSUFFICIENT_LIQUIDITY");
 
-            let finalTx = { ...transaction };
+            let finalTx = { ...transaction, receiverId: resolvedReceiverId };
             if (receiverSnap.exists()) {
                 const rData = receiverSnap.data();
                 if (rData?.publicKey) {
                     finalTx.receiverPublicKey = rData.publicKey;
                 }
-            } else if (['FLOAT', 'GENESIS', 'SYSTEM', 'SUSTENANCE', 'DISTRESS', 'VENTURE'].includes(transaction.receiverId)) {
-                finalTx.receiverPublicKey = `${transaction.receiverId}_NODE`;
+            } else if (isFloatReceiver) {
+                finalTx.receiverPublicKey = `${resolvedReceiverId}_NODE`;
             }
 
             t.update(senderRef, { [balKey]: increment(-transaction.amount) });
-            // Fix: Use set with merge true for receiver to ensure balance reflects even if profile doc is fresh
-            t.set(receiverRef, { ubtBalance: increment(transaction.amount) }, { merge: true });
+            
+            // Only update receiver balance if it's a known internal node or vault
+            if (resolvedReceiverId !== 'EXTERNAL_NODE') {
+                t.set(receiverRef, { [recvBalKey]: increment(transaction.amount) }, { merge: true });
+            }
+
             t.set(doc(ledgerCollection, sanitizeDocId(transaction.signature)), { 
                 ...finalTx, 
-                participants: [transaction.senderId, transaction.receiverId],
+                participants: [transaction.senderId, resolvedReceiverId],
                 priceAtSync: currentPrice, 
                 serverTimestamp: serverTimestamp() 
             });
@@ -389,6 +404,92 @@ export const api = {
         return results;
     },
 
+    reconcileAllBalances: async () => {
+        const usersSnap = await getDocs(usersCollection);
+        const ledgerSnap = await getDocs(ledgerCollection);
+        const txs = ledgerSnap.docs.map(d => d.data() as UbtTransaction);
+        
+        const userMap = new Map<string, { balance: number, publicKey: string }>();
+        usersSnap.docs.forEach(doc => {
+            const data = doc.data();
+            userMap.set(doc.id, { 
+                balance: Number(data.initialUbtStake || 0), 
+                publicKey: data.publicKey || '' 
+            });
+        });
+
+        // Single pass over ledger to calculate all balances
+        txs.forEach(tx => {
+            const amt = Number(tx.amount || 0);
+            
+            // Credit receiver
+            if (userMap.has(tx.receiverId)) {
+                userMap.get(tx.receiverId)!.balance += amt;
+            } else if (tx.receiverPublicKey) {
+                // Fallback: search by public key if receiverId didn't match
+                for (const [uid, userData] of userMap.entries()) {
+                    if (userData.publicKey === tx.receiverPublicKey) {
+                        userData.balance += amt;
+                        break;
+                    }
+                }
+            }
+
+            // Debit sender
+            if (userMap.has(tx.senderId)) {
+                userMap.get(tx.senderId)!.balance -= amt;
+            } else if (tx.senderPublicKey) {
+                for (const [uid, userData] of userMap.entries()) {
+                    if (userData.publicKey === tx.senderPublicKey) {
+                        userData.balance -= amt;
+                        break;
+                    }
+                }
+            }
+        });
+
+        const batch = writeBatch(db);
+        userMap.forEach((data, uid) => {
+            batch.update(doc(usersCollection, uid), { ubtBalance: data.balance });
+        });
+        await batch.commit();
+    },
+
+    reconcileUserBalance: async (uid: string) => {
+        const userDoc = await getDoc(doc(usersCollection, uid));
+        if (!userDoc.exists()) throw new Error("User not found");
+        
+        const userData = userDoc.data();
+        const userPublicKey = userData.publicKey;
+        const initialStake = Number(userData.initialUbtStake || 0);
+
+        // Fetch all transactions where this user is either sender or receiver (by ID or Public Key)
+        const q = query(ledgerCollection, or(
+            where('participants', 'array-contains', uid),
+            where('senderId', '==', uid),
+            where('receiverId', '==', uid),
+            where('senderPublicKey', '==', userPublicKey),
+            where('receiverPublicKey', '==', userPublicKey)
+        ));
+        
+        const snapshot = await getDocs(q);
+        let calculatedBalance = initialStake;
+        
+        snapshot.docs.forEach(d => {
+            const tx = d.data() as UbtTransaction;
+            const amt = Number(tx.amount || 0);
+            
+            const isReceiver = tx.receiverId === uid || (userPublicKey && tx.receiverPublicKey === userPublicKey);
+            const isSender = tx.senderId === uid || (userPublicKey && tx.senderPublicKey === userPublicKey);
+
+            if (isReceiver) calculatedBalance += amt;
+            if (isSender) calculatedBalance -= amt;
+        });
+
+        await updateDoc(doc(usersCollection, uid), { ubtBalance: calculatedBalance });
+        return calculatedBalance;
+    },
+
     // Fix: Added searchUsers for directory and dispatching
     searchUsers: async (queryStr: string, currentUser: User): Promise<PublicUserProfile[]> => {
         const q = query(usersCollection, where('name_lowercase', '>=', queryStr.toLowerCase()), where('name_lowercase', '<=', queryStr.toLowerCase() + '\uf8ff'), limit(15));
@@ -514,19 +615,25 @@ export const api = {
             batch.set(doc(vaultsCollection, v.id), { ...v, publicKey: `UBT-VAULT-${v.id}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`, isLocked: false });
         }
         const txId = `mint-${Date.now().toString(36)}`;
-        const tx = { 
+        const tx: UbtTransaction = { 
             id: txId, 
             senderId: 'SYSTEM', 
             receiverId: 'GENESIS', 
-            participants: ['SYSTEM', 'GENESIS'],
             amount: 15000000, 
             timestamp: Date.now(), 
+            nonce: 'SYSTEM_NONCE',
+            signature: 'SYSTEM_SIG',
+            hash: 'SYSTEM_HASH',
+            senderPublicKey: 'ROOT_PROTOCOL', 
+            parentHash: 'GENESIS_ROOT',
             type: 'SYSTEM_MINT', 
             protocol_mode: 'MAINNET', 
-            senderPublicKey: 'ROOT_PROTOCOL', 
-            serverTimestamp: serverTimestamp() 
         };
-        batch.set(doc(ledgerCollection, txId), tx);
+        batch.set(doc(ledgerCollection, txId), {
+            ...tx,
+            participants: ['SYSTEM', 'GENESIS'],
+            serverTimestamp: serverTimestamp() 
+        });
         await batch.commit();
         sovereignService.dispatchTransaction(tx).catch(console.error);
     },
@@ -765,19 +872,26 @@ export const api = {
             
             const timestamp = Date.now();
             const txId = `multisig-exec-${timestamp.toString(36)}`;
-            const tx = { 
+            const tx: UbtTransaction = { 
                 id: txId, 
                 senderId: data.fromVaultId, 
                 receiverId: data.toVaultId, 
-                participants: [data.fromVaultId, data.toVaultId],
                 amount: data.amount, 
                 timestamp, 
-                reason: `MultiSig: ${data.reason}`, 
+                nonce: `MS-${timestamp}`,
+                signature: `MS-SIG-${timestamp}`,
+                hash: `MS-HASH-${timestamp}`,
+                senderPublicKey: `VAULT-${data.fromVaultId}`,
+                parentHash: 'MULTISIG_CHAIN',
                 type: 'VAULT_SYNC', 
                 protocol_mode: 'MAINNET', 
-                serverTimestamp: serverTimestamp() 
+                reason: `MultiSig: ${data.reason}`, 
             };
-            t.set(doc(ledgerCollection, txId), tx);
+            t.set(doc(ledgerCollection, txId), {
+                ...tx,
+                participants: [data.fromVaultId, data.toVaultId],
+                serverTimestamp: serverTimestamp() 
+            });
             sovereignService.dispatchTransaction(tx).catch(console.error);
         } else {
             t.update(ref, { signatures: newSigs });
@@ -790,11 +904,15 @@ export const api = {
         return s.docs.map(d => ({ id: d.id, ...d.data() } as Member));
     },
     registerMember: async (a: Agent, d: NewMember) => {
-        const welcome = await generateWelcomeMessage(d.full_name, d.circle);
+        const welcome = await generateWelcomeMessage(d.full_name);
         const ref = await addDoc(membersCollection, { ...d, agent_id: a.id, agent_name: a.name, date_registered: serverTimestamp(), welcome_message: welcome, membership_card_id: `UGC-M-${Math.random().toString(36).substring(2, 8).toUpperCase()}` });
         return { id: ref.id, ...d, agent_id: a.id, agent_name: a.name, welcome_message: welcome } as any;
     },
     sendBroadcast: (u: User, m: string) => addDoc(broadcastsCollection, { authorId: u.id, authorName: u.name, message: m, date: new Date().toISOString() }),
+    getNearbyUsers: async (uid: string) => {
+        const snap = await getDocs(query(usersCollection, limit(20)));
+        return snap.docs.map(d => ({ id: d.id, ...d.data() } as User)).filter(u => u.id !== uid);
+    },
     getBroadcasts: async () => {
         const q = query(broadcastsCollection, orderBy('date', 'desc'), limit(10));
         const s = await getDocs(q);

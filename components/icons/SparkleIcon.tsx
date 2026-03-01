@@ -1,17 +1,20 @@
-import React from 'react';
+import React from "react";
 
-export const SparkleIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+export const SparkleIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
     viewBox="0 0 24 24"
-    fill="currentColor"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
     {...props}
   >
-    <path d="M12 2l2.35 7.16h7.65l-6.18 4.44 2.36 7.16L12 16.32l-6.18 4.44 2.36-7.16-6.18-4.44h7.65L12 2zM5 3v4M19 17v4M3 5h4M17 19h4" 
-      fill="none" 
-      stroke="currentColor" 
-      strokeWidth="2" 
-      strokeLinecap="round" 
-      strokeLinejoin="round" 
-    />
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
   </svg>
 );

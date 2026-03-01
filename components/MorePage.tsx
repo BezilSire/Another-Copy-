@@ -1,84 +1,99 @@
-
 import React from 'react';
-import { User, NavView } from '../types';
-import { UserIcon } from './icons/UserIcon';
-import { BellIcon } from './icons/BellIcon';
-import { BookOpenIcon } from './icons/BookOpenIcon';
-import { HeartIcon } from './icons/HeartIcon';
+import { User, MemberUser } from '../types';
+import { UserCircleIcon } from './icons/UserCircleIcon';
 import { LogOutIcon } from './icons/LogOutIcon';
-import { ChevronRightIcon } from './icons/ChevronRightIcon';
-import { LockIcon } from './icons/LockIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
-import { HistoryIcon } from './icons/HistoryIcon';
-import { ScaleIcon } from './icons/ScaleIcon';
+import { BellIcon } from './icons/BellIcon';
+import { HelpCircleIcon } from './icons/HelpCircleIcon';
+import { KeyIcon } from './icons/KeyIcon';
+import { GlobeIcon } from './icons/GlobeIcon';
 
 interface MorePageProps {
-  user: User;
-  onNavigate: (view: NavView) => void;
+  user: MemberUser;
   onLogout: () => void;
-  notificationCount: number;
+  onViewProfile: (userId: string) => void;
 }
 
-const NavItem: React.FC<{
-  icon: React.ReactNode;
-  label: string;
-  onClick: () => void;
-  badgeCount?: number;
-  highlight?: boolean;
-}> = ({ icon, label, onClick, badgeCount, highlight }) => (
-  <button
-    onClick={onClick}
-    className={`w-full flex items-center p-5 rounded-2xl transition-all duration-300 border border-white/5 hover:border-brand-gold/20 ${highlight ? 'bg-brand-gold/5' : 'bg-slate-900/40 hover:bg-slate-900'}`}
-  >
-    <div className={`flex-shrink-0 p-3 rounded-xl ${highlight ? 'bg-brand-gold/10 text-brand-gold' : 'bg-slate-800 text-slate-400 group-hover:text-white'}`}>{icon}</div>
-    <span className="flex-1 ml-5 text-left font-bold text-sm text-slate-300 group-hover:text-white">{label}</span>
-    {badgeCount !== undefined && badgeCount > 0 && (
-      <span className="bg-red-600 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">{badgeCount}</span>
-    )}
-    <ChevronRightIcon className="h-4 w-4 text-slate-600 ml-2" />
-  </button>
-);
-
-export const MorePage: React.FC<MorePageProps> = ({ user, onNavigate, onLogout, notificationCount }) => {
+export const MorePage: React.FC<MorePageProps> = ({ user, onLogout, onViewProfile }) => {
   return (
-    <div className="animate-fade-in space-y-10 max-w-2xl mx-auto pb-20 font-sans">
-      <div className="flex items-center space-x-6 p-8 bg-slate-950 border border-white/5 rounded-3xl shadow-xl">
-        <div className="w-16 h-16 bg-slate-900 rounded-2xl border border-white/10 flex items-center justify-center">
-            <UserIcon className="h-8 w-8 text-slate-500" />
+    <div className="space-y-8 animate-fade-in pb-24">
+      <div className="flex items-center gap-6 mb-10">
+        <div className="w-20 h-20 bg-brand-gold/10 rounded-3xl border-2 border-brand-gold/30 flex items-center justify-center shadow-glow-gold">
+          <UserCircleIcon className="h-10 w-10 text-brand-gold" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-white tracking-tight">{user.name}</h1>
-          <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mt-1">Community Member</p>
+          <h2 className="text-3xl font-black tracking-tighter text-white uppercase leading-none">{user.name}</h2>
+          <p className="text-sm font-bold text-brand-gold tracking-[0.4em] uppercase opacity-60 mt-2">{user.role} Node</p>
         </div>
       </div>
 
-      <div className="space-y-2">
-        <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-4 mb-3">Your Account</h3>
-        <NavItem icon={<UserIcon className="h-4 w-4" />} label="Edit Profile" onClick={() => onNavigate('profile')} />
-        <NavItem icon={<BellIcon className="h-4 w-4" />} label="Notifications" onClick={() => onNavigate('notifications')} badgeCount={notificationCount} />
-        <NavItem icon={<LockIcon className="h-4 w-4" />} label="Identity Vault" onClick={() => onNavigate('security')} />
-      </div>
-
-      <div className="space-y-2">
-        <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-4 mb-3">Community State</h3>
-        <NavItem icon={<ShieldCheckIcon className="h-4 w-4" />} label="The Registry" onClick={() => onNavigate('state')} />
-        <NavItem icon={<ScaleIcon className="h-4 w-4" />} label="Justice Hub" onClick={() => onNavigate('state')} />
-        <NavItem icon={<HistoryIcon className="h-4 w-4" />} label="Audit Ledger" onClick={() => onNavigate('audit')} />
-      </div>
-
-      <div className="space-y-2">
-        <h3 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest pl-4 mb-3">Ecosystem</h3>
-        <NavItem icon={<HeartIcon className="h-4 w-4" />} label="Sustenance Dividend" onClick={() => onNavigate('sustenance')} />
-        <NavItem icon={<BookOpenIcon className="h-4 w-4" />} label="Knowledge Base" onClick={() => onNavigate('knowledge')} />
-      </div>
-
-      <div className="pt-6">
-        <button
-          onClick={onLogout}
-          className="w-full flex items-center justify-center p-5 bg-red-950/10 border border-red-900/20 rounded-2xl hover:bg-red-900/20 transition-all text-red-500 font-bold text-sm uppercase tracking-wide"
+      <div className="space-y-4">
+        <button 
+          onClick={() => onViewProfile(user.id)}
+          className="w-full bg-white/5 border border-white/5 p-6 rounded-3xl flex items-center justify-between hover:bg-white/10 transition-all group"
         >
-          <LogOutIcon className="h-4 w-4 mr-3" />
-          <span>Sign Out</span>
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 group-hover:text-white transition-colors">
+              <UserCircleIcon className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Identity Profile</p>
+          </div>
+          <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Manage</p>
+        </button>
+
+        <button className="w-full bg-white/5 border border-white/5 p-6 rounded-3xl flex items-center justify-between hover:bg-white/10 transition-all group">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 group-hover:text-white transition-colors">
+              <ShieldCheckIcon className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Security Protocol</p>
+          </div>
+          <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Locked</p>
+        </button>
+
+        <button className="w-full bg-white/5 border border-white/5 p-6 rounded-3xl flex items-center justify-between hover:bg-white/10 transition-all group">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 group-hover:text-white transition-colors">
+              <BellIcon className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Alert Settings</p>
+          </div>
+          <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Active</p>
+        </button>
+
+        <button className="w-full bg-white/5 border border-white/5 p-6 rounded-3xl flex items-center justify-between hover:bg-white/10 transition-all group">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 group-hover:text-white transition-colors">
+              <GlobeIcon className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Network Status</p>
+          </div>
+          <p className="text-[10px] font-bold text-green-400 uppercase tracking-widest">Online</p>
+        </button>
+
+        <button className="w-full bg-white/5 border border-white/5 p-6 rounded-3xl flex items-center justify-between hover:bg-white/10 transition-all group">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 group-hover:text-white transition-colors">
+              <HelpCircleIcon className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Protocol Support</p>
+          </div>
+          <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Help</p>
+        </button>
+      </div>
+
+      <div className="pt-8 border-t border-white/10">
+        <button 
+          onClick={onLogout}
+          className="w-full bg-red-500/10 border border-red-500/20 p-6 rounded-3xl flex items-center justify-between hover:bg-red-500/20 transition-all group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 group-hover:text-red-300 transition-colors">
+              <LogOutIcon className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-black text-red-400 uppercase tracking-widest leading-none">Terminate Session</p>
+          </div>
+          <p className="text-[10px] font-bold text-red-400/40 uppercase tracking-widest">Log Out</p>
         </button>
       </div>
     </div>

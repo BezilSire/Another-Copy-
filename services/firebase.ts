@@ -30,9 +30,12 @@ const initPersistence = async () => {
   }
 };
 
-initPersistence();
+if (typeof window !== 'undefined') {
+  initPersistence();
+}
 
 export const getMessagingInstance = async () => {
+  if (typeof window === 'undefined') return null;
   try {
     const isMessagingSupported = await isSupported();
     if (isMessagingSupported) {

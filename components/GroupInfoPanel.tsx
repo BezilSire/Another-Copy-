@@ -45,7 +45,7 @@ export const GroupInfoPanel: React.FC<GroupInfoPanelProps> = ({ conversation, cu
             isOpen={isAddingMembers}
             onClose={() => setIsAddingMembers(false)}
             currentUser={currentUser}
-            onSelectUser={() => { /* Simplified */ }}
+            onSelect={() => { /* Simplified */ }}
           />
       )}
       <div className="p-4 border-b border-slate-700 flex items-center space-x-3">

@@ -1,6 +1,6 @@
-import React from 'react';
+import React from "react";
 
-export const WalletIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
+export const WalletIcon = (props: React.SVGProps<SVGSVGElement>) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
     width="24"
@@ -13,8 +13,8 @@ export const WalletIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => (
     strokeLinejoin="round"
     {...props}
   >
-    <path d="M20 12V8H6a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h12a2 2 0 0 1 2 2v4" />
-    <path d="M4 6v12a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V12" />
-    <path d="M18 12a2 2 0 0 0-2 2c0 1.1.9 2 2 2a2 2 0 1 0 0-4z" />
+    <circle cx="12" cy="12" r="10" />
+    <line x1="12" y1="8" x2="12" y2="12" />
+    <line x1="12" y1="16" x2="12.01" y2="16" />
   </svg>
 );

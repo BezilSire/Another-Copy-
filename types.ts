@@ -8,7 +8,7 @@ export type ProtocolMode = 'MAINNET' | 'TESTNET';
 export type AssetType = 'SOL' | 'USDT' | 'USDC';
 export type GovernanceTier = 'CITY' | 'NATIONAL' | 'GLOBAL';
 
-export type MemberView = 'pulse' | 'ledger' | 'vault' | 'lab' | 'assembly' | 'registry' | 'more' | 'profile' | 'notifications' | 'security' | 'audit' | 'knowledge' | 'chats' | 'community' | 'governance' | 'meeting' | 'state' | 'sustenance' | 'home' | 'hub';
+export type MemberView = 'pulse' | 'ledger' | 'vault' | 'wallet' | 'lab' | 'assembly' | 'registry' | 'more' | 'profile' | 'notifications' | 'security' | 'audit' | 'knowledge' | 'chats' | 'community' | 'governance' | 'meeting' | 'state' | 'sustenance' | 'home' | 'hub';
 
 // Fixed: Added missing NavView type alias used in MorePage.tsx
 export type NavView = MemberView;

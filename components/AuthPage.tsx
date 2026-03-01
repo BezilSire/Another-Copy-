@@ -1,109 +1,127 @@
-
 import React, { useState } from 'react';
-import { LoginPage } from './LoginPage';
-import { SignupPage } from './SignupPage';
-import { ForgotPasswordForm } from './ForgotPasswordForm';
-import { GenesisNodeFlow } from './GenesisNodeFlow';
-import { RecoveryProtocol } from './RecoveryProtocol';
 import { useAuth } from '../contexts/AuthContext';
-import { PrivacyPolicyModal } from './PrivacyPolicyModal';
-import { PublicRegistrationPage } from './PublicRegistrationPage';
-import { cryptoService } from '../services/cryptoService';
-import { useToast } from '../contexts/ToastContext';
+import { SignupPage } from './SignupPage';
 import { LogoIcon } from './icons/LogoIcon';
-import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
-
-type AuthView = 'selector' | 'login' | 'agentSignup' | 'publicSignup' | 'forgotPassword' | 'genesis' | 'recovery';
+import { EyeIcon } from './icons/EyeIcon';
+import { EyeOffIcon } from './icons/EyeOffIcon';
 
 export const AuthPage: React.FC = () => {
-  const { login, agentSignup, publicMemberSignup, sendPasswordReset, isProcessingAuth, unlockSovereignSession } = useAuth();
-  const [view, setView] = useState<AuthView>('selector');
-  const [isPolicyVisible, setIsPolicyVisible] = useState(false);
-  const { addToast } = useToast();
+  const { login, isProcessingAuth, sendPasswordReset } = useAuth();
+  const [isSignup, setIsSignup] = useState(false);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isPasswordVisible, setIsPasswordVisible] = useState(false);
+  const [isResetMode, setIsResetMode] = useState(false);
 
-  const handleRecoveryComplete = async (m: string, p: string, data: any) => {
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
     try {
-        await cryptoService.saveVault({ mnemonic: m }, p);
-        await unlockSovereignSession(data, p);
-        addToast("Account access restored.", "success");
-        setView('login');
-    } catch (err) {
-        addToast("Restoration failed.", "error");
-    }
+      await login({ email, password });
+    } catch (err) {}
   };
 
-  const renderContent = () => {
-    switch(view) {
-        case 'selector':
-            return (
-                <div className="module-frame glass-module p-10 sm:p-16 rounded-[3rem] border-white/10 shadow-2xl flex flex-col items-center animate-fade-in max-w-md w-full relative overflow-hidden font-sans">
-                    <div className="corner-tl"></div><div className="corner-tr"></div><div className="corner-bl"></div><div className="corner-br"></div>
-                    
-                    <div className="flex flex-col items-center mb-12 relative z-10">
-                        <div className="w-16 h-16 bg-slate-900 rounded-2xl border border-brand-gold/30 flex items-center justify-center mb-6 shadow-lg">
-                            <LogoIcon className="h-10 w-10 text-brand-gold" />
-                        </div>
-                        <h2 className="text-4xl font-bold text-center text-white tracking-tight leading-none">Welcome</h2>
-                        <p className="text-sm font-semibold text-slate-500 mt-2">Community Hub</p>
-                    </div>
-                    
-                    <div className="flex flex-col gap-4 w-full relative z-10">
-                        <button 
-                            onClick={() => setView('login')} 
-                            className="w-full py-5 bg-brand-gold hover:bg-brand-goldlight text-slate-950 font-bold rounded-xl shadow-lg active:scale-95 transition-all text-sm"
-                        >
-                            Sign In
-                        </button>
-                        <button 
-                            onClick={() => setView('genesis')} 
-                            className="w-full py-5 bg-white/5 border border-white/10 text-white font-bold rounded-xl hover:bg-white/10 active:scale-95 transition-all text-sm"
-                        >
-                            Create New Account
-                        </button>
-                        
-                        <div className="mt-8 pt-8 border-t border-white/5 flex flex-col gap-4">
-                            <button 
-                                onClick={() => setView('recovery')} 
-                                className="w-full flex items-center justify-center gap-3 py-4 bg-red-500/10 hover:bg-red-500/20 border border-red-500/30 rounded-xl text-xs font-bold text-red-500 transition-all"
-                            >
-                                <AlertTriangleIcon className="h-4 w-4" />
-                                I Lost My Access Key
-                            </button>
-                            <p className="text-xs text-slate-500 text-center font-medium leading-relaxed px-4">
-                                Use this if you lost your 12-word recovery phrase or forgotten your PIN.
-                            </p>
-                        </div>
-                    </div>
+  const handleReset = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      await sendPasswordReset(email);
+      setIsResetMode(false);
+    } catch (err) {}
+  };
 
-                    <div className="mt-12 text-center pb-2 relative z-10 border-t border-white/5 pt-8 w-full">
-                        <button onClick={() => setIsPolicyVisible(true)} className="text-xs font-bold text-slate-600 hover:text-brand-gold transition-colors">Privacy & Guidelines</button>
-                    </div>
-                </div>
-            );
-        case 'recovery':
-            return <RecoveryProtocol onBack={() => setView('selector')} onComplete={handleRecoveryComplete} />;
-        case 'genesis':
-            return <GenesisNodeFlow onComplete={async (m, p) => { await cryptoService.saveVault({mnemonic: m}, p); setView('publicSignup'); }} onBack={() => setView('selector')} />;
-        case 'login':
-            return <LoginPage onLogin={login} isProcessing={isProcessingAuth} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => setView('publicSignup')} onSwitchToForgotPassword={() => setView('forgotPassword')} onBack={() => setView('selector')} />;
-        case 'publicSignup':
-            return <PublicRegistrationPage onRegister={publicMemberSignup} isProcessing={isProcessingAuth} onBackToLogin={() => setView('login')} />;
-        case 'agentSignup':
-            return <SignupPage onSignup={agentSignup} isProcessing={isProcessingAuth} onSwitchToLogin={() => setView('login')} />;
-        case 'forgotPassword':
-            return <ForgotPasswordForm onReset={async (email) => { await sendPasswordReset(email); setView('selector'); }} isProcessing={isProcessingAuth} onBack={() => setView('login')} />;
-        default:
-            return <LoginPage onLogin={login} isProcessing={isProcessingAuth} onSwitchToSignup={() => setView('agentSignup')} onSwitchToPublicSignup={() => setView('publicSignup')} onSwitchToForgotPassword={() => setView('forgotPassword')} onBack={() => setView('selector')} />;
-    }
+  if (isSignup) {
+    return <SignupPage onSignup={async () => {}} isProcessing={isProcessingAuth} onSwitchToLogin={() => setIsSignup(false)} />;
   }
 
   return (
-    <div className="flex-1 flex flex-col justify-center items-center relative min-h-screen w-full overflow-hidden py-10 bg-black font-sans">
-        <div className="absolute inset-0 blueprint-grid opacity-[0.03] pointer-events-none"></div>
-        <div className="flex-1 flex items-center justify-center z-10 w-full px-4">
-            {renderContent()}
+    <div className="min-h-screen flex items-center justify-center bg-black p-6 font-sans">
+      <div className="module-frame glass-module p-8 sm:p-12 rounded-[3.5rem] border-white/20 relative overflow-hidden shadow-2xl w-full max-w-md animate-fade-in">
+        <div className="corner-tl !border-white/40"></div><div className="corner-tr !border-white/40"></div><div className="corner-bl !border-white/40"></div><div className="corner-br !border-white/40"></div>
+        
+        <div className="flex flex-col items-center mb-10 relative z-10 pt-4">
+          <div className="w-16 h-16 bg-black rounded-2xl border-2 border-brand-gold/50 flex items-center justify-center shadow-glow-gold mb-6">
+              <LogoIcon className="h-10 w-10 text-brand-gold" />
+          </div>
+          <h2 className="text-3xl font-black text-center text-white tracking-tighter uppercase gold-text leading-none">Ubuntium</h2>
+          <p className="label-caps mt-2 !text-brand-gold !tracking-[0.4em] !text-[10px]">Protocol Handshake</p>
         </div>
-        <PrivacyPolicyModal isOpen={isPolicyVisible} onClose={() => setIsPolicyVisible(false)} />
+
+        {isResetMode ? (
+          <form onSubmit={handleReset} className="space-y-6 relative z-10">
+            <div className="space-y-2">
+              <label className="label-caps pl-1 !text-white !font-black" htmlFor="email">Recovery Address</label>
+              <input 
+                id="email" 
+                type="email" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all uppercase font-bold" 
+                placeholder="EMAIL@PROTOCOL.ORG" 
+                required 
+              />
+            </div>
+            <button
+              type="submit"
+              className="w-full py-6 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl transition-all active:scale-[0.98] shadow-glow-gold disabled:opacity-50 uppercase tracking-[0.4em] text-[12px] mt-4"
+              disabled={isProcessingAuth}
+            >
+              Dispatch Recovery
+            </button>
+            <button type="button" onClick={() => setIsResetMode(false)} className="w-full text-center text-xs font-bold text-white/50 hover:text-white transition-colors uppercase tracking-widest">
+              Back to Handshake
+            </button>
+          </form>
+        ) : (
+          <form onSubmit={handleLogin} className="space-y-6 relative z-10">
+            <div className="space-y-2">
+              <label className="label-caps pl-1 !text-white !font-black" htmlFor="email">Comms Address</label>
+              <input 
+                id="email" 
+                type="email" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all uppercase font-bold" 
+                placeholder="EMAIL@PROTOCOL.ORG" 
+                required 
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex justify-between items-center pr-1">
+                <label className="label-caps pl-1 !text-white !font-black" htmlFor="password">Security Key</label>
+                <button type="button" onClick={() => setIsResetMode(true)} className="text-[9px] font-black uppercase tracking-widest text-brand-gold/60 hover:text-brand-gold transition-colors">Forgot Key?</button>
+              </div>
+              <div className="relative">
+                <input 
+                    id="password" 
+                    type={isPasswordVisible ? 'text' : 'password'} 
+                    value={password} 
+                    onChange={(e) => setPassword(e.target.value)} 
+                    className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base pr-14 focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all font-bold" 
+                    placeholder="STRICT KEY"
+                    required 
+                />
+                <button type="button" onClick={() => setIsPasswordVisible((prev) => !prev)} className="absolute inset-y-0 right-0 px-4 flex items-center text-gray-500 hover:text-brand-gold transition-colors">
+                  {isPasswordVisible ? <EyeOffIcon className="h-6 w-6" /> : <EyeIcon className="h-6 w-6" />}
+                </button>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-6 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl transition-all active:scale-[0.98] shadow-glow-gold disabled:opacity-50 uppercase tracking-[0.4em] text-[12px] mt-4"
+              disabled={isProcessingAuth}
+            >
+              {isProcessingAuth ? "Verifying..." : "Initiate Handshake"}
+            </button>
+
+            <div className="mt-10 text-center relative z-10 border-t border-white/10 pt-8">
+                <button type="button" onClick={() => setIsSignup(true)} className="text-[12px] font-black uppercase tracking-[0.4em] text-white hover:text-brand-gold transition-colors">
+                  Deploy Facilitator Node
+                </button>
+            </div>
+          </form>
+        )}
+      </div>
     </div>
   );
 };

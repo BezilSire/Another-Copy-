@@ -1,49 +1,37 @@
 import React from 'react';
 import { useToast } from '../contexts/ToastContext';
-import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { XCircleIcon } from './icons/XCircleIcon';
-import { UserCircleIcon } from './icons/UserCircleIcon'; // For info
+import { CheckCircleIcon } from './icons/CheckCircleIcon';
+import { InfoIcon } from './icons/InfoIcon';
+import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
 export const ToastContainer: React.FC = () => {
   const { toasts, removeToast } = useToast();
 
-  const icons = {
-    success: <CheckCircleIcon className="h-6 w-6 text-green-500" />,
-    error: <XCircleIcon className="h-6 w-6 text-red-500" />,
-    info: <UserCircleIcon className="h-6 w-6 text-blue-500" />,
-  };
-  
-  const colors = {
-    success: 'bg-white dark:bg-slate-800 border-green-500 dark:border-green-700',
-    error: 'bg-white dark:bg-slate-800 border-red-500 dark:border-red-700',
-    info: 'bg-white dark:bg-slate-800 border-blue-500 dark:border-blue-700'
-  };
-
   return (
-    <div className="fixed top-5 right-5 z-50 space-y-3 w-full max-w-sm">
-      {toasts.map(toast => (
+    <div className="fixed bottom-4 right-4 z-[9999] flex flex-col gap-2">
+      {toasts.map((toast) => (
         <div
           key={toast.id}
-          className={`
-            w-full p-4 rounded-lg shadow-2xl flex items-center
-            animate-fade-in
-            ${colors[toast.type]}
-            border
-          `}
+          className={`flex items-center gap-3 px-4 py-3 rounded-xl shadow-premium animate-slide-up border ${
+            toast.type === 'success' ? 'bg-green-900/90 border-green-500/30 text-green-100' :
+            toast.type === 'error' ? 'bg-red-900/90 border-red-500/30 text-red-100' :
+            toast.type === 'warning' ? 'bg-yellow-900/90 border-yellow-500/30 text-yellow-100' :
+            'bg-slate-900/90 border-slate-500/30 text-slate-100'
+          }`}
         >
-          <div className="flex-shrink-0">
-            {icons[toast.type]}
-          </div>
-          <div className="ml-3 text-sm font-medium text-slate-800 dark:text-gray-200">
-            {toast.message}
-          </div>
+          {toast.type === 'success' && <CheckCircleIcon className="h-5 w-5 text-green-400" />}
+          {toast.type === 'error' && <AlertTriangleIcon className="h-5 w-5 text-red-400" />}
+          {toast.type === 'info' && <InfoIcon className="h-5 w-5 text-blue-400" />}
+          {toast.type === 'warning' && <AlertTriangleIcon className="h-5 w-5 text-yellow-400" />}
+          
+          <span className="text-sm font-medium">{toast.message}</span>
+          
           <button
             onClick={() => removeToast(toast.id)}
-            className="ml-auto -mx-1.5 -my-1.5 bg-transparent rounded-lg focus:ring-2 focus:ring-gray-400 p-1.5 hover:bg-gray-100 dark:hover:bg-slate-700 inline-flex h-8 w-8 text-slate-500 dark:text-gray-400 hover:text-slate-900 dark:hover:text-white"
-            aria-label="Close"
+            className="ml-2 hover:opacity-70 transition-opacity"
           >
-            <span className="sr-only">Close</span>
-            <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd"></path></svg>
+            <XCircleIcon className="h-4 w-4" />
           </button>
         </div>
       ))}

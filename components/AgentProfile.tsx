@@ -148,7 +148,7 @@ export const AgentProfile: React.FC<AgentProfileProps> = ({ agent, onUpdateUser 
         </div>
       )}
       
-      <ProfileCompletionMeter profileData={formData} role="agent" />
+      <ProfileCompletionMeter user={{ ...agent, ...formData } as any} />
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">

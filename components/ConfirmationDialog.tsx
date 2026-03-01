@@ -1,12 +1,14 @@
-import React, { useState } from 'react';
+import React from 'react';
+import { XCircleIcon } from './icons/XCircleIcon';
 
 interface ConfirmationDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  onConfirm: () => void | Promise<void>;
+  onConfirm: () => void;
   title: string;
   message: string;
   confirmButtonText?: string;
+  cancelButtonText?: string;
 }
 
 export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
@@ -16,71 +18,39 @@ export const ConfirmationDialog: React.FC<ConfirmationDialogProps> = ({
   title,
   message,
   confirmButtonText = 'Confirm',
+  cancelButtonText = 'Cancel',
 }) => {
-  const [isConfirming, setIsConfirming] = useState(false);
-
-  if (!isOpen) {
-    return null;
-  }
-  
-  const handleConfirm = async () => {
-    setIsConfirming(true);
-    try {
-        await onConfirm();
-    } finally {
-        // The onConfirm handler is responsible for closing the dialog by updating parent state.
-        // This will unmount the component, so resetting isConfirming isn't strictly necessary,
-        // but it's good practice in case the component isn't unmounted.
-        if (isOpen) { // Check if component is still mounted (prop would update)
-            setIsConfirming(false);
-        }
-    }
-  };
-
+  if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-10 overflow-y-auto" aria-labelledby="modal-title" role="dialog" aria-modal="true">
-      <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div className="fixed inset-0 bg-black bg-opacity-75 transition-opacity" aria-hidden="true" onClick={onClose}></div>
-        <span className="hidden sm:inline-block sm:align-middle sm:h-screen" aria-hidden="true">&#8203;</span>
-        <div className="inline-block align-bottom bg-slate-800 rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div className="bg-slate-800 px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-            <div className="sm:flex sm:items-start">
-              <div className="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-900 bg-opacity-50 sm:mx-0 sm:h-10 sm:w-10">
-                <svg className="h-6 w-6 text-red-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-              <div className="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                <h3 className="text-lg leading-6 font-medium text-white" id="modal-title">
-                  {title}
-                </h3>
-                <div className="mt-2">
-                  <p className="text-sm text-gray-400">
-                    {message}
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="bg-slate-800 border-t border-slate-700 px-4 py-3 sm:px-6 sm:flex sm:flex-row-reverse">
-            <button
-              type="button"
-              disabled={isConfirming}
-              className="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm disabled:bg-red-900 disabled:cursor-not-allowed"
-              onClick={handleConfirm}
-            >
-              {isConfirming ? 'Processing...' : confirmButtonText}
-            </button>
-            <button
-              type="button"
-              disabled={isConfirming}
-              className="mt-3 w-full inline-flex justify-center rounded-md border border-slate-600 shadow-sm px-4 py-2 bg-slate-700 text-base font-medium text-gray-300 hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-800 focus:ring-green-500 sm:mt-0 sm:ml-3 sm:w-auto sm:text-sm"
-              onClick={onClose}
-            >
-              Cancel
-            </button>
-          </div>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+      <div className="bg-midnight-light border border-white/10 rounded-[2.5rem] p-8 max-w-md w-full shadow-premium relative overflow-hidden">
+        <div className="corner-tl !border-white/20"></div><div className="corner-tr !border-white/20"></div><div className="corner-bl !border-white/20"></div><div className="corner-br !border-white/20"></div>
+        
+        <div className="flex justify-between items-start mb-6">
+          <h3 className="text-2xl font-black text-white uppercase tracking-tighter leading-none">{title}</h3>
+          <button onClick={onClose} className="text-white/40 hover:text-white transition-colors">
+            <XCircleIcon className="h-6 w-6" />
+          </button>
+        </div>
+        
+        <p className="text-white/70 text-sm font-medium leading-relaxed mb-8">
+          {message}
+        </p>
+        
+        <div className="flex flex-col sm:flex-row gap-3">
+          <button
+            onClick={onConfirm}
+            className="flex-1 py-4 bg-red-500 hover:bg-red-600 text-white font-black rounded-2xl transition-all active:scale-[0.98] uppercase tracking-widest text-[10px]"
+          >
+            {confirmButtonText}
+          </button>
+          <button
+            onClick={onClose}
+            className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white font-black rounded-2xl transition-all active:scale-[0.98] border border-white/5 uppercase tracking-widest text-[10px]"
+          >
+            {cancelButtonText}
+          </button>
         </div>
       </div>
     </div>

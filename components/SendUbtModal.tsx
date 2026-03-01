@@ -85,9 +85,18 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
     };
 
     const handleSend = async () => {
-        if (!selectedUser) return;
         const sendAmount = parseFloat(amount);
         if (isNaN(sendAmount) || sendAmount <= 0) return;
+        
+        // Determine receiver details
+        let receiverId = selectedUser?.id || 'EXTERNAL_NODE';
+        let receiverPublicKey = selectedUser?.publicKey || (searchQuery.startsWith('UBT-') ? searchQuery : '');
+
+        if (!receiverPublicKey && !selectedUser) {
+            addToast("Invalid Recipient: Please select a user or provide a valid UBT address.", "error");
+            return;
+        }
+
         if (sendAmount > (currentUser.ubtBalance || 0)) {
             addToast("Liquidity Breach: Insufficient Node Balance.", "error");
             return;
@@ -110,20 +119,21 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
             setTimeout(() => setProtocolLogs(p => [...p, "> GATHERING WITNESS SIGNATURES..."]), 1200);
             setTimeout(() => setProtocolLogs(p => [...p, "> Syncing Global Mainnet Ledger..."]), 1600);
 
-            const payloadToSign = `${currentUser.id}:${selectedUser.id}:${sendAmount}:${timestamp}:${nonce}`;
+            const payloadToSign = `${currentUser.id}:${receiverId}:${sendAmount}:${timestamp}:${nonce}`;
             const signature = cryptoService.signTransaction(payloadToSign);
             const txId = `dispatch-${Date.now().toString(36)}`;
             
             const transaction: UbtTransaction = {
                 id: txId,
                 senderId: currentUser.id,
-                receiverId: selectedUser.id,
+                receiverId: receiverId,
                 amount: sendAmount,
                 timestamp: timestamp,
                 nonce: nonce,
                 signature: signature,
                 hash: payloadToSign,
                 senderPublicKey: currentUser.publicKey || "",
+                receiverPublicKey: receiverPublicKey,
                 parentHash: 'GENESIS_CHAIN',
                 type: 'P2P_HANDSHAKE',
                 protocol_mode: 'MAINNET'

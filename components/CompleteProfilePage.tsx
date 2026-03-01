@@ -1,148 +1,106 @@
-
 import React, { useState } from 'react';
 import { User } from '../types';
-import { useToast } from '../contexts/ToastContext';
-import { useAuth } from '../contexts/AuthContext';
-import { ProfileCompletionMeter } from './ProfileCompletionMeter';
-import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
-import { XCircleIcon } from './icons/XCircleIcon';
-import { LoaderIcon } from './icons/LoaderIcon';
+import { LogoIcon } from './icons/LogoIcon';
+import { CheckCircleIcon } from './icons/CheckCircleIcon';
 
 interface CompleteProfilePageProps {
   user: User;
-  onProfileComplete: (updatedData: Partial<User>) => Promise<void>;
-  onCancel?: () => void;
+  onProfileComplete: (data: Partial<User>) => Promise<void>;
+  onCancel: () => void;
 }
 
 export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, onProfileComplete, onCancel }) => {
-  const { isProcessingAuth } = useAuth();
   const [formData, setFormData] = useState({
     phone: user.phone || '',
     address: user.address || '',
     bio: user.bio || '',
-    profession: user.profession || '',
-    skills: (user.skills || []).join(', '),
-    id_card_number: user.id_card_number || '',
-    circle: user.circle || '',
+    skills: user.skills?.join(', ') || '',
+    interests: user.interests?.join(', ') || '',
   });
-  const [isSaving, setIsSaving] = useState(false);
-  const { addToast } = useToast();
-
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-    const { name, value } = e.target;
-    setFormData(prev => ({ ...prev, [name]: value }));
-  };
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
-    const required = ['phone', 'address', 'bio', 'profession', 'circle', 'id_card_number'];
-    const missing = required.some(f => !(formData as any)[f]?.trim());
-
-    if (missing) {
-      addToast('Please fill in all information.', 'error');
-      return;
-    }
-
-    setIsSaving(true);
+    setIsSubmitting(true);
     try {
-      const skillsArray = formData.skills.split(',').map(s => s.trim()).filter(Boolean);
-      const dataToSubmit: Partial<User> = {
-          phone: formData.phone,
-          address: formData.address,
-          bio: formData.bio,
-          profession: formData.profession,
-          skills: skillsArray,
-          id_card_number: formData.id_card_number,
-          circle: formData.circle,
-          isProfileComplete: true
+      const updatedData = {
+        ...formData,
+        skills: formData.skills.split(',').map(s => s.trim()).filter(s => s),
+        interests: formData.interests.split(',').map(s => s.trim()).filter(s => s),
+        isProfileComplete: true,
+        isCompletingProfile: true,
       };
-      await onProfileComplete(dataToSubmit);
-      addToast('Profile updated!', 'success');
-    } catch (error: any) {
-      console.error("Profile save error:", error);
+      await onProfileComplete(updatedData);
+    } catch (err) {
+      console.error(err);
     } finally {
-      setIsSaving(false);
+      setIsSubmitting(false);
     }
   };
 
   return (
-    <div className="max-w-3xl mx-auto px-4 font-sans relative">
-        <div className="module-frame glass-module p-8 sm:p-12 rounded-[3.5rem] border-white/10 shadow-premium animate-fade-in relative overflow-hidden">
-            <div className="corner-tl opacity-30"></div><div className="corner-tr opacity-30"></div>
-            
-            {onCancel && (
-                <button 
-                    type="button"
-                    onClick={onCancel}
-                    className="absolute top-6 right-6 z-50 p-2 bg-red-500/10 hover:bg-red-500 text-red-500 hover:text-white rounded-xl border border-red-500/20 transition-all cursor-pointer shadow-lg active:scale-90"
-                    title="Skip for now"
-                >
-                    <XCircleIcon className="h-6 w-6" />
-                </button>
-            )}
-
-            <div className="text-center mb-10">
-                <div className="w-20 h-20 bg-brand-gold/10 rounded-2xl flex items-center justify-center border border-brand-gold/20 mx-auto mb-6 shadow-glow-gold">
-                    <ShieldCheckIcon className="h-10 w-10 text-brand-gold" />
-                </div>
-                <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text leading-none">Your Profile</h2>
-                <p className="text-[10px] text-gray-500 uppercase font-black tracking-[0.4em] mt-3">Help people find you</p>
-            </div>
-
-            <ProfileCompletionMeter profileData={{ ...user, ...formData, skills: formData.skills.split(',').map(s => s.trim()).filter(Boolean) }} role={user.role} />
-
-            <form onSubmit={handleSubmit} className="space-y-8">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <InputField label="Phone Number" name="phone" value={formData.phone} onChange={handleChange} required placeholder="+263..." />
-                    <InputField label="National ID Number" name="id_card_number" value={formData.id_card_number} onChange={handleChange} required placeholder="ID Number" />
-                    <InputField label="What is your job?" name="profession" value={formData.profession} onChange={handleChange} required placeholder="E.G. FARMER" />
-                    <InputField label="Your City/Town" name="circle" value={formData.circle} onChange={handleChange} required placeholder="E.G. HARARE" />
-                </div>
-                
-                <div className="space-y-2">
-                    <label className="label-caps !text-[9px]">Home Address</label>
-                    <input name="address" value={formData.address} onChange={handleChange} required className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white font-bold placeholder-gray-700" placeholder="FULL PHYSICAL ADDRESS" />
-                </div>
-
-                <div className="space-y-2">
-                    <label className="label-caps !text-[9px]">Your Skills (Separated by commas)</label>
-                    <input name="skills" value={formData.skills} onChange={handleChange} className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white font-mono text-xs uppercase" placeholder="FARMING, TRADING, MARKETING..." />
-                </div>
-
-                <div className="space-y-2">
-                    <label className="label-caps !text-[9px]">A little about you</label>
-                    <textarea name="bio" rows={4} value={formData.bio} onChange={handleChange} required className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white text-sm leading-relaxed" placeholder="Tell the community who you are..."/>
-                </div>
-
-                <div className="flex flex-col gap-4">
-                    <button 
-                        type="submit" 
-                        disabled={isSaving || isProcessingAuth} 
-                        className={`w-full py-6 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl uppercase tracking-[0.4em] text-[12px] shadow-glow-gold transition-all active:scale-95 flex items-center justify-center gap-3 cursor-pointer ${isSaving || isProcessingAuth ? 'opacity-70 grayscale cursor-not-allowed' : ''}`}
-                    >
-                        {isSaving || isProcessingAuth ? <LoaderIcon className="h-5 w-5 animate-spin" /> : "Save Changes"}
-                    </button>
-                    
-                    {onCancel && (
-                        <button 
-                            type="button"
-                            onClick={onCancel}
-                            className="w-full py-2 text-[10px] font-black text-gray-600 hover:text-white uppercase tracking-[0.3em] transition-colors"
-                        >
-                            Skip for now
-                        </button>
-                    )}
-                </div>
-            </form>
+    <div className="max-w-md mx-auto animate-fade-in">
+      <div className="module-frame glass-module p-8 sm:p-12 rounded-[3.5rem] border-white/20 relative overflow-hidden shadow-2xl">
+        <div className="corner-tl !border-white/40"></div><div className="corner-tr !border-white/40"></div><div className="corner-bl !border-white/40"></div><div className="corner-br !border-white/40"></div>
+        
+        <div className="flex flex-col items-center mb-10 relative z-10 pt-4">
+          <div className="w-16 h-16 bg-black rounded-2xl border-2 border-brand-gold/50 flex items-center justify-center shadow-glow-gold mb-6">
+              <LogoIcon className="h-10 w-10 text-brand-gold" />
+          </div>
+          <h2 className="text-3xl font-black text-center text-white tracking-tighter uppercase gold-text leading-none">Anchor Identity</h2>
+          <p className="label-caps mt-2 !text-brand-gold !tracking-[0.4em] !text-[10px]">Node Personalization Protocol</p>
         </div>
+
+        <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
+          <div className="space-y-2">
+            <label className="label-caps pl-1 !text-white !font-black">Comms Number</label>
+            <input 
+              type="text" 
+              value={formData.phone} 
+              onChange={(e) => setFormData(p => ({ ...p, phone: e.target.value }))} 
+              className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all uppercase font-bold" 
+              placeholder="+263 7XX XXX XXX" 
+              required 
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="label-caps pl-1 !text-white !font-black">Physical Node Location</label>
+            <input 
+              type="text" 
+              value={formData.address} 
+              onChange={(e) => setFormData(p => ({ ...p, address: e.target.value }))} 
+              className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all uppercase font-bold" 
+              placeholder="CITY, AREA" 
+              required 
+            />
+          </div>
+
+          <div className="space-y-2">
+            <label className="label-caps pl-1 !text-white !font-black">Identity Bio</label>
+            <textarea 
+              value={formData.bio} 
+              onChange={(e) => setFormData(p => ({ ...p, bio: e.target.value }))} 
+              className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all uppercase font-bold min-h-[100px]" 
+              placeholder="WHO ARE YOU IN THE COMMONS?" 
+              required 
+            />
+          </div>
+
+          <button
+            type="submit"
+            className="w-full py-6 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-black rounded-3xl transition-all active:scale-[0.98] shadow-glow-gold disabled:opacity-50 uppercase tracking-[0.4em] text-[12px] mt-4 flex items-center justify-center gap-3"
+            disabled={isSubmitting}
+          >
+            {isSubmitting ? "Anchoring..." : "Anchor Identity"}
+            {!isSubmitting && <CheckCircleIcon className="h-5 w-5" />}
+          </button>
+
+          <button type="button" onClick={onCancel} className="w-full text-center text-xs font-bold text-white/30 hover:text-white transition-colors uppercase tracking-widest">
+            Skip for now
+          </button>
+        </form>
+      </div>
     </div>
   );
 };
-
-const InputField: React.FC<{label: string, name: string, value: string, onChange: any, required?: boolean, placeholder?: string}> = ({label, name, value, onChange, required, placeholder}) => (
-    <div className="space-y-2">
-        <label className="label-caps !text-[9px]">{label}</label>
-        <input type="text" name={name} value={value} onChange={onChange} required={required} className="w-full bg-slate-900 border border-white/5 p-4 rounded-xl text-white font-bold placeholder-gray-700 uppercase" placeholder={placeholder} />
-    </div>
-);

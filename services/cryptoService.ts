@@ -126,17 +126,17 @@ export const cryptoService = {
     _encryptWithPin: async (text: string, pin: string): Promise<string> => {
         const enc = new TextEncoder();
         const pinBytes = enc.encode(pin);
-        const pwKey = await crypto.subtle.importKey('raw', pinBytes, { name: 'PBKDF2' }, false, ['deriveKey']);
+        const pwKey = await crypto.subtle.importKey('raw', pinBytes as any, { name: 'PBKDF2' }, false, ['deriveKey']);
         const salt = window.crypto.getRandomValues(new Uint8Array(16));
         const key = await crypto.subtle.deriveKey(
-            { name: 'PBKDF2', salt, iterations: 100000, hash: 'SHA-256' },
+            { name: 'PBKDF2', salt: salt as any, iterations: 100000, hash: 'SHA-256' },
             pwKey,
             { name: 'AES-GCM', length: 256 },
             false,
             ['encrypt']
         );
         const iv = window.crypto.getRandomValues(new Uint8Array(12));
-        const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, enc.encode(text));
+        const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv: iv as any }, key, enc.encode(text) as any);
         return JSON.stringify({ iv: encodeBase64(iv), salt: encodeBase64(salt), data: encodeBase64(new Uint8Array(ciphertext)) });
     },
 
@@ -144,15 +144,15 @@ export const cryptoService = {
         const vault = JSON.parse(vaultJson);
         const enc = new TextEncoder();
         const pinBytes = enc.encode(pin);
-        const pwKey = await crypto.subtle.importKey('raw', pinBytes, { name: 'PBKDF2' }, false, ['deriveKey']);
+        const pwKey = await crypto.subtle.importKey('raw', pinBytes as any, { name: 'PBKDF2' }, false, ['deriveKey']);
         const key = await crypto.subtle.deriveKey(
-            { name: 'PBKDF2', salt: decodeBase64(vault.salt), iterations: 100000, hash: 'SHA-256' },
+            { name: 'PBKDF2', salt: decodeBase64(vault.salt) as any, iterations: 100000, hash: 'SHA-256' },
             pwKey,
             { name: 'AES-GCM', length: 256 },
             false,
             ['decrypt']
         );
-        const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: decodeBase64(vault.iv) }, key, decodeBase64(vault.data));
+        const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: decodeBase64(vault.iv) as any }, key, decodeBase64(vault.data) as any);
         return new TextDecoder().decode(decrypted);
     }
 };

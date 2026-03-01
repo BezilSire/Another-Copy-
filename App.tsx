@@ -87,7 +87,7 @@ const App: React.FC = () => {
         
         if (userToRender.role === 'admin') return <AdminDashboard user={userToRender as Admin} onUpdateUser={updateUser} unreadCount={unreadNotificationCount} onOpenChat={handleOpenChat} onViewProfile={handleViewProfile} />;
         if (userToRender.role === 'agent') return <AgentDashboard user={userToRender as Agent} broadcasts={[]} onUpdateUser={updateUser} activeView="dashboard" setActiveView={() => {}} onViewProfile={handleViewProfile} />;
-        return <MemberDashboard user={userToRender as MemberUser} onUpdateUser={updateUser} unreadCount={unreadNotificationCount} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={handleViewProfile} forcedView={forceView} clearForcedView={() => setForceView(null)} />;
+        return <MemberDashboard user={userToRender as MemberUser} onUpdateUser={updateUser} unreadCount={unreadNotificationCount} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={(uid: string | null) => handleViewProfile(uid)} forcedView={forceView} clearForcedView={() => setForceView(null)} />;
     }
     
     if (isLoadingAuth || isProcessingAuth) {
