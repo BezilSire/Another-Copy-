@@ -48,14 +48,14 @@ export const AuthPage: React.FC = () => {
         {isResetMode ? (
           <form onSubmit={handleReset} className="space-y-6 relative z-10">
             <div className="space-y-2">
-              <label className="label-caps pl-1 !text-white !font-black" htmlFor="email">Recovery Address</label>
+              <label className="label-caps pl-1 !text-white !font-black" htmlFor="email">Email Address</label>
               <input 
                 id="email" 
                 type="email" 
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
-                className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all uppercase font-bold" 
-                placeholder="EMAIL@PROTOCOL.ORG" 
+                className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all font-bold" 
+                placeholder="example@gmail.com" 
                 required 
               />
             </div>
@@ -73,21 +73,21 @@ export const AuthPage: React.FC = () => {
         ) : (
           <form onSubmit={handleLogin} className="space-y-6 relative z-10">
             <div className="space-y-2">
-              <label className="label-caps pl-1 !text-white !font-black" htmlFor="email">Comms Address</label>
+              <label className="label-caps pl-1 !text-white !font-black" htmlFor="email">Email Address</label>
               <input 
                 id="email" 
                 type="email" 
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
-                className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all uppercase font-bold" 
-                placeholder="EMAIL@PROTOCOL.ORG" 
+                className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all font-bold" 
+                placeholder="example@gmail.com" 
                 required 
               />
             </div>
 
             <div className="space-y-2">
               <div className="flex justify-between items-center pr-1">
-                <label className="label-caps pl-1 !text-white !font-black" htmlFor="password">Security Key</label>
+                <label className="label-caps pl-1 !text-white !font-black" htmlFor="password">Password</label>
                 <button type="button" onClick={() => setIsResetMode(true)} className="text-[9px] font-black uppercase tracking-widest text-brand-gold/60 hover:text-brand-gold transition-colors">Forgot Key?</button>
               </div>
               <div className="relative">
@@ -97,7 +97,7 @@ export const AuthPage: React.FC = () => {
                     value={password} 
                     onChange={(e) => setPassword(e.target.value)} 
                     className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base pr-14 focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all font-bold" 
-                    placeholder="STRICT KEY"
+                    placeholder="your security key"
                     required 
                 />
                 <button type="button" onClick={() => setIsPasswordVisible((prev) => !prev)} className="absolute inset-y-0 right-0 px-4 flex items-center text-gray-500 hover:text-brand-gold transition-colors">

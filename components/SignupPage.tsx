@@ -41,28 +41,28 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, isProcessing, 
 
       <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
         <div className="space-y-2">
-          <label className="label-caps pl-1 !text-white !font-black" htmlFor="name">Full Designation</label>
+          <label className="label-caps pl-1 !text-white !font-black" htmlFor="name">Full Name</label>
           <input 
             id="name" 
             type="text" 
             value={name} 
             onChange={(e) => setName(e.target.value)} 
-            className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all uppercase font-bold" 
-            placeholder="ENTER LEGAL NAME" 
+            className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all font-bold" 
+            placeholder="enter legal name" 
             required 
             disabled={isProcessing} 
           />
         </div>
 
         <div className="space-y-2">
-          <label className="label-caps pl-1 !text-white !font-black" htmlFor="email">Comms Address</label>
+          <label className="label-caps pl-1 !text-white !font-black" htmlFor="email">Email Address</label>
           <input 
             id="email" 
             type="email" 
             value={email} 
             onChange={(e) => setEmail(e.target.value)} 
-            className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all uppercase font-bold" 
-            placeholder="EMAIL@PROTOCOL.ORG" 
+            className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all font-bold" 
+            placeholder="example@gmail.com" 
             required 
             disabled={isProcessing} 
           />
@@ -75,15 +75,15 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, isProcessing, 
             type="text" 
             value={circle} 
             onChange={(e) => setCircle(e.target.value)} 
-            className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all uppercase font-bold" 
-            placeholder="CITY / AREA" 
+            className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all font-bold" 
+            placeholder="city / area" 
             required 
             disabled={isProcessing} 
           />
         </div>
 
         <div className="space-y-2">
-          <label className="label-caps pl-1 !text-white !font-black" htmlFor="password">Security Key</label>
+          <label className="label-caps pl-1 !text-white !font-black" htmlFor="password">Password</label>
           <div className="relative">
             <input 
                 id="password" 
@@ -91,7 +91,7 @@ export const SignupPage: React.FC<SignupPageProps> = ({ onSignup, isProcessing, 
                 value={password} 
                 onChange={(e) => setPassword(e.target.value)} 
                 className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base pr-14 focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all font-bold" 
-                placeholder="STRICT KEY"
+                placeholder="your security key"
                 required 
                 minLength={6} 
                 disabled={isProcessing} 

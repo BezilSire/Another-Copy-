@@ -53,36 +53,36 @@ export const CompleteProfilePage: React.FC<CompleteProfilePageProps> = ({ user, 
 
         <form onSubmit={handleSubmit} className="space-y-6 relative z-10">
           <div className="space-y-2">
-            <label className="label-caps pl-1 !text-white !font-black">Comms Number</label>
+            <label className="label-caps pl-1 !text-white !font-black">Phone Number</label>
             <input 
               type="text" 
               value={formData.phone} 
               onChange={(e) => setFormData(p => ({ ...p, phone: e.target.value }))} 
-              className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all uppercase font-bold" 
-              placeholder="+263 7XX XXX XXX" 
+              className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all font-bold" 
+              placeholder="+263 7xx xxx xxx" 
               required 
             />
           </div>
 
           <div className="space-y-2">
-            <label className="label-caps pl-1 !text-white !font-black">Physical Node Location</label>
+            <label className="label-caps pl-1 !text-white !font-black">Physical Address</label>
             <input 
               type="text" 
               value={formData.address} 
               onChange={(e) => setFormData(p => ({ ...p, address: e.target.value }))} 
-              className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all uppercase font-bold" 
-              placeholder="CITY, AREA" 
+              className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all font-bold" 
+              placeholder="city, area" 
               required 
             />
           </div>
 
           <div className="space-y-2">
-            <label className="label-caps pl-1 !text-white !font-black">Identity Bio</label>
+            <label className="label-caps pl-1 !text-white !font-black">Bio</label>
             <textarea 
               value={formData.bio} 
               onChange={(e) => setFormData(p => ({ ...p, bio: e.target.value }))} 
-              className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all uppercase font-bold min-h-[100px]" 
-              placeholder="WHO ARE YOU IN THE COMMONS?" 
+              className="w-full bg-slate-900 border-2 border-white/10 rounded-xl py-4 px-6 text-white text-base focus:outline-none focus:ring-4 focus:ring-brand-gold/10 focus:border-brand-gold transition-all font-bold min-h-[100px]" 
+              placeholder="who are you in the commons?" 
               required 
             />
           </div>

@@ -7,6 +7,7 @@
     "dev": "tsx server.ts",
     "prebuild": "node scripts/generate-icon-stubs.js",
     "build": "npm run prebuild && vite build",
+    "start": "node server.ts",
     "lint": "tsc --noEmit",
     "preview": "vite preview"
   },
