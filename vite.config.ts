@@ -23,10 +23,10 @@ export default defineConfig({
     port: 3000,
   },
   define: {
-    'process.env.API_KEY': JSON.stringify(process.env.API_KEY),
-    'process.env.GITHUB_TOKEN': JSON.stringify(process.env.GITHUB_TOKEN),
-    'process.env.GITHUB_REPO': JSON.stringify(process.env.GITHUB_REPO),
-    'process.env.SITE_MODE': JSON.stringify(process.env.SITE_MODE),
+    'process.env.API_KEY': JSON.stringify(process.env.API_KEY || ''),
+    'process.env.GITHUB_TOKEN': JSON.stringify(process.env.GITHUB_TOKEN || ''),
+    'process.env.GITHUB_REPO': JSON.stringify(process.env.GITHUB_REPO || ''),
+    'process.env.SITE_MODE': JSON.stringify(process.env.SITE_MODE || ''),
     'global': 'window'
   }
 });

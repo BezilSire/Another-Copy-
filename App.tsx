@@ -22,7 +22,7 @@ import { LedgerPage } from './components/LedgerPage';
 const App: React.FC = () => {
   const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser } = useAuth();
   
-  const isExplorer = process.env.SITE_MODE === 'EXPLORER';
+  const isExplorer = (typeof process !== 'undefined' && process?.env?.SITE_MODE === 'EXPLORER');
   
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
@@ -31,10 +31,18 @@ const App: React.FC = () => {
   const [isRadarOpen, setIsRadarOpen] = useState(false);
   const [forceView, setForceView] = useState<string | null>(null);
 
-  const [hasSkippedProfile, setHasSkippedProfile] = useState(() => sessionStorage.getItem('ugc_skip_anchor') === 'true');
+  const [hasSkippedProfile, setHasSkippedProfile] = useState(() => {
+    try {
+        return sessionStorage.getItem('ugc_skip_anchor') === 'true';
+    } catch (e) {
+        return false;
+    }
+  });
 
   const handleSkipProfile = () => {
-      sessionStorage.setItem('ugc_skip_anchor', 'true');
+      try {
+          sessionStorage.setItem('ugc_skip_anchor', 'true');
+      } catch (e) {}
       setHasSkippedProfile(true);
   };
 
@@ -46,7 +54,9 @@ const App: React.FC = () => {
   }, [currentUser, firebaseUser]);
 
   const confirmLogout = async () => { 
-      sessionStorage.removeItem('ugc_skip_anchor');
+      try {
+          sessionStorage.removeItem('ugc_skip_anchor');
+      } catch (e) {}
       await logout(); 
       setIsLogoutConfirmOpen(false); 
       window.location.reload(); 

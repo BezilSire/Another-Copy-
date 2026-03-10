@@ -25,7 +25,7 @@ const isExplorer =
     hostname.includes('scan') || 
     hostname.includes('ledger') || 
     window.location.search.includes('mode=explorer') ||
-    process.env.SITE_MODE === 'EXPLORER';
+    (typeof process !== 'undefined' && process?.env?.SITE_MODE === 'EXPLORER');
 
 const root = ReactDOM.createRoot(rootElement);
 

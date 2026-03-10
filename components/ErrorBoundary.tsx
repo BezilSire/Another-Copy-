@@ -37,9 +37,16 @@ export class ErrorBoundary extends Component<Props, State> {
               </div>
               
               <h2 className="text-3xl font-black text-white tracking-tighter uppercase leading-none mb-4">Protocol Fault</h2>
-              <p className="text-sm font-medium text-white/50 leading-relaxed mb-10 uppercase tracking-widest">
+              <p className="text-sm font-medium text-white/50 leading-relaxed mb-4 uppercase tracking-widest">
                 An unexpected state has been detected in the node.
               </p>
+              
+              {this.state.error && (
+                <div className="w-full bg-black/40 rounded-2xl p-4 mb-8 text-left overflow-auto max-h-40 border border-white/5">
+                  <p className="text-red-400 font-mono text-xs break-all mb-2">{this.state.error.toString()}</p>
+                  <p className="text-white/20 font-mono text-[10px] whitespace-pre">{this.state.error.stack}</p>
+                </div>
+              )}
               
               <button
                 onClick={() => window.location.reload()}
