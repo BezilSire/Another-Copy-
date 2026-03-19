@@ -1,14 +1,14 @@
 
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, FieldValue } from 'firebase/firestore';
 
-export type UserRole = 'member' | 'agent' | 'admin';
+export type UserRole = 'member' | 'admin';
 export type UserStatus = 'active' | 'pending' | 'pending_trust' | 'suspended' | 'ousted';
 export type FilterType = 'all' | 'general' | 'proposal' | 'offer' | 'opportunity' | 'distress' | 'foryou' | 'following';
 export type ProtocolMode = 'MAINNET' | 'TESTNET';
 export type AssetType = 'SOL' | 'USDT' | 'USDC';
 export type GovernanceTier = 'CITY' | 'NATIONAL' | 'GLOBAL';
 
-export type MemberView = 'pulse' | 'ledger' | 'vault' | 'wallet' | 'lab' | 'assembly' | 'registry' | 'more' | 'profile' | 'notifications' | 'security' | 'audit' | 'knowledge' | 'chats' | 'community' | 'governance' | 'meeting' | 'state' | 'sustenance' | 'home' | 'hub';
+export type MemberView = 'pulse' | 'ledger' | 'vault' | 'wallet' | 'lab' | 'assembly' | 'registry' | 'more' | 'profile' | 'notifications' | 'security' | 'audit' | 'knowledge' | 'community' | 'governance' | 'state' | 'sustenance' | 'home' | 'hub';
 
 // Fixed: Added missing NavView type alias used in MorePage.tsx
 export type NavView = MemberView;
@@ -76,17 +76,27 @@ export interface User {
   id_card_number?: string;
   initialUbtStake?: number;
   sustenanceVouchers?: SustenanceVoucher[];
+  recoveryCommitment?: string;
+  isKeyRotated?: boolean;
 }
 
-// Fixed: Added Admin and Agent interfaces extending User
+// Fixed: Added Admin interface extending User
 export interface Admin extends User {
     role: 'admin';
 }
 
-export interface Agent extends User {
-    role: 'agent';
-    agent_code: string;
-    commissionBalance?: number;
+export interface Block {
+    id: string;
+    index: number;
+    timestamp: number;
+    transactions: UbtTransaction[];
+    merkleRoot: string;
+    previousHash: string;
+    nonce: number;
+    hash: string;
+    minerId: string;
+    difficulty: number;
+    serverTimestamp?: Timestamp;
 }
 
 export interface UbtTransaction {
@@ -94,7 +104,8 @@ export interface UbtTransaction {
     senderId: string;
     receiverId: string;
     amount: number;
-    timestamp: number;
+    fee?: number;
+    timestamp: number | Timestamp | FieldValue;
     nonce: string;
     signature: string;
     hash: string;
@@ -103,9 +114,10 @@ export interface UbtTransaction {
     parentHash: string;
     priceAtSync?: number; 
     status?: 'pending' | 'verified' | 'failed';
-    type?: 'P2P_HANDSHAKE' | 'VOUCH_ANCHOR' | 'REDEMPTION' | 'SYSTEM_MINT' | 'VAULT_SYNC' | 'FIAT_BRIDGE' | 'INTENT_PRIME' | 'SIMULATION_MINT' | 'credit' | 'debit';
+    type?: 'P2P_HANDSHAKE' | 'VOUCH_ANCHOR' | 'REDEMPTION' | 'SYSTEM_MINT' | 'VAULT_SYNC' | 'FIAT_BRIDGE' | 'INTENT_PRIME' | 'SIMULATION_MINT' | 'TRANSFER' | 'credit' | 'debit' | 'COINBASE';
     protocol_mode: ProtocolMode; 
     reason?: string;
+    serverTimestamp?: Timestamp;
 }
 
 export interface GlobalEconomy {
@@ -135,31 +147,6 @@ export interface PendingUbtPurchase {
     verifiedAt?: Timestamp;
 }
 
-export interface Conversation {
-    id: string;
-    members: string[];
-    memberNames: { [key: string]: string };
-    lastMessage: string;
-    lastMessageTimestamp: Timestamp;
-    lastMessageSenderId: string;
-    readBy: string[];
-    isGroup: boolean;
-    name?: string;
-}
-
-// Fixed: Added signature, hash, and nonce to Message interface
-export interface Message {
-    id: string;
-    senderId: string;
-    senderName: string;
-    text: string;
-    timestamp: Timestamp;
-    signature?: string;
-    hash?: string;
-    nonce?: string;
-}
-
-// Fixed: Added causerId to Notification interface
 export interface Notification {
     id: string;
     userId: string;
@@ -425,45 +412,6 @@ export interface Report {
     postAuthorId?: string;
 }
 
-export interface ParticipantStatus {
-    uid: string;
-    name: string;
-    isVideoOn: boolean;
-    isMicOn: boolean;
-    joinedAt: number;
-    isOnStage: boolean;
-    isRequestingStage: boolean;
-    role: string;
-    isSpeaking: boolean;
-}
-
-export interface Meeting {
-    id: string;
-    title: string;
-    expiresAt: Timestamp;
-    hostId: string;
-    participants: Record<string, ParticipantStatus>;
-    kickedParticipantId?: string;
-}
-
-export interface RTCSignal {
-    type: 'offer' | 'answer';
-    sdp: string;
-    from: string;
-    to: string;
-    timestamp: number;
-}
-
-export interface ICESignal {
-    candidate: string;
-    from: string;
-    to: string;
-    timestamp: number;
-    sdpMLineIndex?: number;
-    sdpMid?: string;
-}
-
-// Fixed: Added missing NewPublicMemberData interface
 export interface NewPublicMemberData {
     full_name: string;
     email: string;
@@ -496,3 +444,64 @@ export interface Post {
 
 // Fixed: Added Transaction type alias for backward compatibility
 export type Transaction = UbtTransaction;
+
+export interface ZimNews {
+    id: string;
+    title: string;
+    content: string;
+    source: string;
+    url: string;
+    timestamp: Timestamp;
+    category: 'economy' | 'agriculture' | 'tech' | 'social' | 'general';
+    sentiment: 'positive' | 'neutral' | 'negative';
+    vouchCount: number;
+    vouchedBy: string[];
+}
+
+export interface Simulation {
+    id: string;
+    userId: string;
+    title: string;
+    seedMaterial: string;
+    status: 'initializing' | 'simulating' | 'completed' | 'failed';
+    createdAt: Timestamp;
+    completedAt?: Timestamp;
+    prediction?: string;
+    profitStrategy?: string;
+    confidenceScore: number;
+    agentCount: number;
+}
+
+export interface SimAgent {
+    id: string;
+    simulationId: string;
+    name: string;
+    persona: string;
+    background: string;
+    initialStance: string;
+    currentStance: string;
+    avatarUrl?: string;
+}
+
+export interface SimMessage {
+    id: string;
+    simulationId: string;
+    agentId: string;
+    agentName: string;
+    content: string;
+    timestamp: Timestamp;
+    platform: 'ZIM_X' | 'ZIM_REDDIT';
+}
+
+export interface AgenticTask {
+    id: string;
+    userId: string;
+    description: string;
+    status: 'pending' | 'processing' | 'completed' | 'failed';
+    result?: string;
+    createdAt: Timestamp;
+    completedAt?: Timestamp;
+    toolsUsed: string[];
+}
+
+

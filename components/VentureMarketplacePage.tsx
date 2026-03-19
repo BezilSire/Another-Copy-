@@ -156,7 +156,7 @@ export const VentureMarketplacePage: React.FC<VentureMarketplacePageProps> = ({ 
             ) : (
                 <div className="text-center text-gray-500 py-16 bg-slate-800 rounded-lg">
                     <BriefcaseIcon className="h-12 w-12 mx-auto text-slate-600 mb-4" />
-                    <p className="font-semibold text-lg text-white">The Marketplace is Quiet</p>
+                    <p className="font-semibold text-lg text-white">The Global Commons Marketplace is Quiet</p>
                     <p>There are no community ventures seeking funding at this time. Check back soon!</p>
                 </div>
             )}

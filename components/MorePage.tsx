@@ -4,17 +4,19 @@ import { UserCircleIcon } from './icons/UserCircleIcon';
 import { LogOutIcon } from './icons/LogOutIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { BellIcon } from './icons/BellIcon';
-import { HelpCircleIcon } from './icons/HelpCircleIcon';
+import { BookOpenIcon } from './icons/BookOpenIcon';
 import { KeyIcon } from './icons/KeyIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
+import { MessageSquareIcon } from './icons/MessageSquareIcon';
 
 interface MorePageProps {
   user: MemberUser;
   onLogout: () => void;
   onViewProfile: (userId: string) => void;
+  onNavigate: (view: any) => void;
 }
 
-export const MorePage: React.FC<MorePageProps> = ({ user, onLogout, onViewProfile }) => {
+export const MorePage: React.FC<MorePageProps> = ({ user, onLogout, onViewProfile, onNavigate }) => {
   return (
     <div className="space-y-8 animate-fade-in pb-24">
       <div className="flex items-center gap-6 mb-10">
@@ -23,7 +25,7 @@ export const MorePage: React.FC<MorePageProps> = ({ user, onLogout, onViewProfil
         </div>
         <div>
           <h2 className="text-3xl font-black tracking-tighter text-white uppercase leading-none">{user.name}</h2>
-          <p className="text-sm font-bold text-brand-gold tracking-[0.4em] uppercase opacity-60 mt-2">{user.role} Node</p>
+          <p className="text-sm font-bold text-brand-gold tracking-[0.4em] uppercase opacity-60 mt-2">{user.role} Account</p>
         </div>
       </div>
 
@@ -36,9 +38,22 @@ export const MorePage: React.FC<MorePageProps> = ({ user, onLogout, onViewProfil
             <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 group-hover:text-white transition-colors">
               <UserCircleIcon className="h-6 w-6" />
             </div>
-            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Identity Profile</p>
+            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Profile Settings</p>
           </div>
           <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Manage</p>
+        </button>
+
+        <button 
+          onClick={() => onNavigate('ledger')}
+          className="w-full bg-white/5 border border-white/5 p-6 rounded-3xl flex items-center justify-between hover:bg-white/10 transition-all group"
+        >
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 group-hover:text-white transition-colors">
+              <BookOpenIcon className="h-6 w-6" />
+            </div>
+            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Public Ledger</p>
+          </div>
+          <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">View</p>
         </button>
 
         <button className="w-full bg-white/5 border border-white/5 p-6 rounded-3xl flex items-center justify-between hover:bg-white/10 transition-all group">
@@ -46,7 +61,7 @@ export const MorePage: React.FC<MorePageProps> = ({ user, onLogout, onViewProfil
             <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 group-hover:text-white transition-colors">
               <ShieldCheckIcon className="h-6 w-6" />
             </div>
-            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Security Protocol</p>
+            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Security Settings</p>
           </div>
           <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Locked</p>
         </button>
@@ -56,7 +71,7 @@ export const MorePage: React.FC<MorePageProps> = ({ user, onLogout, onViewProfil
             <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 group-hover:text-white transition-colors">
               <BellIcon className="h-6 w-6" />
             </div>
-            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Alert Settings</p>
+            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Notifications</p>
           </div>
           <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Active</p>
         </button>
@@ -74,9 +89,9 @@ export const MorePage: React.FC<MorePageProps> = ({ user, onLogout, onViewProfil
         <button className="w-full bg-white/5 border border-white/5 p-6 rounded-3xl flex items-center justify-between hover:bg-white/10 transition-all group">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-2xl bg-white/5 border border-white/10 flex items-center justify-center text-white/40 group-hover:text-white transition-colors">
-              <HelpCircleIcon className="h-6 w-6" />
+              <MessageSquareIcon className="h-6 w-6" />
             </div>
-            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Protocol Support</p>
+            <p className="text-sm font-black text-white uppercase tracking-widest leading-none">Help & Support</p>
           </div>
           <p className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Help</p>
         </button>
@@ -91,9 +106,9 @@ export const MorePage: React.FC<MorePageProps> = ({ user, onLogout, onViewProfil
             <div className="w-12 h-12 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center text-red-400 group-hover:text-red-300 transition-colors">
               <LogOutIcon className="h-6 w-6" />
             </div>
-            <p className="text-sm font-black text-red-400 uppercase tracking-widest leading-none">Terminate Session</p>
+            <p className="text-sm font-black text-red-400 uppercase tracking-widest leading-none">Log Out</p>
           </div>
-          <p className="text-[10px] font-bold text-red-400/40 uppercase tracking-widest">Log Out</p>
+          <p className="text-[10px] font-bold text-red-400/40 uppercase tracking-widest">Exit</p>
         </button>
       </div>
     </div>

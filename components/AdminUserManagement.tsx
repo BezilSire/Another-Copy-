@@ -51,14 +51,14 @@ export const AdminUserManagement: React.FC<{ admin: Admin; users: User[] }> = ({
         const isSuspended = user.status === 'suspended';
         const nextStatus = isSuspended ? 'active' : 'suspended';
         
-        if (!window.confirm(`PROTOCOL_OVERRIDE: ${isSuspended ? 'Unlock/Activate' : 'Lock/Suspend'} node ${user.name}?`)) return;
+        if (!window.confirm(`Are you sure you want to ${isSuspended ? 'Activate' : 'Suspend'} user ${user.name}?`)) return;
 
         setBusyId(user.id);
         try {
             await api.setUserStatus(user.id, nextStatus);
-            addToast(`Node ${user.name} state updated to ${nextStatus.toUpperCase()}.`, "success");
+            addToast(`User ${user.name} status updated to ${nextStatus.toUpperCase()}.`, "success");
         } catch (e) {
-            addToast("Authorization failure. Ledger update denied.", "error");
+            addToast("Failed to update user status.", "error");
         } finally {
             setBusyId(null);
         }
@@ -68,8 +68,8 @@ export const AdminUserManagement: React.FC<{ admin: Admin; users: User[] }> = ({
         <div className="module-frame glass-module p-8 sm:p-12 rounded-[3rem] border-white/5 shadow-premium animate-fade-in space-y-10">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 border-b border-white/5 pb-8">
                 <div>
-                    <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text leading-none">Node Registry</h2>
-                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.5em] mt-3">Identity Authorization Panel</p>
+                    <h2 className="text-3xl font-black text-white uppercase tracking-tighter gold-text leading-none">User Registry</h2>
+                    <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.5em] mt-3">UGC User Management Panel</p>
                 </div>
                 <div className="relative w-full md:w-80 group">
                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none text-gray-600 group-focus-within:text-brand-gold transition-colors">
@@ -79,7 +79,7 @@ export const AdminUserManagement: React.FC<{ admin: Admin; users: User[] }> = ({
                         type="text"
                         value={search}
                         onChange={e => setSearch(e.target.value)}
-                        placeholder="SEARCH IDENTITY..."
+                        placeholder="SEARCH USERS..."
                         className="w-full bg-slate-950 border border-white/10 rounded-2xl py-4 pl-12 pr-4 text-xs font-black text-white tracking-widest focus:ring-1 focus:ring-brand-gold/30 outline-none uppercase placeholder-gray-800"
                     />
                 </div>
@@ -89,18 +89,18 @@ export const AdminUserManagement: React.FC<{ admin: Admin; users: User[] }> = ({
                 {isSovereignLocked && (
                     <div className="absolute inset-0 z-20 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center rounded-3xl animate-fade-in">
                         <LockIcon className="h-12 w-12 text-brand-gold mb-4" />
-                        <p className="label-caps !text-[11px] !text-white text-center">Protocol Registry Locked</p>
-                        <p className="text-[9px] text-gray-400 mt-2 uppercase font-black tracking-widest">Unlock your HUD session to modify nodes</p>
+                        <p className="label-caps !text-[11px] !text-white text-center">Registry Locked</p>
+                        <p className="text-[9px] text-gray-400 mt-2 uppercase font-black tracking-widest">Unlock your session to modify users</p>
                     </div>
                 )}
                 
                 <table className="w-full text-left">
                     <thead>
                         <tr className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] border-b border-white/5">
-                            <th className="px-6 py-5">Node Identity</th>
-                            <th className="px-6 py-5">Operational Circle</th>
-                            <th className="px-6 py-5">State Pulse</th>
-                            <th className="px-6 py-5 text-right">Handshake Override</th>
+                            <th className="px-6 py-5">User</th>
+                            <th className="px-6 py-5">Circle</th>
+                            <th className="px-6 py-5">Status</th>
+                            <th className="px-6 py-5 text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-white/5">
@@ -112,8 +112,8 @@ export const AdminUserManagement: React.FC<{ admin: Admin; users: User[] }> = ({
                                             <ShieldCheckIcon className="h-6 w-6" />
                                         </div>
                                         <div>
-                                            <p className="text-sm font-black text-white uppercase tracking-tight truncate max-w-[200px]">{u.name || 'Unknown Identity'}</p>
-                                            <p className="text-[9px] text-gray-600 font-mono mt-1 uppercase truncate max-w-[150px]">{u.email || 'No Comms Address'}</p>
+                                            <p className="text-sm font-black text-white uppercase tracking-tight truncate max-w-[200px]">{u.name || 'Unknown User'}</p>
+                                            <p className="text-[9px] text-gray-600 font-mono mt-1 uppercase truncate max-w-[150px]">{u.email || 'No Email'}</p>
                                         </div>
                                     </div>
                                 </td>
@@ -123,7 +123,7 @@ export const AdminUserManagement: React.FC<{ admin: Admin; users: User[] }> = ({
                                 <td className="px-6 py-6">
                                     <div className="flex items-center gap-3">
                                         <div className={`w-1.5 h-1.5 rounded-full animate-pulse shadow-glow-matrix ${u.status === 'suspended' ? 'bg-red-500' : 'bg-emerald-500'}`}></div>
-                                        <span className={`text-[10px] font-black uppercase tracking-widest ${u.status === 'suspended' ? 'text-red-500' : 'text-emerald-500'}`}>{u.status === 'suspended' ? 'ISOLATED' : 'SYNCHRONIZED'}</span>
+                                        <span className={`text-[10px] font-black uppercase tracking-widest ${u.status === 'suspended' ? 'text-red-500' : 'text-emerald-500'}`}>{u.status === 'suspended' ? 'SUSPENDED' : 'ACTIVE'}</span>
                                     </div>
                                 </td>
                                 <td className="px-6 py-6 text-right">
@@ -137,7 +137,7 @@ export const AdminUserManagement: React.FC<{ admin: Admin; users: User[] }> = ({
                                                 : 'bg-red-600/10 text-red-500 border-red-500/20 hover:bg-red-600 hover:text-white'}
                                         `}
                                     >
-                                        {busyId === u.id ? <LoaderIcon className="h-4 w-4 animate-spin"/> : u.status === 'suspended' ? <><UnlockIcon className="h-3.5 w-3.5"/> Unlock Identity</> : <><LockIcon className="h-3.5 w-3.5"/> Lock Node</>}
+                                        {busyId === u.id ? <LoaderIcon className="h-4 w-4 animate-spin"/> : u.status === 'suspended' ? <><UnlockIcon className="h-3.5 w-3.5"/> Activate User</> : <><LockIcon className="h-3.5 w-3.5"/> Suspend User</>}
                                     </button>
                                 </td>
                             </tr>
@@ -147,7 +147,7 @@ export const AdminUserManagement: React.FC<{ admin: Admin; users: User[] }> = ({
                 {filteredUsers.length === 0 && (
                     <div className="py-32 text-center opacity-30">
                         <AlertTriangleIcon className="h-16 w-16 mx-auto mb-6 text-gray-700" />
-                        <p className="label-caps !text-[12px] !tracking-[0.6em]">No Matching Entities Indexed</p>
+                        <p className="label-caps !text-[12px] !tracking-[0.6em]">No Matching Users Found</p>
                     </div>
                 )}
             </div>

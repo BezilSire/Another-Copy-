@@ -44,7 +44,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose, currentUser }
     if (isOpen) {
       const init = async () => {
         try {
-          const systemInstruction = "You are the Ubuntium Assistant, a helpful AI guide for the Ubuntium Global Commons.";
+          const systemInstruction = "You are the Ubuntium Global Commons Assistant, a helpful AI guide for the Ubuntium Global Commons.";
           const newChat = await initializeChat(systemInstruction);
           setChat(newChat);
 
@@ -53,11 +53,11 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose, currentUser }
             const savedMessages = JSON.parse(savedMessagesRaw) as Message[];
             setMessages(savedMessages);
           } else {
-            const initialMessage: Message = { author: 'bot', text: "Hello! I'm the Ubuntium Assistant. How can I help you today?" };
+            const initialMessage: Message = { author: 'bot', text: "Hello! I'm the Ubuntium Global Commons Assistant. How can I help you today?" };
             setMessages([initialMessage]);
           }
         } catch (error) {
-          const initialMessage: Message = { author: 'bot', text: "Hello! I'm the Ubuntium Assistant. How can I help you today?" };
+          const initialMessage: Message = { author: 'bot', text: "Hello! I'm the Ubuntium Global Commons Assistant. How can I help you today?" };
           setMessages([initialMessage]);
         }
         setInput('');
@@ -110,7 +110,7 @@ export const ChatBot: React.FC<ChatBotProps> = ({ isOpen, onClose, currentUser }
             </button>
           )}
           <SparkleIcon className="h-6 w-6 text-green-400" />
-          <h3 className="text-lg font-bold text-white">Ubuntium Assistant</h3>
+          <h3 className="text-lg font-bold text-white">UGC Assistant</h3>
         </div>
         {!isMobile && (
             <button onClick={onClose} className="text-gray-400 hover:text-white" aria-label="Close chat">

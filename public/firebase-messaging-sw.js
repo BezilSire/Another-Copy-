@@ -6,7 +6,7 @@ const firebaseConfig = {
   authDomain: "agent-app-35634.firebaseapp.com",
   databaseURL: "https://agent-app-35634-default-rtdb.firebaseio.com",
   projectId: "agent-app-35634",
-  storageBucket: "agent-app-35634.appspot.com",
+  storageBucket: "agent-app-35634.firebasestorage.app",
   messagingSenderId: "620541880901",
   appId: "1:620541880901:web:076e9c26c55d42a153512c",
   measurementId: "G-2PMBW9EYWM"
@@ -18,7 +18,7 @@ const messaging = firebase.messaging();
 
 messaging.onBackgroundMessage((payload) => {
   console.log('[firebase-messaging-sw.js] Background message received: ', payload);
-  const notificationTitle = payload.notification?.title || 'Ubuntium Dispatch';
+  const notificationTitle = payload.notification?.title || 'Ubuntium Global Commons Dispatch';
   const notificationOptions = {
     body: payload.notification?.body || 'Protocol data received.',
     icon: '/logo.svg'

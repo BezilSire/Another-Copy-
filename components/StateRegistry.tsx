@@ -9,7 +9,7 @@ import { DatabaseIcon } from './icons/DatabaseIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { ScaleIcon } from './icons/ScaleIcon';
-import { InfoIcon } from './icons/InfoIcon';
+import { LightbulbIcon } from './icons/LightbulbIcon';
 
 export const StateRegistry: React.FC<{ user: User }> = ({ user }) => {
     const [view, setView] = useState<'resources' | 'justice'>('resources');
@@ -65,7 +65,7 @@ export const StateRegistry: React.FC<{ user: User }> = ({ user }) => {
             </div>
 
             <div className="max-w-2xl mx-auto bg-slate-950/60 p-6 rounded-3xl border border-white/5 flex gap-4 items-start shadow-inner">
-                <InfoIcon className="h-4 w-4 text-brand-gold flex-shrink-0 mt-1" />
+                <LightbulbIcon className="h-4 w-4 text-brand-gold flex-shrink-0 mt-1" />
                 <p className="text-[10px] text-gray-500 uppercase font-black tracking-widest leading-loose">
                     {view === 'resources' 
                         ? 'The Physical Commons tracks tangible assets like land, water nodes, and energy grids owned collectively by your Circle. This data is verified via IoT anchors and peer witness.' 

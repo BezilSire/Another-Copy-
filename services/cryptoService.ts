@@ -1,6 +1,7 @@
 
 import * as tweetnacl from 'tweetnacl';
 import * as bip39 from 'bip39';
+import { safeJsonStringify } from '../utils';
 
 const nacl = (tweetnacl as any).default || tweetnacl;
 
@@ -40,6 +41,10 @@ const decodeBase64 = (s: string): Uint8Array => {
     }
 };
 
+const toHex = (arr: Uint8Array): string => {
+    return Array.from(arr).map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
 export const cryptoService = {
     generateMnemonic: (): string => bip39.generateMnemonic(),
 
@@ -63,7 +68,7 @@ export const cryptoService = {
     },
 
     saveVault: async (data: VaultData, pin: string): Promise<string> => {
-        const encrypted = await cryptoService._encryptWithPin(JSON.stringify(data), pin);
+        const encrypted = await cryptoService._encryptWithPin(safeJsonStringify(data), pin);
         localStorage.setItem(ENCRYPTED_VAULT_STORAGE, encrypted);
         
         const keys = cryptoService.mnemonicToKeyPair(data.mnemonic);
@@ -96,6 +101,26 @@ export const cryptoService = {
     hasVault: () => !!localStorage.getItem(ENCRYPTED_VAULT_STORAGE),
 
     getPublicKey: () => localStorage.getItem(SIGN_PUBLIC_KEY_STORAGE),
+    getSecretKey: () => localStorage.getItem(SIGN_SECRET_KEY_STORAGE),
+    getVault: () => localStorage.getItem(ENCRYPTED_VAULT_STORAGE),
+
+    preparePayload: (data: any): string => {
+        const { signature, hash, status, serverTimestamp, id, ...rest } = data;
+        const sortedKeys = Object.keys(rest).sort();
+        const sortedData = sortedKeys.reduce((acc: any, key) => {
+            acc[key] = rest[key];
+            return acc;
+        }, {});
+        return safeJsonStringify(sortedData);
+    },
+
+    hashTransaction: async (txData: any): Promise<string> => {
+        const payload = cryptoService.preparePayload(txData);
+        const msgUint8 = encodeUTF8(payload);
+        // Cast to ArrayBuffer to satisfy BufferSource requirement
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8.buffer as ArrayBuffer);
+        return encodeBase64(new Uint8Array(hashBuffer));
+    },
 
     signTransaction: (payload: string): string => {
         const secretKeyBase64 = localStorage.getItem(SIGN_SECRET_KEY_STORAGE);
@@ -116,6 +141,57 @@ export const cryptoService = {
     },
 
     generateNonce: () => encodeBase64(window.crypto.getRandomValues(new Uint8Array(16))),
+
+    calculateHash: async (data: string): Promise<string> => {
+        const msgUint8 = encodeUTF8(data);
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8.buffer as ArrayBuffer);
+        return toHex(new Uint8Array(hashBuffer));
+    },
+
+    calculateMerkleRoot: async (transactions: any[]): Promise<string> => {
+        if (transactions.length === 0) return '0'.repeat(64);
+        
+        let hashes = await Promise.all(transactions.map(tx => cryptoService.hashTransaction(tx)));
+        
+        while (hashes.length > 1) {
+            const nextLevel: string[] = [];
+            for (let i = 0; i < hashes.length; i += 2) {
+                const left = hashes[i];
+                const right = i + 1 < hashes.length ? hashes[i + 1] : left;
+                const combined = await cryptoService.calculateHash(left + right);
+                nextLevel.push(combined);
+            }
+            hashes = nextLevel;
+        }
+        
+        return hashes[0];
+    },
+
+    calculateBlockHash: async (index: number, previousHash: string, timestamp: number, merkleRoot: string, nonce: number): Promise<string> => {
+        const data = index + previousHash + timestamp + merkleRoot + nonce;
+        return cryptoService.calculateHash(data);
+    },
+
+    mineBlock: async (index: number, previousHash: string, transactions: any[], difficulty: number, onProgress?: (nonce: number) => void): Promise<{ hash: string, nonce: number, timestamp: number, merkleRoot: string }> => {
+        let nonce = 0;
+        let timestamp = Date.now();
+        let hash = '';
+        const target = '0'.repeat(difficulty);
+        const merkleRoot = await cryptoService.calculateMerkleRoot(transactions);
+        
+        while (true) {
+            hash = await cryptoService.calculateBlockHash(index, previousHash, timestamp, merkleRoot, nonce);
+            if (hash.startsWith(target)) {
+                return { hash, nonce, timestamp, merkleRoot };
+            }
+            nonce++;
+            if (nonce % 500 === 0) {
+                if (onProgress) onProgress(nonce);
+                await new Promise(resolve => setTimeout(resolve, 0));
+                timestamp = Date.now();
+            }
+        }
+    },
 
     // Fix: Added clearSession method to remove sensitive keys from local storage on logout
     clearSession: () => {
@@ -154,5 +230,22 @@ export const cryptoService = {
         );
         const decrypted = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: decodeBase64(vault.iv) as any }, key, decodeBase64(vault.data) as any);
         return new TextDecoder().decode(decrypted);
+    },
+
+    generateRecoverySecret: (): string => {
+        const words = bip39.generateMnemonic().split(' ');
+        // We only take 6 words for the recovery secret to make it easier to remember but still secure
+        return words.slice(0, 6).join(' ');
+    },
+
+    hashRecoverySecret: async (secret: string): Promise<string> => {
+        const msgUint8 = encodeUTF8(secret.toLowerCase().trim());
+        const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8.buffer as ArrayBuffer);
+        return toHex(new Uint8Array(hashBuffer));
+    },
+
+    verifyRecoverySecret: async (secret: string, hashedSecret: string): Promise<boolean> => {
+        const currentHash = await cryptoService.hashRecoverySecret(secret);
+        return currentHash === hashedSecret;
     }
 };

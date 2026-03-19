@@ -134,7 +134,7 @@ export const MyInvestmentsPage: React.FC<MyInvestmentsPageProps> = ({ user, onNa
       <div className="bg-slate-900/50 p-6 rounded-lg border border-slate-700 space-y-3">
         <h2 className="text-lg font-semibold text-gray-200">What is Venture Equity (VEQ)?</h2>
         <p className="text-sm text-gray-400">
-            Venture Equity (VEQ) represents your direct ownership stake—in the form of shares—in community-led businesses launched through the Ubuntium platform. It's the primary way to turn your contributions into long-term, wealth-generating assets.
+            Venture Equity (VEQ) represents your direct ownership stake—in the form of shares—in community-led businesses launched through the Ubuntium Global Commons platform. It's the primary way to turn your contributions into long-term, wealth-generating assets.
         </p>
         <h3 className="text-md font-semibold text-gray-300 pt-2 border-t border-slate-800">How do you earn VEQ?</h3>
         <p className="text-sm text-gray-400">

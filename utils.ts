@@ -118,3 +118,31 @@ export const formatTimeAgo = (val: any): string => {
   }
   return Math.floor(seconds) + " seconds ago";
 };
+
+export function safeJsonStringify(obj: any) {
+  const cache = new Set();
+  return JSON.stringify(obj, (key, value) => {
+    if (typeof value === 'object' && value !== null) {
+      if (cache.has(value)) {
+        return '[Circular]';
+      }
+      cache.add(value);
+    }
+    return value;
+  });
+}
+
+export const formatFirestoreError = (msg: string): string => {
+  if (!msg) return 'Unknown error';
+  try {
+    if (msg.startsWith('{') && msg.endsWith('}')) {
+      const parsed = JSON.parse(msg);
+      if (parsed.error) {
+        return `Identity sync failed: ${parsed.error} (${parsed.operationType} on ${parsed.path})`;
+      }
+    }
+  } catch (e) {
+    // Not a JSON string or not our format
+  }
+  return msg;
+};

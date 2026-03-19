@@ -97,7 +97,7 @@ export const PublicProfile: React.FC<PublicProfileProps> = ({ userId, currentUse
             <div className="space-y-2">
               <p className="text-[10px] font-black text-white/40 uppercase tracking-widest pl-2">Skills & Expertise</p>
               <div className="flex flex-wrap gap-2">
-                {profile.skills?.length ? profile.skills.map(skill => (
+                {Array.isArray(profile.skills) && profile.skills.length > 0 ? profile.skills.map(skill => (
                   <span key={skill} className="px-4 py-2 bg-white/5 border border-white/10 rounded-xl text-[10px] font-black text-white/60 uppercase tracking-widest">{skill}</span>
                 )) : <p className="text-xs font-bold text-white/20 uppercase tracking-widest pl-2">No skills listed.</p>}
               </div>

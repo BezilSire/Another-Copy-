@@ -21,11 +21,13 @@ if (!rootElement) throw new Error("Root not found");
  * If we are on the public explorer domain, we render the Ledger only.
  */
 const hostname = window.location.hostname;
-const isExplorer = 
+const isExplorer = false;
+    /*
     hostname.includes('scan') || 
     hostname.includes('ledger') || 
     window.location.search.includes('mode=explorer') ||
     (typeof process !== 'undefined' && process?.env?.SITE_MODE === 'EXPLORER');
+    */
 
 const root = ReactDOM.createRoot(rootElement);
 

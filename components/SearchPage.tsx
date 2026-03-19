@@ -13,7 +13,7 @@ export const SearchPage: React.FC = () => {
                 </div>
                 <input
                     type="text"
-                    placeholder="Search Ubuntium..."
+                    placeholder="Search Ubuntium Global Commons..."
                     className="block w-full bg-slate-800 border border-slate-700 rounded-md py-2 pl-10 pr-4 text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-green-500"
                 />
             </div>

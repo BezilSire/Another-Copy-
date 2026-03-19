@@ -7,8 +7,8 @@ import { WalletIcon } from './icons/WalletIcon';
 import { DatabaseIcon } from './icons/DatabaseIcon';
 import { MessageSquareIcon } from './icons/MessageSquareIcon';
 import { BellIcon } from './icons/BellIcon';
-import { TrendingUpIcon } from './icons/TrendingUpIcon';
-import { BriefcaseIcon } from './icons/BriefcaseIcon';
+import { ArrowUpRightIcon } from './icons/ArrowUpRightIcon';
+import { ScaleIcon } from './icons/ScaleIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
@@ -18,6 +18,7 @@ import { VenturesPage } from './VenturesPage';
 import { LedgerPage } from './LedgerPage';
 import { WalletPage } from './WalletPage';
 import { MorePage } from './MorePage';
+import { ZimPulseFeed } from './ZimPulseFeed';
 import { BottomNavBar } from './BottomNavBar';
 
 interface MemberDashboardProps {
@@ -30,7 +31,7 @@ interface MemberDashboardProps {
   clearForcedView: () => void;
 }
 
-type MemberView = 'home' | 'wallet' | 'ledger' | 'governance' | 'ventures' | 'more';
+type MemberView = 'home' | 'wallet' | 'ledger' | 'governance' | 'ventures' | 'profile' | 'notifications' | 'more';
 
 export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdateUser, unreadCount, onLogout, onViewProfile, forcedView, clearForcedView }) => {
   const [activeView, setActiveView] = useState<MemberView>('home');
@@ -70,48 +71,75 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       case 'ledger': return <LedgerPage />;
       case 'governance': return <ProposalsPage currentUser={user} onNavigateToDetails={() => {}} />;
       case 'ventures': return <VenturesPage currentUser={user} onViewProfile={onViewProfile} onNavigateToPitchAssistant={() => setActiveView('home')} />;
-      case 'more': return <MorePage user={user} onLogout={onLogout} onViewProfile={onViewProfile} />;
+      case 'more': return <MorePage user={user} onLogout={onLogout} onViewProfile={onViewProfile} onNavigate={setActiveView} />;
       default:
         return (
-          <div className="space-y-8 animate-fade-in pb-24">
-            <div className="bg-white/5 border border-white/10 p-8 rounded-[3rem] relative overflow-hidden group hover:bg-white/[0.08] transition-all">
-              <div className="corner-tl !border-white/20"></div><div className="corner-tr !border-white/20"></div><div className="corner-bl !border-white/20"></div><div className="corner-br !border-white/20"></div>
-              <div className="flex justify-between items-start mb-4">
-                <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.3em]">Wallet Balance</p>
-                <div className="bg-brand-gold/10 p-2 rounded-xl border border-brand-gold/20">
-                  <WalletIcon className="h-5 w-5 text-brand-gold" />
+          <div className="space-y-8 animate-slide-up pb-24">
+            {/* Balance Card */}
+            <div className="pro-card p-6 relative overflow-hidden group">
+              <div className="flex justify-between items-start mb-6">
+                <div>
+                  <p className="label-caps !mb-1">Available Balance</p>
+                  <div className="flex items-baseline gap-2">
+                    <h2 className="text-4xl font-bold tracking-tight text-white">
+                      {(user.ubtBalance || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </h2>
+                    <span className="text-sm font-semibold text-brand-gold">UBT</span>
+                  </div>
+                </div>
+                <div className="bg-brand-gold/10 p-3 rounded-2xl border border-brand-gold/20">
+                  <WalletIcon className="h-6 w-6 text-brand-gold" />
                 </div>
               </div>
-              <div className="flex items-baseline gap-2">
-                <p className="text-5xl font-black text-white leading-none">{(user.ubtBalance || 0).toFixed(2)}</p>
-                <p className="text-sm font-bold text-brand-gold uppercase tracking-widest">UBT</p>
-              </div>
-              <div className="mt-6 flex items-center gap-4">
-                <p className="text-xs font-bold text-white/30 uppercase tracking-widest leading-none">≈ ${( (user.ubtBalance || 0) * (economy?.ubt_to_usd_rate || 0) ).toFixed(2)} USD</p>
+              
+              <div className="flex items-center justify-between pt-4 border-t border-white/5">
+                <p className="text-sm text-slate-400">
+                  ≈ <span className="text-white font-medium">${( (user.ubtBalance || 0) * (economy?.ubt_to_usd_rate || 0) ).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span> <span className="text-[10px] uppercase tracking-wider opacity-50 ml-1">USD</span>
+                </p>
                 <button 
                   onClick={handleReconcile}
                   disabled={isReconciling}
-                  className="flex items-center gap-2 text-[10px] font-black text-brand-gold hover:text-brand-gold-light transition-colors uppercase tracking-widest"
+                  className="flex items-center gap-2 text-xs font-semibold text-brand-gold hover:text-brand-gold-light transition-colors"
                 >
                   {isReconciling ? <LoaderIcon className="h-3 w-3 animate-spin" /> : <RotateCwIcon className="h-3 w-3" />}
-                  Reconcile
+                  Sync Balance
                 </button>
               </div>
             </div>
 
+            {/* Quick Actions */}
             <div className="grid grid-cols-2 gap-4">
-              <button onClick={() => setActiveView('wallet')} className="p-6 bg-white/5 hover:bg-white/10 rounded-3xl border border-white/5 transition-all text-center group">
-                <TrendingUpIcon className="h-8 w-8 text-brand-gold mx-auto mb-3 group-hover:scale-110 transition-transform" />
-                <p className="text-[10px] font-black text-white uppercase tracking-widest">Transfer</p>
+              <button 
+                onClick={() => setActiveView('wallet')} 
+                className="pro-card p-5 flex flex-col items-center justify-center gap-3 hover:bg-white/5 transition-colors group"
+              >
+                <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center group-hover:bg-brand-gold/20 transition-colors">
+                  <ArrowUpRightIcon className="h-6 w-6 text-brand-gold" />
+                </div>
+                <span className="text-sm font-medium text-slate-200">Transfer</span>
               </button>
-              <button onClick={() => setActiveView('governance')} className="p-6 bg-white/5 hover:bg-white/10 rounded-3xl border border-white/5 transition-all text-center group">
-                <DatabaseIcon className="h-8 w-8 text-brand-gold mx-auto mb-3 group-hover:scale-110 transition-transform" />
-                <p className="text-[10px] font-black text-white uppercase tracking-widest">Vote</p>
+              <button 
+                onClick={() => setActiveView('governance')} 
+                className="pro-card p-5 flex flex-col items-center justify-center gap-3 hover:bg-white/5 transition-colors group"
+              >
+                <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center group-hover:bg-brand-gold/20 transition-colors">
+                  <ScaleIcon className="h-6 w-6 text-brand-gold" />
+                </div>
+                <span className="text-sm font-medium text-slate-200">Governance</span>
               </button>
             </div>
 
-            <div className="space-y-6">
-              <h3 className="text-xl font-black text-white uppercase tracking-tighter leading-none px-2">Community Pulse</h3>
+            {/* Zim Pulse Feed (The Intelligence Layer) */}
+            <div className="space-y-4">
+              <ZimPulseFeed />
+            </div>
+
+            {/* Activity Feed */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between px-1">
+                <h3 className="text-lg font-bold text-white">Community Pulse</h3>
+                <button className="text-xs font-medium text-slate-400 hover:text-white transition-colors">View All</button>
+              </div>
               <ActivityFeed user={user} onViewProfile={onViewProfile} />
             </div>
           </div>
@@ -121,9 +149,9 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
 
   return (
     <div className="min-h-screen bg-black text-white font-sans selection:bg-brand-gold/30">
-      <main className="max-w-2xl mx-auto px-6 pt-8">
+      <div className="max-w-2xl mx-auto px-6 pt-8">
         {renderContent()}
-      </main>
+      </div>
       
       <BottomNavBar user={user} activeView={activeView} onNavigate={setActiveView} unreadCount={unreadCount} />
     </div>

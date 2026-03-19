@@ -113,7 +113,7 @@ export const VentureEquityPage: React.FC<VentureEquityPageProps> = ({ user }) =>
       <h1 className="text-3xl font-bold text-white">My Investments (VEQ)</h1>
       <div className="bg-slate-900/50 p-4 rounded-lg border border-slate-700">
         <h2 className="text-lg font-semibold text-gray-200">What is Venture Equity (VEQ)?</h2>
-        <p className="text-sm text-gray-400 mt-1">VEQ represents your direct ownership stake in ventures created within the Ubuntium Commons. You earn it by proposing successful projects or contributing your skills. As these ventures generate profit, a portion is distributed to you based on the shares you hold.</p>
+        <p className="text-sm text-gray-400 mt-1">VEQ represents your direct ownership stake in ventures created within the Ubuntium Global Commons. You earn it by proposing successful projects or contributing your skills. As these ventures generate profit, a portion is distributed to you based on the shares you hold.</p>
       </div>
 
       {holdings.length > 0 ? (

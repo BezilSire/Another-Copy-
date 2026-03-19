@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MemberUser, GlobalEconomy, UbtTransaction } from '../types';
 import { api } from '../services/apiService';
 import { useToast } from '../contexts/ToastContext';
+import { Timestamp } from 'firebase/firestore';
 import { WalletIcon } from './icons/WalletIcon';
 import { SendIcon } from './icons/SendIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
@@ -38,7 +39,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ user, economy, onReconci
         
         <div className="flex justify-between items-start mb-6">
           <div>
-            <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] mb-2">Available Assets</p>
+            <p className="text-[10px] font-black text-white/40 uppercase tracking-[0.4em] mb-2">UGC Available Assets</p>
             <div className="flex items-baseline gap-3">
               <p className="text-6xl font-black text-white tracking-tighter leading-none">{(user.ubtBalance || 0).toFixed(2)}</p>
               <p className="text-lg font-black text-brand-gold uppercase tracking-widest leading-none">UBT</p>
@@ -103,7 +104,7 @@ export const WalletPage: React.FC<WalletPageProps> = ({ user, economy, onReconci
                     {tx.receiverId === user.id ? '+' : '-'}{tx.amount.toLocaleString()}
                   </p>
                   <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest">
-                    {new Date(tx.timestamp).toLocaleDateString()}
+                    {tx.timestamp instanceof Timestamp ? tx.timestamp.toDate().toLocaleDateString() : new Date(tx.timestamp as any).toLocaleDateString()}
                   </p>
                 </div>
               </div>

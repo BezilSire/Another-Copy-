@@ -4,7 +4,7 @@ import { User, IntentRule } from '../types';
 import { PlusIcon } from './icons/PlusIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
-import { InfoIcon } from './icons/InfoIcon';
+import { SparkleIcon } from './icons/SparkleIcon';
 
 export const IntentLab: React.FC<{ user: User, onUpdateUser: (d: any) => Promise<void> }> = ({ user, onUpdateUser }) => {
     const [isCreating, setIsCreating] = useState(false);
@@ -33,7 +33,7 @@ export const IntentLab: React.FC<{ user: User, onUpdateUser: (d: any) => Promise
                 <h1 className="text-4xl font-black text-white uppercase tracking-tighter gold-text leading-none mb-4">Intent Lab</h1>
                 <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em]">Program your capital with sovereign logic.</p>
                 <div className="mt-8 p-6 bg-black/40 rounded-3xl border border-white/5 text-left flex gap-4 max-w-2xl mx-auto items-start">
-                    <InfoIcon className="h-5 w-5 text-brand-gold flex-shrink-0 mt-1" />
+                    <SparkleIcon className="h-5 w-5 text-brand-gold flex-shrink-0 mt-1" />
                     <p className="text-[10px] text-gray-400 font-bold uppercase tracking-widest leading-loose">
                         <strong className="text-white">What is Capital Intent?</strong> Guardian Logic allows you to automate node actions. For example, your node can automatically contribute to distress calls in your circle when tension spikes, or reinvest dividends based on specific market triggers.
                     </p>

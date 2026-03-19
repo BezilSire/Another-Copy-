@@ -1,16 +1,31 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth } from 'firebase/auth';
-import { getFirestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
+import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
+import { initializeFirestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
 import { getMessaging, isSupported } from 'firebase/messaging';
 import { getFunctions } from 'firebase/functions';
-import { firebaseConfig } from './firebaseConfig';
+import firebaseConfig from '../firebase-applet-config.json';
 
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+
+// Set persistence as early as possible
+if (typeof window !== 'undefined') {
+    console.log("Auth: Initializing persistence...");
+    setPersistence(auth, browserLocalPersistence).then(() => {
+        console.log("Auth: Persistence set to local.");
+    }).catch(err => {
+        console.error("Auth: Persistence initialization failed:", err);
+    });
+}
+
+const firestoreId = (firebaseConfig as any).firestoreDatabaseId;
+export const db = (firestoreId && firestoreId !== '(default)') 
+    ? initializeFirestore(app, { ignoreUndefinedProperties: true, experimentalForceLongPolling: true }, firestoreId)
+    : initializeFirestore(app, { ignoreUndefinedProperties: true, experimentalForceLongPolling: true });
+
 export const storage = getStorage(app);
 export const rtdb = getDatabase(app);
 export const functions = getFunctions(app);

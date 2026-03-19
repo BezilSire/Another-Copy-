@@ -4,7 +4,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Ubuntium | Community Hub</title>
+  <title>Ubuntium Global Commons | Community Hub</title>
   <link rel="manifest" href="/manifest.json">
   <link rel="icon" href="/logo.svg" type="image/svg+xml">
   <meta name="theme-color" content="#0f172a"/>
@@ -47,12 +47,24 @@
     }
   </script>
   <style>
+    :root {
+      --brand-gold: #D4AF37;
+      --brand-gold-light: #FFD76A;
+      --bg-deep: #020617;
+      --bg-card: #0f172a;
+      --bg-input: #1e293b;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+    }
+
     body { 
-      background-color: #020617;
-      color: #f1f5f9;
+      background-color: var(--bg-deep);
+      color: var(--text-primary);
       overflow-x: hidden;
       -webkit-font-smoothing: antialiased;
-      font-family: 'Inter', sans-serif;
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      line-height: 1.5;
     }
     
     #root {
@@ -61,43 +73,96 @@
       flex-direction: column;
     }
 
-    .fintech-card {
-      background: #0f172a;
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 1.5rem;
+    /* Professional Card Style */
+    .pro-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-subtle);
+      border-radius: 1.25rem;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+
+    .pro-card:hover {
+      border-color: rgba(212, 175, 55, 0.3);
+    }
+
+    /* Glassmorphism Effect */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      border: 1px solid var(--border-subtle);
     }
 
     .no-scrollbar::-webkit-scrollbar { display: none; }
     
+    /* Refined Inputs */
     input, select, textarea {
-      background: #1e293b !important;
-      border: 1px solid rgba(255, 255, 255, 0.1) !important;
+      background: var(--bg-input) !important;
+      border: 1px solid var(--border-subtle) !important;
       border-radius: 0.75rem !important;
       padding: 0.75rem 1rem !important;
       color: white !important;
       font-size: 0.95rem !important;
-      transition: all 0.2s ease !important;
-      font-family: 'Inter', sans-serif;
+      transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1) !important;
+      width: 100%;
     }
 
-    input:focus {
-      border-color: #D4AF37 !important;
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--brand-gold) !important;
       outline: none !important;
-      box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.1) !important;
+      box-shadow: 0 0 0 3px rgba(212, 175, 55, 0.15) !important;
+      background: #233147 !important;
     }
 
+    /* Typography Utilities */
     .label-caps {
-        font-size: 0.75rem;
-        font-weight: 700;
+        font-size: 0.7rem;
+        font-weight: 600;
         text-transform: uppercase;
-        letter-spacing: 0.025em;
-        color: #94a3b8;
+        letter-spacing: 0.05em;
+        color: var(--text-secondary);
         display: block;
-        margin-bottom: 0.4rem;
+        margin-bottom: 0.5rem;
     }
 
-    .gold-text {
-        color: #D4AF37;
+    .heading-premium {
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      background: linear-gradient(to bottom right, #fff, #94a3b8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .gold-gradient-text {
+      background: linear-gradient(to right, #D4AF37, #FFD76A);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(255, 255, 255, 0.1);
+      border-radius: 10px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(255, 255, 255, 0.2);
+    }
+
+    /* Animations */
+    @keyframes slideUp {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+
+    .animate-slide-up {
+      animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1) forwards;
     }
   </style>
 </head>

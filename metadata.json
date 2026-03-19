@@ -1,6 +1,6 @@
 {
-  "name": "Global Commons Network",
-  "description": "The official application for members, agents, and creators of the Global Commons Network.",
+  "name": "Ubuntium Global Commons",
+  "description": "The official Agentic Intelligence Layer for members, agents, and creators of the Ubuntium Global Commons.",
   "requestFramePermissions": [
     "camera",
     "microphone"

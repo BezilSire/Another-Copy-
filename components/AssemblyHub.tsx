@@ -11,7 +11,7 @@ export const AssemblyHub: React.FC<{ currentUser: User, onViewProfile: (id: stri
                 <div className="corner-tl opacity-20"></div><div className="corner-br opacity-20"></div>
                 <div className="absolute inset-0 blueprint-grid opacity-[0.02] pointer-events-none"></div>
                 <h1 className="text-4xl font-black text-white uppercase tracking-tighter gold-text leading-none mb-4">The Assembly</h1>
-                <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em]">The Living Web of Verified trust.</p>
+                <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.4em]">The Living Web of Verified trust in the Ubuntium Global Commons.</p>
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">

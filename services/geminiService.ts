@@ -8,10 +8,10 @@ export const generateWelcomeMessage = async (name: string) => {
       model: "gemini-3-flash-preview",
       contents: `Generate a short, inspiring, and futuristic welcome message for a new member named ${name} joining the Ubuntium Global Commons. Keep it under 50 words.`,
     });
-    return response.text || `Welcome, ${name}. Your node is now active in the Global Commons.`;
+    return response.text || `Welcome, ${name}. Your node is now active in the Ubuntium Global Commons.`;
   } catch (error) {
     console.error("Gemini error:", error);
-    return `Welcome, ${name}. Your node is now active in the Global Commons.`;
+    return `Welcome, ${name}. Your node is now active in the Ubuntium Global Commons.`;
   }
 };
 

@@ -185,10 +185,10 @@ export const AIVenturePitchAssistant: React.FC<AIVenturePitchAssistantProps> = (
 
                 {step === 1 && (
                     <div className="animate-fade-in space-y-4">
-                        <h2 className="text-xl font-semibold text-white">Step 1: Your Core Idea</h2>
+                        <h2 className="text-xl font-semibold text-white">Step 1: Your Core Idea for the Ubuntium Global Commons</h2>
                         <div>
                             <label htmlFor="businessIdea" className="block text-sm font-medium text-gray-300">Your Business Idea</label>
-                            <textarea id="businessIdea" rows={4} value={businessIdea} onChange={e => setBusinessIdea(e.target.value)} placeholder="Describe your vision, what problem you are solving, and for whom." className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"></textarea>
+                            <textarea id="businessIdea" rows={4} value={businessIdea} onChange={e => setBusinessIdea(e.target.value)} placeholder="Describe your vision, what problem you are solving, and for whom in the context of the Global Commons." className="mt-1 block w-full px-3 py-2 bg-slate-700 border border-slate-600 rounded-md text-white"></textarea>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-300">What are you looking for?</label>

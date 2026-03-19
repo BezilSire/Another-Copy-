@@ -13,6 +13,7 @@ import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { ClipboardIcon } from './icons/ClipboardIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { GenesisNodeFlow } from './GenesisNodeFlow';
+import { serverTimestamp } from 'firebase/firestore';
 
 interface SendUbtModalProps {
     isOpen: boolean;
@@ -128,7 +129,7 @@ export const SendUbtModal: React.FC<SendUbtModalProps> = ({ isOpen, onClose, cur
                 senderId: currentUser.id,
                 receiverId: receiverId,
                 amount: sendAmount,
-                timestamp: timestamp,
+                timestamp: serverTimestamp(),
                 nonce: nonce,
                 signature: signature,
                 hash: payloadToSign,

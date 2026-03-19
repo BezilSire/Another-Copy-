@@ -31,6 +31,8 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
     const [recoveredAccount, setRecoveredAccount] = useState<User | null>(null);
     const [scanningStatus, setScanningStatus] = useState('');
     const [isLazarusMode, setIsLazarusMode] = useState(false);
+    const [isSecretMode, setIsSecretMode] = useState(false);
+    const [recoverySecret, setRecoverySecret] = useState('');
     
     const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
@@ -134,6 +136,97 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
         }
     };
 
+    const handleVerifySecret = async (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        if (!recoverySecret || recoverySecret.split(/\s+/).length < 6) {
+            alert("INTEGRITY ERROR: Recovery secret must be at least 6 words.");
+            return;
+        }
+
+        setIsVerifying(true);
+        setScanningStatus("VERIFYING_COMMITMENT...");
+
+        try {
+            // In a real app, we'd need the user's email or some identifier to fetch their commitment
+            // For this flow, we'll assume they are logged in or we have a way to identify them.
+            // If they are NOT logged in, we'd need them to provide their email first.
+            const email = auth.currentUser?.email;
+            if (!email) {
+                alert("IDENTITY ERROR: Please sign in with your email first to use the recovery secret.");
+                setIsVerifying(false);
+                return;
+            }
+
+            const user = await api.getUserByEmail(email);
+            if (!user || !user.recoveryCommitment) {
+                alert("IDENTITY ERROR: No recovery anchor found for this account.");
+                setIsVerifying(false);
+                return;
+            }
+
+            const isValid = await cryptoService.verifyRecoverySecret(recoverySecret, user.recoveryCommitment);
+            if (isValid) {
+                setRecoveredAccount(user);
+                setScanningStatus("IDENTITY_VERIFIED");
+                // For secret recovery, we generate a NEW mnemonic because the old one is lost
+                const newMnemonic = cryptoService.generateMnemonic();
+                setPhraseParts(newMnemonic.split(' '));
+                setStep(2);
+            } else {
+                alert("VERIFICATION FAILED: Secret does not match anchor.");
+            }
+        } catch (e) {
+            console.error("Recovery secret verification failed:", e);
+            alert("System error during verification.");
+        } finally {
+            setIsVerifying(false);
+        }
+    };
+
+    if (isSecretMode) {
+        return (
+            <div className="module-frame glass-module p-10 rounded-[3rem] border-brand-gold/20 shadow-premium animate-fade-in text-center space-y-8 max-w-2xl w-full relative overflow-hidden pointer-events-auto">
+                <div className="corner-tl !border-brand-gold/40"></div><div className="corner-tr !border-brand-gold/40"></div><div className="corner-bl !border-brand-gold/40"></div><div className="corner-br !border-brand-gold/40"></div>
+                
+                <div className="w-20 h-20 bg-brand-gold/10 rounded-2xl flex items-center justify-center border border-brand-gold/20 mx-auto mb-6 shadow-glow-gold">
+                    <ShieldCheckIcon className="h-10 w-10 text-brand-gold" />
+                </div>
+                
+                <div className="space-y-4">
+                    <h2 className="text-2xl font-black text-white uppercase tracking-tighter leading-none">Sovereign Recovery</h2>
+                    <p className="text-sm text-gray-400 leading-relaxed max-w-sm mx-auto uppercase tracking-widest opacity-80">
+                        Enter your 6-word recovery secret to rotate your keys and regain access.
+                    </p>
+                </div>
+
+                <div className="space-y-4">
+                    <textarea 
+                        value={recoverySecret}
+                        onChange={(e) => setRecoverySecret(e.target.value)}
+                        placeholder="Enter your 6-word recovery secret..."
+                        className="w-full h-32 bg-slate-950 border-2 border-white/10 rounded-3xl p-6 text-white font-mono text-lg focus:border-brand-gold outline-none transition-all resize-none text-center"
+                    />
+                    <p className="text-[9px] text-slate-500 uppercase font-black tracking-widest">Case-insensitive. Spaces required.</p>
+                </div>
+
+                <button 
+                    onClick={handleVerifySecret}
+                    disabled={isVerifying || !recoverySecret}
+                    className="w-full py-6 bg-brand-gold text-slate-950 font-black rounded-2xl uppercase tracking-[0.4em] text-[10px] shadow-glow-gold active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                >
+                    {isVerifying ? <LoaderIcon className="h-5 w-5 animate-spin" /> : <KeyIcon className="h-5 w-5" />}
+                    {isVerifying ? scanningStatus : "Verify Secret & Rotate Keys"}
+                </button>
+
+                <button onClick={() => setIsSecretMode(false)} className="w-full mt-4 text-[9px] font-black text-gray-600 hover:text-white uppercase tracking-[0.5em] transition-colors flex items-center justify-center gap-3 relative z-10 cursor-pointer">
+                    <ArrowLeftIcon className="h-3 w-3" /> Back to Phrase
+                </button>
+            </div>
+        );
+    }
+
     if (isLazarusMode) {
         return (
             <div className="space-y-8 animate-fade-in w-full max-w-2xl pointer-events-auto">
@@ -210,6 +303,18 @@ export const RecoveryProtocol: React.FC<RecoveryProtocolProps> = ({ onComplete, 
                         </button>
 
                         <div className="pt-8 border-t border-white/5 space-y-6 text-center">
+                            <button 
+                                type="button"
+                                onClick={(e) => {
+                                    e.preventDefault();
+                                    e.stopPropagation();
+                                    setIsSecretMode(true);
+                                }}
+                                className="px-8 py-4 bg-white/5 hover:bg-brand-gold hover:text-slate-950 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all border border-white/10 flex items-center justify-center gap-3 mx-auto shadow-xl cursor-pointer"
+                            >
+                                <ShieldCheckIcon className="h-5 w-5" /> Use Recovery Secret
+                            </button>
+
                             <button 
                                 type="button"
                                 onClick={(e) => {
