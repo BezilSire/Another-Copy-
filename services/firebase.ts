@@ -5,7 +5,11 @@ import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
 import { getMessaging, isSupported } from 'firebase/messaging';
 import { getFunctions } from 'firebase/functions';
-import firebaseConfig from '../firebase-applet-config.json';
+
+// Safely attempt to load the local config file if it exists (it won't exist on Vercel/GitHub)
+// @ts-ignore
+const localConfigs = import.meta.glob('../firebase-applet-config.json', { eager: true });
+const firebaseConfig: any = (localConfigs['../firebase-applet-config.json'] as any)?.default || {};
 
 const getEnvVar = (key: string) => {
     try {
@@ -33,7 +37,7 @@ const config = {
     messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID') || firebaseConfig.messagingSenderId,
     appId: getEnvVar('VITE_FIREBASE_APP_ID') || firebaseConfig.appId,
     measurementId: getEnvVar('VITE_FIREBASE_MEASUREMENT_ID') || firebaseConfig.measurementId,
-    databaseURL: getEnvVar('VITE_FIREBASE_DATABASE_URL') || (firebaseConfig as any).databaseURL,
+    databaseURL: getEnvVar('VITE_FIREBASE_DATABASE_URL') || firebaseConfig.databaseURL,
 };
 
 const app = !getApps().length ? initializeApp(config) : getApp();
