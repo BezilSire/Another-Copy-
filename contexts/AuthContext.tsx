@@ -4,7 +4,7 @@ import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPasswor
 import { doc, onSnapshot, setDoc, getDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
 import { useToast } from './ToastContext';
 import { api, handleFirestoreError, OperationType } from '../services/apiService';
-import { cryptoService, VaultData } from '../services/cryptoService';
+import { cryptoService, VaultData, UGC_DEFAULT_NODE_PIN } from '../services/cryptoService';
 import { auth, db } from '../services/firebase';
 import { User, NewPublicMemberData, LoginCredentials } from '../types';
 import { generateReferralCode, formatFirestoreError } from '../utils';
@@ -14,7 +14,6 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   isLoadingAuth: boolean;
   isProcessingAuth: boolean;
-  isSovereignLocked: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   loginAnonymously: (displayName: string) => Promise<void>;
@@ -23,7 +22,6 @@ interface AuthContextType {
   restoreWallet: (mnemonic: string, email: string, password: string) => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   updateUser: (updatedUser: Partial<User> & { isCompletingProfile?: boolean }) => Promise<void>;
-  unlockSovereignSession: (data: VaultData, pin: string) => Promise<void>;
   refreshIdentity: () => Promise<void>;
 }
 
@@ -34,7 +32,39 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(false);
   const [isProcessingAuth, setIsProcessingAuth] = useState(false);
-  const [isSovereignLocked, setIsSovereignLocked] = useState(false);
+
+  const attemptAutoUnlock = useCallback(async (uid: string) => {
+    if (!cryptoService.hasVault()) return false;
+    const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
+    if (isUnlocked) return true;
+
+    // 1. Try UID (New standard)
+    let vaultData = await cryptoService.unlockVault(uid);
+    if (vaultData) {
+        sessionStorage.setItem('ugc_node_unlocked', 'true');
+        sessionStorage.setItem('ugc_temp_pin', uid);
+        return true;
+    }
+
+    // 2. Try Default Pin (Legacy fallback)
+    vaultData = await cryptoService.unlockVault(UGC_DEFAULT_NODE_PIN);
+    if (vaultData) {
+        sessionStorage.setItem('ugc_node_unlocked', 'true');
+        sessionStorage.setItem('ugc_temp_pin', UGC_DEFAULT_NODE_PIN);
+        
+        // Auto-migrate to UID-based anchoring
+        console.log("Auth: Auto-migrating legacy vault to UID-based anchoring...");
+        await cryptoService.saveVault(vaultData, uid);
+        const encryptedVault = localStorage.getItem('gcn_encrypted_vault');
+        if (encryptedVault) {
+            await setDoc(doc(db, 'users', uid), { encryptedVault }, { merge: true });
+        }
+        sessionStorage.setItem('ugc_temp_pin', uid);
+        return true;
+    }
+
+    return false;
+  }, []);
   
   const { addToast } = useToast();
 
@@ -73,7 +103,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
             
             const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
-            setIsSovereignLocked(cryptoService.hasVault() && !isUnlocked);
+            if (!isUnlocked) {
+                attemptAutoUnlock(uid);
+            }
         } else {
             console.log("Identity Sync: User document missing, provisioning skeletal user.");
             // Provision skeletal user for new Google/Social logins
@@ -165,7 +197,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             }
 
             const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
-            setIsSovereignLocked(cryptoService.hasVault() && !isUnlocked);
+            if (!isUnlocked) {
+                attemptAutoUnlock(user.uid);
+            }
           } else {
             // If user doc doesn't exist, we might need to create it, but we don't block
             console.warn("User document does not exist for UID:", user.uid);
@@ -254,23 +288,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   }, [addToast]);
 
-  const unlockSovereignSession = useCallback(async (data: VaultData, pin: string) => {
-      setIsProcessingAuth(true);
-      try {
-          sessionStorage.setItem('ugc_temp_pin', pin);
-          sessionStorage.setItem('ugc_node_unlocked', 'true');
-          setIsSovereignLocked(false);
-          
-          if (firebaseUser) await syncIdentity(firebaseUser.uid, firebaseUser.email);
-          
-          setIsProcessingAuth(false);
-          addToast("Identity Verified.", "success");
-      } catch (err) {
-          setIsProcessingAuth(false);
-          addToast("Verification failed.", "error");
-      }
-  }, [addToast, firebaseUser, syncIdentity]);
-
   const logout = useCallback(async () => {
     if (currentUser) api.goOffline(currentUser.id);
     sessionStorage.removeItem('ugc_node_unlocked');
@@ -303,8 +320,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const mnemonic = memberData.mnemonic || cryptoService.generateMnemonic();
         const keys = cryptoService.mnemonicToKeyPair(mnemonic);
         
-        // Save vault locally
-        await cryptoService.saveVault({ mnemonic, email: memberData.email }, password);
+        // Save vault locally using UID as the anchor (removing separate password need)
+        await cryptoService.saveVault({ mnemonic, email: memberData.email }, user.uid);
         const encryptedVault = localStorage.getItem('gcn_encrypted_vault') || "";
 
         const batch = writeBatch(db);
@@ -374,7 +391,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
         
         sessionStorage.setItem('ugc_node_unlocked', 'true');
-        setIsSovereignLocked(false);
         setIsProcessingAuth(false);
         addToast("Account created successfully.", "success");
     } catch (error: any) {
@@ -405,8 +421,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             user = cred.user.uid;
         }
 
-        // Save vault locally
-        await cryptoService.saveVault({ mnemonic, email }, password);
+        // Save vault locally using UID as the anchor
+        await cryptoService.saveVault({ mnemonic, email }, user);
         const keys = cryptoService.mnemonicToKeyPair(mnemonic);
         const encryptedVault = localStorage.getItem('gcn_encrypted_vault') || "";
 
@@ -435,7 +451,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         sessionStorage.setItem('ugc_node_unlocked', 'true');
-        setIsSovereignLocked(false);
         addToast("Wallet Restored Successfully", "success");
     } catch (error: any) {
         setIsProcessingAuth(false);
@@ -468,7 +483,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     firebaseUser,
     isLoadingAuth,
     isProcessingAuth,
-    isSovereignLocked,
     login,
     loginWithGoogle,
     loginAnonymously,
@@ -477,7 +491,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     restoreWallet,
     sendPasswordReset,
     updateUser,
-    unlockSovereignSession,
     refreshIdentity,
   };
 

@@ -9,6 +9,8 @@ const SIGN_SECRET_KEY_STORAGE = 'gcn_sign_secret_key';
 const SIGN_PUBLIC_KEY_STORAGE = 'gcn_sign_public_key';
 const ENCRYPTED_VAULT_STORAGE = 'gcn_encrypted_vault';
 
+export const UGC_DEFAULT_NODE_PIN = "ubuntium-default-node-pin";
+
 export interface VaultData {
     mnemonic: string;
     email?: string;

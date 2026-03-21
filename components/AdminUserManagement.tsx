@@ -17,7 +17,6 @@ export const AdminUserManagement: React.FC<{ admin: Admin; users: User[] }> = ({
     const [currentPage, setCurrentPage] = useState(1);
     const [busyId, setBusyId] = useState<string | null>(null);
     const { addToast } = useToast();
-    const { isSovereignLocked } = useAuth();
     const ITEMS_PER_PAGE = 10;
 
     const filteredUsers = useMemo(() => {
@@ -43,11 +42,6 @@ export const AdminUserManagement: React.FC<{ admin: Admin; users: User[] }> = ({
     const totalPages = Math.ceil(filteredUsers.length / ITEMS_PER_PAGE);
 
     const handleToggleStatus = async (user: User) => {
-        if (isSovereignLocked) {
-            addToast("AUTHORIZATION_REQUIRED: Please unlock your node session in the HUD first.", "error");
-            return;
-        }
-
         const isSuspended = user.status === 'suspended';
         const nextStatus = isSuspended ? 'active' : 'suspended';
         
@@ -86,14 +80,6 @@ export const AdminUserManagement: React.FC<{ admin: Admin; users: User[] }> = ({
             </div>
 
             <div className="overflow-x-auto no-scrollbar relative">
-                {isSovereignLocked && (
-                    <div className="absolute inset-0 z-20 bg-black/60 backdrop-blur-sm flex flex-col items-center justify-center rounded-3xl animate-fade-in">
-                        <LockIcon className="h-12 w-12 text-brand-gold mb-4" />
-                        <p className="label-caps !text-[11px] !text-white text-center">Registry Locked</p>
-                        <p className="text-[9px] text-gray-400 mt-2 uppercase font-black tracking-widest">Unlock your session to modify users</p>
-                    </div>
-                )}
-                
                 <table className="w-full text-left">
                     <thead>
                         <tr className="text-[10px] font-black text-gray-600 uppercase tracking-[0.3em] border-b border-white/5">

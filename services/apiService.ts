@@ -604,6 +604,17 @@ export const api = {
     
     setUserStatus: (uid: string, status: User['status']) => updateDoc(doc(db, 'users', uid), { status }),
 
+    getPrivateData: async (uid: string): Promise<any> => {
+        try {
+            const privateDoc = await getDoc(doc(db, 'users', uid, 'private', 'data'));
+            if (!privateDoc.exists()) return null;
+            return privateDoc.data();
+        } catch (error) {
+            handleFirestoreError(error, OperationType.GET, `users/${uid}/private/data`);
+            throw error;
+        }
+    },
+
     getUsersByUids: async (uids: string[]): Promise<User[]> => {
         if (uids.length === 0) return [];
         const results: User[] = [];

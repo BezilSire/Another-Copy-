@@ -121,33 +121,13 @@ const TOOLS = [
 ];
 
 export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onViewProfile, onSwitchView, chatTargetId, onChatStarted, onOpenRecoverySetup }) => {
-  const { isSovereignLocked, unlockSovereignSession } = useAuth();
   const [messages, setMessages] = useState<AgentMessage[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [isUnlocking, setIsUnlocking] = useState(false);
   const [showWhatsApp, setShowWhatsApp] = useState(false);
   const [isDistressModalOpen, setIsDistressModalOpen] = useState(false);
-  const [unlockPassword, setUnlockPassword] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { addToast } = useToast();
-
-  const handleUnlockNode = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!unlockPassword || isUnlocking) return;
-    setIsUnlocking(true);
-    try {
-      const vaultData = await cryptoService.unlockVault(unlockPassword);
-      if (!vaultData) throw new Error("Invalid node password.");
-      await unlockSovereignSession(vaultData, unlockPassword);
-      addToast("Node Anchored Successfully", "success");
-      setUnlockPassword('');
-    } catch (err: any) {
-      addToast(err.message || "Unlock failed", "error");
-    } finally {
-      setIsUnlocking(false);
-    }
-  };
 
   useEffect(() => {
     if (chatTargetId && onChatStarted) {
@@ -206,12 +186,10 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
           const updatedUser = await api.getUser(user.id);
           // Attempt deep sync if node is anchored
           let ledgerBalance = updatedUser.ubtBalance;
-          if (!isSovereignLocked) {
-            try {
-              ledgerBalance = await api.reconcileUserBalance(user.id);
-            } catch (e) {
-              console.warn("Ledger reconciliation failed, using cached balance.");
-            }
+          try {
+            ledgerBalance = await api.reconcileUserBalance(user.id);
+          } catch (e) {
+            console.warn("Ledger reconciliation failed, using cached balance.");
           }
 
           const txs = await new Promise<any[]>((resolve, reject) => {
@@ -229,15 +207,12 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
               <div className="flex justify-between items-start">
                 <div>
                   <p className="text-[10px] font-black text-brand-gold uppercase tracking-[0.3em] mb-1">
-                    {isSovereignLocked ? 'Cached Node Balance' : 'Ledger-Verified Balance'}
+                    Ledger-Verified Balance
                   </p>
                   <div className="flex items-baseline gap-2">
                     <p className="text-4xl font-black text-white">{(ledgerBalance ?? 0).toFixed(2)}</p>
                     <p className="text-xs font-black text-brand-gold">UBT</p>
                   </div>
-                  {isSovereignLocked && (
-                    <p className="text-[8px] text-white/30 italic mt-1">Node is currently isolated. Anchor node for deep ledger sync.</p>
-                  )}
                 </div>
                 <div className="bg-brand-gold/10 p-3 rounded-2xl border border-brand-gold/20 flex flex-col items-center gap-1">
                   <WalletIcon className="h-6 w-6 text-brand-gold" />
@@ -248,8 +223,8 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
               <div className="bg-white/5 p-4 rounded-2xl border border-white/10 space-y-2">
                 <div className="flex justify-between items-center">
                   <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Node Address</p>
-                  <span className={`text-[8px] font-bold uppercase px-2 py-0.5 rounded-full ${isSovereignLocked ? 'text-amber-400 bg-amber-400/10' : 'text-green-400 bg-green-400/10'}`}>
-                    {isSovereignLocked ? 'Isolated' : 'Anchored'}
+                  <span className="text-[8px] font-bold uppercase px-2 py-0.5 rounded-full text-green-400 bg-green-400/10">
+                    Anchored
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -314,9 +289,6 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
           };
         }
         case 'send_ubt': {
-          if (isSovereignLocked) {
-            throw new Error("Node is isolated. You must anchor your node (unlock vault) before signing transactions.");
-          }
           const receiver = await api.getUserByPublicKey(args.receiverAddress) || 
                            await api.getUserByEmail(args.receiverAddress) || 
                            await api.getUser(args.receiverAddress);
@@ -469,7 +441,7 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
         case 'get_security_status': {
           const hasVault = cryptoService.hasVault();
           const publicKey = cryptoService.getPublicKey();
-          const isAnchored = !isSovereignLocked;
+          const isAnchored = true;
           
           const widget = (
             <div className="bg-slate-900/90 border border-brand-gold/30 p-6 rounded-[2rem] mt-4 space-y-6 shadow-glow-gold animate-fade-in">
@@ -478,7 +450,7 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
                   <p className="text-[10px] font-black text-brand-gold uppercase tracking-[0.3em] mb-1">Node Security Status</p>
                   <p className="text-[8px] font-bold text-white/30 uppercase tracking-widest">Cryptographic Identity Anchor</p>
                 </div>
-                <div className={`p-2 rounded-xl border ${isAnchored ? 'bg-green-500/10 border-green-500/20 text-green-400' : 'bg-amber-500/10 border-amber-500/20 text-amber-400'}`}>
+                <div className="p-2 rounded-xl border bg-green-500/10 border-green-500/20 text-green-400">
                   <ShieldCheckIcon className="h-5 w-5" />
                 </div>
               </div>
@@ -495,9 +467,9 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/10 flex justify-between items-center">
                   <div>
                     <p className="text-[10px] font-black text-white/80 uppercase mb-1">Anchor Status</p>
-                    <p className="text-[8px] text-white/30 uppercase tracking-widest">{isAnchored ? 'Node Anchored (Unlocked)' : 'Node Isolated (Locked)'}</p>
+                    <p className="text-[8px] text-white/30 uppercase tracking-widest">Node Anchored</p>
                   </div>
-                  <div className={`w-2 h-2 rounded-full ${isAnchored ? 'bg-green-400 animate-pulse' : 'bg-amber-400'}`}></div>
+                  <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
                 </div>
 
                 <div className="bg-white/5 p-4 rounded-2xl border border-white/10">
@@ -508,20 +480,6 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
                 </div>
               </div>
 
-              {!isAnchored && hasVault && (
-                <div className="p-4 bg-amber-500/5 border border-amber-500/20 rounded-2xl">
-                  <p className="text-[9px] text-amber-500/80 leading-relaxed italic mb-3">
-                    Your node is currently isolated. You must anchor your node to the protocol to sign transactions or perform deep ledger syncs.
-                  </p>
-                  <button 
-                    onClick={() => setInput("I want to anchor my node")}
-                    className="w-full py-2 bg-amber-500/20 hover:bg-amber-500/30 text-amber-500 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all"
-                  >
-                    Anchor Node Now
-                  </button>
-                </div>
-              )}
-
               <div className="p-4 bg-brand-gold/5 border border-brand-gold/20 rounded-2xl">
                 <p className="text-[9px] text-brand-gold/80 leading-relaxed italic">
                   Your node is secured by a non-custodial cryptographic vault. This protocol is reconstructible on any database using your 12-word phrase.
@@ -529,7 +487,7 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
               </div>
             </div>
           );
-          return { result: `Displayed security status. Anchored: ${isAnchored}. Public Key: ${publicKey || 'Locked'}.`, widget };
+          return { result: `Displayed security status. Anchored: true. Public Key: ${publicKey || 'Locked'}.`, widget };
         }
         case 'get_receive_address': {
           const updatedUser = await api.getUser(user.id);
@@ -657,12 +615,12 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
         <div className="flex items-center gap-4">
           <div className="bg-brand-gold/10 p-2.5 rounded-xl border border-brand-gold/20 relative">
             <SparkleIcon className="h-5 w-5 text-brand-gold" />
-            <div className={`absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-950 ${isSovereignLocked ? 'bg-amber-500' : 'bg-green-500'}`}></div>
+            <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-950 bg-green-500"></div>
           </div>
           <div>
             <h1 className="text-lg font-black uppercase tracking-tight leading-none">UGC Brain</h1>
             <p className="text-[9px] font-bold text-white/20 uppercase tracking-widest mt-1">
-              {isSovereignLocked ? 'Node Isolated' : 'Node Anchored'}
+              Node Anchored
             </p>
           </div>
         </div>
@@ -672,8 +630,9 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
             <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest leading-none mb-1">Protocol Active</p>
             <p className="text-sm font-black text-brand-gold uppercase">{user.name}</p>
           </div>
-          <button onClick={onLogout} className="p-2.5 hover:bg-white/5 rounded-xl transition-colors text-white/40 hover:text-white border border-transparent hover:border-white/10">
+          <button onClick={onLogout} className="p-2.5 hover:bg-white/5 rounded-xl transition-colors text-white/40 hover:text-white border border-transparent hover:border-white/10 relative">
             <GlobeIcon className="h-4 w-4" />
+            <div className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-slate-950 bg-green-500"></div>
           </button>
           <button 
             onClick={() => setIsDistressModalOpen(true)} 
@@ -684,49 +643,6 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
           </button>
         </div>
       </header>
-
-      {/* Sovereign Unlock Overlay */}
-      {isSovereignLocked && (
-        <div className="absolute inset-0 z-50 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6">
-          <div className="max-w-md w-full bg-slate-900 border border-brand-gold/30 p-8 rounded-[2.5rem] shadow-glow-gold animate-fade-in">
-            <div className="flex flex-col items-center text-center space-y-6">
-              <div className="bg-amber-500/10 p-4 rounded-3xl border border-amber-500/20">
-                <ShieldCheckIcon className="h-10 w-10 text-amber-500" />
-              </div>
-              <div className="space-y-2">
-                <h2 className="text-2xl font-black uppercase tracking-tight">Anchor Your Node</h2>
-                <p className="text-sm text-white/40 leading-relaxed">
-                  Your cryptographic vault is locked. To sign transactions and synchronize with the ledger, you must provide your node password.
-                </p>
-              </div>
-              
-              <form onSubmit={handleUnlockNode} className="w-full space-y-4">
-                <input 
-                  type="password"
-                  value={unlockPassword}
-                  onChange={(e) => setUnlockPassword(e.target.value)}
-                  placeholder="Enter Node Password"
-                  className="w-full bg-white/5 border-2 border-white/10 rounded-2xl py-4 px-6 text-white text-center font-bold focus:border-brand-gold outline-none transition-all"
-                />
-                <button 
-                  type="submit"
-                  disabled={isUnlocking || !unlockPassword}
-                  className="w-full py-4 bg-brand-gold text-slate-950 rounded-2xl font-black uppercase tracking-widest text-xs shadow-glow-gold active:scale-95 transition-all disabled:opacity-50"
-                >
-                  {isUnlocking ? 'Anchoring...' : 'Anchor Node'}
-                </button>
-              </form>
-              
-              <button 
-                onClick={onLogout}
-                className="text-[10px] font-black text-white/20 uppercase tracking-widest hover:text-white transition-colors"
-              >
-                Switch Account
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-hidden relative">
@@ -813,21 +729,26 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
                     }
                   }}
                   placeholder="Command the Commons..."
-                  className="w-full bg-white/5 border border-white/10 rounded-3xl py-6 px-10 pr-20 text-white text-lg font-medium placeholder:text-white/20 focus:outline-none focus:border-brand-gold/50 focus:ring-1 focus:ring-brand-gold/20 transition-all shadow-premium resize-none min-h-[88px] max-h-[300px] leading-relaxed"
+                  className="w-full bg-white/5 border border-white/10 rounded-[2.5rem] py-7 px-12 pr-24 text-white text-lg font-medium placeholder:text-white/20 focus:outline-none focus:border-brand-gold/50 focus:ring-1 focus:ring-brand-gold/20 transition-all shadow-premium resize-none min-h-[100px] max-h-[400px] leading-relaxed"
                   disabled={isLoading}
                   rows={1}
                 />
                 <button
                   type="submit"
                   disabled={isLoading || !input.trim()}
-                  className="absolute right-3 top-3 bottom-3 w-14 bg-brand-gold hover:bg-brand-gold-light text-slate-950 rounded-2xl font-black uppercase tracking-widest text-[10px] transition-all active:scale-95 disabled:opacity-50 disabled:active:scale-100 shadow-glow-gold flex items-center justify-center"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 w-12 h-12 bg-brand-gold/10 hover:bg-brand-gold/20 text-brand-gold rounded-2xl border border-brand-gold/20 transition-all active:scale-95 disabled:opacity-30 disabled:active:scale-100 flex items-center justify-center group shadow-sm"
                 >
-                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 10l7-7m0 0l7 7m-7-7v18" />
+                  <svg 
+                    className="h-5 w-5 group-hover:-translate-y-0.5 transition-transform" 
+                    fill="none" 
+                    viewBox="0 0 24 24" 
+                    stroke="currentColor"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 10l7-7m0 0l7 7m-7-7v18" />
                   </svg>
                 </button>
               </form>
-              <div className="flex gap-4 mt-4 px-4 overflow-x-auto no-scrollbar">
+              <div className="flex gap-6 mt-6 px-6 overflow-x-auto no-scrollbar pb-2">
                  <QuickAction icon={<GlobeIcon className="h-3 w-3 text-emerald-400" />} label="WhatsApp Gateway" onClick={() => setShowWhatsApp(true)} />
                  <QuickAction icon={<SparkleIcon className="h-3 w-3 text-brand-gold" />} label="Guardian Oracle" onClick={() => onSwitchView('oracle')} />
                  <QuickAction icon={<WalletIcon className="h-3 w-3" />} label="Wallet Balance" onClick={() => setInput("Show me my wallet balance")} />
@@ -859,7 +780,7 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
 const QuickAction = ({ icon, label, onClick }: { icon: React.ReactNode, label: string, onClick: () => void }) => (
   <button 
     onClick={onClick}
-    className="flex-shrink-0 flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/5 rounded-full hover:bg-white/10 hover:border-white/20 transition-all text-[9px] font-black uppercase tracking-widest text-white/30 hover:text-white"
+    className="flex-shrink-0 flex items-center gap-3 px-6 py-3 bg-white/5 border border-white/5 rounded-full hover:bg-white/10 hover:border-white/20 transition-all text-[10px] font-black uppercase tracking-widest text-white/40 hover:text-white shadow-sm"
   >
     {icon}
     {label}

@@ -10,22 +10,21 @@ service cloud.firestore {
     // Improved robust Admin check
     function isAdmin() { 
       return isSignedIn() && 
-             (request.auth.token.email == "bezilsire00@gmail.com" && request.auth.token.email_verified == true ||
-              (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
-               get(/databases/$(database)/documents/users/$(request.auth.uid)).data.get('role', 'member') == 'admin')); 
+             ((request.auth.token.email == "bezilsire00@gmail.com" || request.auth.token.email == "bezilsire01@gmail.com") && 
+              request.auth.token.email_verified == true); 
     }
     
-    function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
+    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
 
     // --- IDENTITY & WALLETS ---
     match /users/{userId} {
       allow get: if true; 
       allow read, list: if isSignedIn(); 
       allow create: if isMember() && request.auth.uid == userId;
-      allow update: if isOwner(userId) || isAdmin() || (isMember() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ubtBalance', 'credibility_score', 'vouchCount', 'followers', 'lastSeen', 'fcmToken', 'encryptedVault', 'publicKey', 'recoveryCommitment', 'isKeyRotated']));
+      allow update: if isOwner(userId) || isAdmin();
       
       match /private/data {
-        allow read, write: if isOwner(userId) || isAdmin();
+        allow read, write: if request.auth.uid == userId || isAdmin();
       }
 
       match /notifications/{id} { allow read, write: if isOwner(userId) || isAdmin(); }
