@@ -7,27 +7,33 @@ import { getMessaging, isSupported } from 'firebase/messaging';
 import { getFunctions } from 'firebase/functions';
 import firebaseConfig from '../firebase-applet-config.json';
 
-const getFirebaseApiKey = () => {
+const getEnvVar = (key: string) => {
     try {
         // @ts-ignore - Vite environment
-        if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_FIREBASE_API_KEY) {
-            return (import.meta as any).env.VITE_FIREBASE_API_KEY;
+        if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[key]) {
+            return (import.meta as any).env[key];
         }
     } catch (e) {}
     
     try {
         // Node.js environment
-        if (typeof process !== 'undefined' && process.env && process.env.VITE_FIREBASE_API_KEY) {
-            return process.env.VITE_FIREBASE_API_KEY;
+        if (typeof process !== 'undefined' && process.env && process.env[key]) {
+            return process.env[key];
         }
     } catch (e) {}
     
-    return firebaseConfig.apiKey;
+    return null;
 };
 
 const config = {
-    ...firebaseConfig,
-    apiKey: getFirebaseApiKey()
+    apiKey: getEnvVar('VITE_FIREBASE_API_KEY') || firebaseConfig.apiKey,
+    authDomain: getEnvVar('VITE_FIREBASE_AUTH_DOMAIN') || firebaseConfig.authDomain,
+    projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID') || firebaseConfig.projectId,
+    storageBucket: getEnvVar('VITE_FIREBASE_STORAGE_BUCKET') || firebaseConfig.storageBucket,
+    messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID') || firebaseConfig.messagingSenderId,
+    appId: getEnvVar('VITE_FIREBASE_APP_ID') || firebaseConfig.appId,
+    measurementId: getEnvVar('VITE_FIREBASE_MEASUREMENT_ID') || firebaseConfig.measurementId,
+    databaseURL: getEnvVar('VITE_FIREBASE_DATABASE_URL') || (firebaseConfig as any).databaseURL,
 };
 
 const app = !getApps().length ? initializeApp(config) : getApp();
@@ -44,7 +50,7 @@ if (typeof window !== 'undefined') {
     });
 }
 
-const firestoreId = (firebaseConfig as any).firestoreDatabaseId;
+const firestoreId = getEnvVar('VITE_FIREBASE_FIRESTORE_DATABASE_ID') || (firebaseConfig as any).firestoreDatabaseId;
 
 export const db = (firestoreId && firestoreId !== '(default)') 
     ? initializeFirestore(app, { 
