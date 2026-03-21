@@ -504,4 +504,18 @@ export interface AgenticTask {
     toolsUsed: string[];
 }
 
+export interface DistressCall {
+    id: string;
+    userId: string;
+    userName: string;
+    userEmail: string;
+    message: string;
+    status: 'pending' | 'resolved' | 'dismissed';
+    timestamp: Timestamp;
+    location?: {
+        latitude: number;
+        longitude: number;
+    };
+}
+
 

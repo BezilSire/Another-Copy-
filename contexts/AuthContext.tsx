@@ -1,6 +1,6 @@
 
 import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, useRef } from 'react';
-import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInAnonymously, sendEmailVerification } from 'firebase/auth';
+import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInAnonymously, sendEmailVerification, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
 import { useToast } from './ToastContext';
 import { api, handleFirestoreError, OperationType } from '../services/apiService';
@@ -32,7 +32,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(false);
   const [isProcessingAuth, setIsProcessingAuth] = useState(false);
   const [isSovereignLocked, setIsSovereignLocked] = useState(false);
   
@@ -43,23 +43,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
         console.log("Identity Sync: Starting for UID:", uid);
         const userDocRef = doc(db, 'users', uid);
-        const userDoc = await getDoc(userDocRef);
+        const privateDocRef = doc(db, 'users', uid, 'private', 'data');
+        
+        // Parallel fetch for speed
+        const [userDoc, privateDoc] = await Promise.all([
+            getDoc(userDocRef),
+            getDoc(privateDocRef).catch(err => {
+                console.warn("Private data access restricted or missing:", err);
+                return null;
+            })
+        ]);
         
         if (userDoc.exists()) {
             console.log("Identity Sync: Found user document.");
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
             
-            // Fetch private data safely
             let privateData = {};
-            try {
-                const privateDocRef = doc(db, 'users', uid, 'private', 'data');
-                const privateDoc = await getDoc(privateDocRef);
-                if (privateDoc.exists()) {
-                    console.log("Identity Sync: Found private data.");
-                    privateData = privateDoc.data();
-                }
-            } catch (privateErr) {
-                console.warn("Private data access restricted or missing:", privateErr);
+            if (privateDoc && privateDoc.exists()) {
+                console.log("Identity Sync: Found private data.");
+                privateData = privateDoc.data();
             }
             
             const enrichedUser = { ...userData, ...privateData } as User;
@@ -128,60 +130,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     console.log("Auth: Initializing onAuthStateChanged listener...");
     
-    // Safety timeout for initial auth load
-    const authTimeout = setTimeout(() => {
-        if (isLoadingAuth) {
-            console.warn("Auth: Initial load timeout reached. Forcing load state to false.");
-            setIsLoadingAuth(false);
-            setIsProcessingAuth(false);
-        }
-    }, 12000);
-
     const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       console.log("Auth: State changed. User:", user ? user.uid : "null");
       setFirebaseUser(user);
+      
       if (userDocListener) {
-          console.log("Auth: Unsubscribing previous user doc listener.");
           userDocListener();
+          userDocListener = undefined;
       }
 
       if (user) {
-        clearTimeout(authTimeout);
-        // Immediate Entry Protocol
+        // Immediate Entry Protocol: Don't wait for Firestore to show the app
+        setIsLoadingAuth(false);
+        setIsProcessingAuth(false);
+
         if (user.isAnonymous) {
-            console.log("Auth: Anonymous guest session detected.");
             const guestName = sessionStorage.getItem('ugc_guest_name') || 'Guest Citizen';
             setCurrentUser({ id: user.uid, name: guestName, role: 'member', status: 'active', circle: 'GLOBAL', isProfileComplete: true, distress_calls_available: 0 } as any);
-            setIsLoadingAuth(false);
-            setIsProcessingAuth(false);
             return;
         }
 
-        // Parallel Sync: Start listener but also fetch current state immediately
+        // Background Sync: Load user data without blocking the UI
         const userDocRef = doc(db, 'users', user.uid);
-        syncIdentity(user.uid, user.email, user.displayName).catch(err => {
-            console.error("Auth: syncIdentity background failed:", err);
-        });
-
+        
         console.log("Auth: Setting up user document listener for UID:", user.uid);
         userDocListener = onSnapshot(userDocRef, async (userDoc) => {
-          console.log("Auth: User document snapshot received.");
           if (userDoc.exists()) {
             const userData = { id: userDoc.id, ...userDoc.data() } as User;
-            
-            // Fetch private data safely
-            let privateData = {};
-            try {
-                const privateDoc = await getDoc(doc(db, 'users', user.uid, 'private', 'data'));
-                if (privateDoc.exists()) {
-                    privateData = privateDoc.data();
-                }
-            } catch (privateErr) {
-                console.warn("Private data listener fetch failed:", privateErr);
-            }
-            
-            const enrichedUser = { ...userData, ...privateData } as User;
-            setCurrentUser(enrichedUser);
+            setCurrentUser(userData);
 
             const serverVault = (userData as any).encryptedVault;
             if (serverVault && !cryptoService.hasVault()) {
@@ -191,15 +167,23 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
             setIsSovereignLocked(cryptoService.hasVault() && !isUnlocked);
           } else {
+            // If user doc doesn't exist, we might need to create it, but we don't block
             console.warn("User document does not exist for UID:", user.uid);
+            // Provision skeletal user in background if needed
+            const skeletalUser: any = {
+                id: user.uid,
+                name: user.displayName || user.email?.split('@')[0] || 'Citizen',
+                email: user.email || '',
+                role: 'member',
+                status: 'active',
+                circle: 'GLOBAL',
+                isProfileComplete: true,
+                createdAt: Timestamp.now(),
+            };
+            setCurrentUser(skeletalUser);
           }
-          setIsLoadingAuth(false);
-          setIsProcessingAuth(false);
         }, (error) => {
           console.error("User document listener error:", error);
-          setIsLoadingAuth(false);
-          setIsProcessingAuth(false);
-          addToast(formatFirestoreError(error.message), "error");
         });
         
         try {
@@ -208,7 +192,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             console.error("Presence setup failed:", presenceError);
         }
       } else {
-        console.log("Auth: No authenticated user.");
         setCurrentUser(null);
         setIsLoadingAuth(false);
         setIsProcessingAuth(false);
@@ -217,46 +200,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.error("Auth: onAuthStateChanged error:", error);
       setIsLoadingAuth(false);
       setIsProcessingAuth(false);
-      addToast("Authentication service error. Please try again later.", "error");
     });
 
     return () => {
-      console.log("Auth: Cleaning up AuthProvider listeners.");
-      clearTimeout(authTimeout);
       unsubscribeAuth();
       if (userDocListener) userDocListener();
     };
-  }, [syncIdentity, addToast]);
+  }, [addToast]);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     setIsProcessingAuth(true);
     console.log("Starting login handshake for:", credentials.email);
     
-    // Safety timeout: Reset processing state if it takes too long
-    const timeoutId = setTimeout(() => {
-        setIsProcessingAuth(prev => {
-            if (prev) {
-                console.warn("Login handshake timed out.");
-                addToast("Handshake timeout. Please check your connection.", "error");
-            }
-            return false;
-        });
-    }, 15000);
-
     try {
       const user = await api.login(credentials.email, credentials.password);
       console.log("Firebase Auth success for UID:", user.uid);
-      // We don't set isProcessingAuth(false) here, we wait for onAuthStateChanged/onSnapshot
-      // but we clear the timeout
-      clearTimeout(timeoutId);
+      // Immediate state update for faster UI response
+      setFirebaseUser(user);
+      setIsLoadingAuth(false);
+      setIsProcessingAuth(false);
     } catch (error: any) {
-      clearTimeout(timeoutId);
       setIsProcessingAuth(false); 
       console.error("Login error:", error);
-      addToast(error.message || 'Identity Handshake Failed', 'error');
+      
+      let errorMessage = error.message || 'Identity Handshake Failed';
+      if (errorMessage.includes('network-request-failed') || errorMessage.includes('offline')) {
+          errorMessage = "Connection failed. Please check your internet connection and try again.";
+      }
+      
+      addToast(errorMessage, 'error');
       throw error;
     }
-  }, [addToast, isProcessingAuth]);
+  }, [addToast]);
 
   const loginWithGoogle = useCallback(async () => {
     setIsProcessingAuth(true);
@@ -307,11 +282,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   const signup = useCallback(async (memberData: NewPublicMemberData & { mnemonic?: string }, password: string) => {
     setIsProcessingAuth(true);
+    console.log("Starting signup protocol for:", memberData.email);
     try {
-        const userCredential = await createUserWithEmailAndPassword(auth, memberData.email, password);
-        const { user } = userCredential;
+        let user: FirebaseUser;
+        try {
+            const userCredential = await createUserWithEmailAndPassword(auth, memberData.email, password);
+            user = userCredential.user;
+            console.log("Firebase Auth: User created with UID:", user.uid);
+        } catch (authError: any) {
+            if (authError.code === 'auth/email-already-in-use') {
+                console.log("Firebase Auth: User already exists, attempting to recover session.");
+                const loginCred = await signInWithEmailAndPassword(auth, memberData.email, password);
+                user = loginCred.user;
+            } else {
+                throw authError;
+            }
+        }
         
-        // Use provided mnemonic or generate one if missing (though UI should provide it now)
+        // Use provided mnemonic or generate one if missing
         const mnemonic = memberData.mnemonic || cryptoService.generateMnemonic();
         const keys = cryptoService.mnemonicToKeyPair(mnemonic);
         
@@ -322,8 +310,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const batch = writeBatch(db);
         let referrerId = '';
         if (memberData.referralCode) {
-            const snapshot = await getDocs(query(collection(db, 'users'), where('referralCode', '==', memberData.referralCode), limit(1)));
-            if (!snapshot.empty) referrerId = snapshot.docs[0].id;
+            try {
+                const snapshot = await getDocs(query(collection(db, 'users'), where('referralCode', '==', memberData.referralCode), limit(1)));
+                if (!snapshot.empty) referrerId = snapshot.docs[0].id;
+            } catch (refErr) {
+                console.warn("Referral lookup failed (ignoring):", refErr);
+            }
         }
         
         const memberRef = doc(collection(db, 'members'));
@@ -358,26 +350,38 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             circle: '',
             ubtBalance: 0, initialUbtStake: 0,
             publicKey: keys.publicKey,
-            encryptedVault: encryptedVault, // Backup for ease of access
+            encryptedVault: encryptedVault,
             createdAt: serverTimestamp(),
             lastSeen: serverTimestamp()
-        });
+        }, { merge: true });
 
         batch.set(doc(db, 'users', user.uid, 'private', 'data'), {
             email: memberData.email,
             phone: '',
             address: '',
             id_card_number: '',
-            mnemonic: mnemonic // Also backup in private data
-        });
+            mnemonic: mnemonic
+        }, { merge: true });
 
+        console.log("Firestore: Committing signup batch...");
         await batch.commit();
-        await sendEmailVerification(user);
+        console.log("Firestore: Signup batch committed.");
+        
+        try {
+            await sendEmailVerification(user);
+        } catch (emailErr) {
+            console.warn("Email verification send failed:", emailErr);
+        }
+        
         sessionStorage.setItem('ugc_node_unlocked', 'true');
         setIsSovereignLocked(false);
+        setIsProcessingAuth(false);
+        addToast("Account created successfully.", "success");
     } catch (error: any) {
         setIsProcessingAuth(false);
-        addToast(error.message, 'error');
+        console.error("Signup protocol failed:", error);
+        addToast(error.message || "Signup failed.", 'error');
+        throw error;
     }
   }, [addToast]);
 

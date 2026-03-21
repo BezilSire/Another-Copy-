@@ -25,14 +25,18 @@ export const AuthPage: React.FC = () => {
     e.preventDefault();
     try {
       await login({ email, password });
-    } catch (err) {}
+    } catch (err: any) {
+      console.error("Login component error:", err);
+    }
   };
 
   const handleRestore = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await restoreWallet(mnemonic, email, password);
-    } catch (err) {}
+    } catch (err: any) {
+      console.error("Restore component error:", err);
+    }
   };
 
   const handleReset = async (e: React.FormEvent) => {
@@ -40,7 +44,9 @@ export const AuthPage: React.FC = () => {
     try {
       await sendPasswordReset(email);
       setIsResetMode(false);
-    } catch (err) {}
+    } catch (err: any) {
+      console.error("Reset component error:", err);
+    }
   };
 
   if (isSignup) {

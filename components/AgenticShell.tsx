@@ -14,8 +14,10 @@ import { WalletIcon } from './icons/WalletIcon';
 import { TrendingUpIcon } from './icons/TrendingUpIcon';
 import { BriefcaseIcon } from './icons/BriefcaseIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
+import { SirenIcon } from './icons/SirenIcon';
 import { WalletDashboard } from './WalletDashboard';
 import { WhatsAppLink } from './WhatsAppLink';
+import { DistressCallModal } from './DistressCallModal';
 import ReactMarkdown from 'react-markdown';
 
 import { useAuth } from '../contexts/AuthContext';
@@ -125,6 +127,7 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
   const [isLoading, setIsLoading] = useState(false);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [showWhatsApp, setShowWhatsApp] = useState(false);
+  const [isDistressModalOpen, setIsDistressModalOpen] = useState(false);
   const [unlockPassword, setUnlockPassword] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { addToast } = useToast();
@@ -672,6 +675,13 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
           <button onClick={onLogout} className="p-2.5 hover:bg-white/5 rounded-xl transition-colors text-white/40 hover:text-white border border-transparent hover:border-white/10">
             <GlobeIcon className="h-4 w-4" />
           </button>
+          <button 
+            onClick={() => setIsDistressModalOpen(true)} 
+            className="p-2.5 bg-red-500/10 hover:bg-red-500/20 rounded-xl transition-all text-red-500 border border-red-500/20 animate-pulse"
+            title="Distress Call"
+          >
+            <SirenIcon className="h-4 w-4" />
+          </button>
         </div>
       </header>
 
@@ -832,6 +842,16 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
           </footer>
         </div>
       </main>
+
+      <DistressCallModal 
+        isOpen={isDistressModalOpen} 
+        onClose={() => setIsDistressModalOpen(false)} 
+        user={user} 
+        onSuccess={() => {
+          // User balance/calls count will be updated via AuthContext if implemented there, 
+          // or we can manually trigger a refresh if needed.
+        }}
+      />
     </div>
   );
 };

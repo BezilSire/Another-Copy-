@@ -12,7 +12,9 @@ import { ScaleIcon } from './icons/ScaleIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
 import { LoaderIcon } from './icons/LoaderIcon';
 import { RotateCwIcon } from './icons/RotateCwIcon';
+import { SirenIcon } from './icons/SirenIcon';
 import { ActivityFeed } from './ActivityFeed';
+import { DistressCallModal } from './DistressCallModal';
 import { ProposalsPage } from './ProposalsPage';
 import { VenturesPage } from './VenturesPage';
 import { LedgerPage } from './LedgerPage';
@@ -37,6 +39,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
   const [activeView, setActiveView] = useState<MemberView>('home');
   const [economy, setEconomy] = useState<GlobalEconomy | null>(null);
   const [isReconciling, setIsReconciling] = useState(false);
+  const [isDistressModalOpen, setIsDistressModalOpen] = useState(false);
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -127,6 +130,15 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
                 </div>
                 <span className="text-sm font-medium text-slate-200">Governance</span>
               </button>
+              <button 
+                onClick={() => setIsDistressModalOpen(true)} 
+                className="pro-card p-5 flex flex-col items-center justify-center gap-3 hover:bg-red-500/10 transition-colors group border-red-500/20"
+              >
+                <div className="w-12 h-12 rounded-full bg-red-500/10 flex items-center justify-center group-hover:bg-red-500/20 transition-colors animate-pulse">
+                  <SirenIcon className="h-6 w-6 text-red-500" />
+                </div>
+                <span className="text-sm font-medium text-red-500/80">Distress Call</span>
+              </button>
             </div>
 
             {/* Zim Pulse Feed (The Intelligence Layer) */}
@@ -154,6 +166,13 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       </div>
       
       <BottomNavBar user={user} activeView={activeView} onNavigate={setActiveView} unreadCount={unreadCount} />
+      
+      <DistressCallModal 
+        isOpen={isDistressModalOpen} 
+        onClose={() => setIsDistressModalOpen(false)} 
+        user={user} 
+        onSuccess={() => {}} 
+      />
     </div>
   );
 };

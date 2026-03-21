@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { QrCode, Smartphone, CheckCircle2, LogOut, RefreshCw, Loader2 } from 'lucide-react';
+import { QrCode, Smartphone, CheckCircle2, LogOut, RefreshCw, Loader2, X } from 'lucide-react';
 
 interface WhatsAppLinkProps {
     userId: string;
@@ -42,8 +42,8 @@ export const WhatsAppLink: React.FC<WhatsAppLinkProps> = ({ userId }) => {
         }
     };
 
-    const handleLogout = async () => {
-        if (!confirm('Are you sure you want to disconnect WhatsApp?')) return;
+    const handleLogout = async (confirmFirst = true) => {
+        if (confirmFirst && !confirm('Are you sure you want to disconnect WhatsApp?')) return;
         setLoading(true);
         try {
             await fetch('/api/whatsapp/logout', { 
@@ -71,7 +71,7 @@ export const WhatsAppLink: React.FC<WhatsAppLinkProps> = ({ userId }) => {
                 </div>
                 {status === 'ready' && (
                     <button 
-                        onClick={handleLogout}
+                        onClick={() => handleLogout(true)}
                         disabled={loading}
                         className="p-2 text-slate-400 hover:text-red-400 transition-colors"
                         title="Disconnect"
@@ -93,16 +93,26 @@ export const WhatsAppLink: React.FC<WhatsAppLinkProps> = ({ userId }) => {
                         </p>
                     </div>
                 ) : status === 'qr' && qr ? (
-                    <div className="text-center animate-in fade-in zoom-in duration-300">
+                    <div className="text-center animate-in fade-in zoom-in duration-300 relative">
                         <div className="bg-white p-4 rounded-2xl mb-4 inline-block shadow-2xl">
                             <img src={qr} alt="WhatsApp QR Code" className="w-48 h-48" />
                         </div>
                         <p className="text-sm text-slate-400 mb-4">
                             Scan this QR code with WhatsApp on your phone
                         </p>
-                        <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500 uppercase tracking-widest">
-                            <RefreshCw className="w-3 h-3 animate-spin" />
-                            <span>Waiting for scan...</span>
+                        <div className="flex flex-col items-center gap-4">
+                            <div className="flex items-center justify-center gap-2 text-[10px] text-slate-500 uppercase tracking-widest">
+                                <RefreshCw className="w-3 h-3 animate-spin" />
+                                <span>Waiting for scan...</span>
+                            </div>
+                            <button
+                                onClick={() => handleLogout(false)}
+                                disabled={loading}
+                                className="text-xs text-slate-500 hover:text-white transition-colors flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-white/5 hover:border-white/10 bg-white/5"
+                            >
+                                <X className="w-3 h-3" />
+                                Cancel Scan
+                            </button>
                         </div>
                     </div>
                 ) : (

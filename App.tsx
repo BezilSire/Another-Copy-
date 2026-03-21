@@ -23,7 +23,7 @@ import { GuardianOracle } from './components/GuardianOracle';
 const App: React.FC = () => {
   const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser } = useAuth();
   
-  const isExplorer = (typeof process !== 'undefined' && process?.env?.SITE_MODE === 'EXPLORER');
+  const isExplorer = false; // Forced to false to ensure login page shows
   
   const [unreadNotificationCount, setUnreadNotificationCount] = useState(0);
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState(false);
@@ -106,8 +106,15 @@ const App: React.FC = () => {
         return <AgenticShell user={userToRender as MemberUser} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={handleViewProfile} onSwitchView={setCurrentView} chatTargetId={chatTargetId} onChatStarted={() => setChatTargetId(null)} onOpenRecoverySetup={() => setIsRecoverySetupOpen(true)} />;
     }
     
-    if (isLoadingAuth || isProcessingAuth) {
-        return null;
+    if (isLoadingAuth && !firebaseUser) {
+        return (
+            <div className="flex-1 flex items-center justify-center bg-slate-950">
+                <div className="flex flex-col items-center gap-4">
+                    <LoaderIcon className="w-12 h-12 text-brand-gold animate-spin" />
+                    <p className="text-slate-400 font-mono text-sm animate-pulse">Initializing Identity Protocol...</p>
+                </div>
+            </div>
+        );
     }
 
     return <AuthPage />;

@@ -7,7 +7,7 @@ import { MessageSquareIcon } from './icons/MessageSquareIcon';
 import { BellIcon } from './icons/BellIcon';
 import { GlobeIcon } from './icons/GlobeIcon';
 import { TrendingUpIcon } from './icons/TrendingUpIcon';
-import { SearchIcon } from './icons/SearchIcon';
+import { SirenIcon } from './icons/SirenIcon';
 
 interface HeaderProps {
   user: User;
@@ -15,9 +15,10 @@ interface HeaderProps {
   onViewProfile: (userId: string) => void;
   onVoteClick: () => void;
   onRadarClick: () => void;
+  onDistressClick: () => void;
 }
 
-export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, onVoteClick, onRadarClick }) => {
+export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, onVoteClick, onRadarClick, onDistressClick }) => {
   return (
     <header className="sticky top-0 z-40 w-full glass-panel py-3 px-6 flex items-center justify-between shadow-premium">
       <div className="flex items-center gap-3">
@@ -36,6 +37,9 @@ export const Header: React.FC<HeaderProps> = ({ user, onLogout, onViewProfile, o
           </button>
           <button onClick={onVoteClick} className="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-all" title="Governance">
             <TrendingUpIcon className="h-5 w-5" />
+          </button>
+          <button onClick={onDistressClick} className="p-2 rounded-lg hover:bg-red-500/10 text-red-500/60 hover:text-red-500 transition-all animate-pulse" title="Distress Call">
+            <SirenIcon className="h-5 w-5" />
           </button>
         </div>
         

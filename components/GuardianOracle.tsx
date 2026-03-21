@@ -262,6 +262,8 @@ export const GuardianOracle: React.FC<GuardianOracleProps> = ({ user, onBack }) 
     const chatEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
+        if (!user?.id) return;
+
         const q = query(
             collection(db, 'simulations'),
             where('userId', '==', user.id),

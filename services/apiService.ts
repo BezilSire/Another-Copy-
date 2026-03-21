@@ -56,7 +56,6 @@ import {
     CitizenResource, Dispute, GlobalEconomy, CommunityValuePool, Proposal, Venture, SustenanceCycle, SustenanceVoucher, Comment, Distribution, VentureEquityHolding,
     RedemptionCycle, Candidate, MultiSigProposal, UserVault, Report, Block
 } from '../types';
-import { getDocFromServer } from 'firebase/firestore';
 
 export enum OperationType {
   CREATE = 'create',
@@ -108,20 +107,6 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   console.error('Firestore Error: ', safeJsonStringify(errInfo));
   throw new Error(safeJsonStringify(errInfo));
 }
-
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-    console.log("Firestore: Connection test successful.");
-  } catch (error) {
-    if(error instanceof Error && error.message.includes('the client is offline')) {
-      console.error("Please check your Firebase configuration. The client is offline.");
-    }
-  }
-}
-
-// testConnection();
-testConnection();
 
 const usersCollection = collection(db, 'users');
 const membersCollection = collection(db, 'members');

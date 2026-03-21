@@ -19,6 +19,8 @@ import { ProposalsAdminPage } from './ProposalsAdminPage';
 import { VenturesAdminPage } from './VenturesAdminPage';
 import { PayoutsAdminPage } from './PayoutsAdminPage';
 import { ReportsView } from './ReportsView';
+import { DistressCallsAdminView } from './DistressCallsAdminView';
+import { SirenIcon } from './icons/SirenIcon';
 
 interface AdminDashboardProps {
   user: Admin;
@@ -27,7 +29,7 @@ interface AdminDashboardProps {
   onViewProfile: (userId: string) => void;
 }
 
-type AdminView = 'overview' | 'users' | 'wallets' | 'governance' | 'ventures' | 'payouts' | 'reports';
+type AdminView = 'overview' | 'users' | 'wallets' | 'governance' | 'ventures' | 'payouts' | 'reports' | 'distress';
 
 export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUser, unreadCount, onViewProfile }) => {
   const [activeView, setActiveView] = useState<AdminView>('overview');
@@ -71,6 +73,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
       case 'ventures': return <VenturesAdminPage user={user} ventures={[]} />;
       case 'payouts': return <PayoutsAdminPage adminUser={user} payouts={[]} />;
       case 'reports': return <ReportsView reports={[]} onViewProfile={onViewProfile} onResolve={async () => {}} onDismiss={async () => {}} />;
+      case 'distress': return <DistressCallsAdminView />;
       default:
         return (
           <div className="space-y-8 animate-slide-up">
@@ -157,6 +160,10 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
                       <BellIcon className="h-7 w-7 text-brand-gold mx-auto mb-3 group-hover:scale-110 transition-transform" />
                       <p className="text-[10px] font-bold text-white uppercase tracking-wider">System Reports</p>
                     </button>
+                    <button onClick={() => setActiveView('distress')} className="p-6 bg-slate-900/50 hover:bg-slate-900 rounded-2xl border border-white/5 transition-all text-center group">
+                      <SirenIcon className="h-7 w-7 text-red-500 mx-auto mb-3 group-hover:scale-110 transition-transform" />
+                      <p className="text-[10px] font-bold text-white uppercase tracking-wider">Distress Calls</p>
+                    </button>
                   </div>
                </div>
             </div>
@@ -228,6 +235,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
           >
             <BellIcon className="h-4 w-4" />
             Reports
+          </button>
+          <button 
+            onClick={() => setActiveView('distress')}
+            className={`flex items-center gap-3 px-5 py-3.5 rounded-xl transition-all text-xs font-semibold ${activeView === 'distress' ? 'bg-brand-gold text-slate-950 shadow-md' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+          >
+            <SirenIcon className="h-4 w-4" />
+            Distress Calls
           </button>
         </div>
 

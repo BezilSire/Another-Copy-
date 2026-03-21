@@ -4,6 +4,7 @@ import {
     addDoc, 
     updateDoc, 
     doc, 
+    getDoc,
     serverTimestamp, 
     getDocs, 
     query, 
@@ -139,9 +140,11 @@ export const simulationService = {
      * Step 4: Generate Final Report
      */
     generateFinalReport: async (simId: string): Promise<void> => {
-        const simSnap = await getDocs(query(simulationsCollection, where('__name__', '==', simId)));
-        if (simSnap.empty) return;
-        const simData = simSnap.docs[0].data() as Simulation;
+        const simDocRef = doc(db, 'simulations', simId);
+        const simSnap = await getDoc(simDocRef);
+        
+        if (!simSnap.exists()) return;
+        const simData = simSnap.data() as Simulation;
         
         const messagesSnap = await getDocs(collection(db, `simulations/${simId}/messages`));
         const allMessages = messagesSnap.docs.map(d => d.data() as SimMessage);

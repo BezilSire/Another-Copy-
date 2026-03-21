@@ -65,6 +65,20 @@
         "content": { "type": "string" }
       },
       "required": ["simulationId", "agentId", "content"]
+    },
+    "DistressCall": {
+      "title": "DistressCall",
+      "description": "Emergency call for help from a member",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "userName": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["pending", "resolved", "dismissed"] },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "userName", "message", "status", "timestamp"]
     }
   },
   "firestore": {
@@ -87,6 +101,10 @@
     "/simulations/{simId}/messages/{msgId}": {
       "schema": "SimMessage",
       "description": "Messages in simulation"
+    },
+    "/distress_calls/{callId}": {
+      "schema": "DistressCall",
+      "description": "Emergency distress calls"
     }
   }
 }

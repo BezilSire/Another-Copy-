@@ -7,7 +7,30 @@ import { getMessaging, isSupported } from 'firebase/messaging';
 import { getFunctions } from 'firebase/functions';
 import firebaseConfig from '../firebase-applet-config.json';
 
-const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+const getFirebaseApiKey = () => {
+    try {
+        // @ts-ignore - Vite environment
+        if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env.VITE_FIREBASE_API_KEY) {
+            return (import.meta as any).env.VITE_FIREBASE_API_KEY;
+        }
+    } catch (e) {}
+    
+    try {
+        // Node.js environment
+        if (typeof process !== 'undefined' && process.env && process.env.VITE_FIREBASE_API_KEY) {
+            return process.env.VITE_FIREBASE_API_KEY;
+        }
+    } catch (e) {}
+    
+    return firebaseConfig.apiKey;
+};
+
+const config = {
+    ...firebaseConfig,
+    apiKey: getFirebaseApiKey()
+};
+
+const app = !getApps().length ? initializeApp(config) : getApp();
 
 export const auth = getAuth(app);
 
@@ -22,9 +45,16 @@ if (typeof window !== 'undefined') {
 }
 
 const firestoreId = (firebaseConfig as any).firestoreDatabaseId;
+
 export const db = (firestoreId && firestoreId !== '(default)') 
-    ? initializeFirestore(app, { ignoreUndefinedProperties: true, experimentalForceLongPolling: true }, firestoreId)
-    : initializeFirestore(app, { ignoreUndefinedProperties: true, experimentalForceLongPolling: true });
+    ? initializeFirestore(app, { 
+        ignoreUndefinedProperties: true,
+        experimentalAutoDetectLongPolling: true
+      }, firestoreId)
+    : initializeFirestore(app, { 
+        ignoreUndefinedProperties: true,
+        experimentalAutoDetectLongPolling: true
+      });
 
 export const storage = getStorage(app);
 export const rtdb = getDatabase(app);

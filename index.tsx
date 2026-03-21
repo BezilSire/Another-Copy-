@@ -21,7 +21,7 @@ if (!rootElement) throw new Error("Root not found");
  * If we are on the public explorer domain, we render the Ledger only.
  */
 const hostname = window.location.hostname;
-const isExplorer = false;
+const isExplorer = false; // Forced to false to ensure login page shows
     /*
     hostname.includes('scan') || 
     hostname.includes('ledger') || 
