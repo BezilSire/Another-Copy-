@@ -1,6 +1,6 @@
 
-import React from 'react';
-import ReactDOM from 'react-dom/client';
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
 import App from './App';
 import { ToastProvider } from './contexts/ToastContext';
 import { AuthProvider } from './contexts/AuthContext';
@@ -29,21 +29,21 @@ const isExplorer = false; // Forced to false to ensure login page shows
     (typeof process !== 'undefined' && process?.env?.SITE_MODE === 'EXPLORER');
     */
 
-const root = ReactDOM.createRoot(rootElement);
+const root = createRoot(rootElement);
 
 if (isExplorer) {
     root.render(
-        <React.StrictMode>
+        <StrictMode>
             <ErrorBoundary>
                 <ToastProvider>
                     <LedgerPage />
                 </ToastProvider>
             </ErrorBoundary>
-        </React.StrictMode>
+        </StrictMode>
     );
 } else {
     root.render(
-        <React.StrictMode>
+        <StrictMode>
             <ErrorBoundary>
                 <ToastProvider>
                     <ThemeProvider>
@@ -53,6 +53,6 @@ if (isExplorer) {
                     </ThemeProvider>
                 </ToastProvider>
             </ErrorBoundary>
-        </React.StrictMode>
+        </StrictMode>
     );
 }

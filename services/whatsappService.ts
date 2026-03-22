@@ -119,10 +119,11 @@ export const whatsappService = {
 
         // AI Parsing Logic for Zim Pulse
         try {
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-            const response = await ai.models.generateContent({
-                model: "gemini-3-flash-preview",
-                contents: `Extract commerce data from this WhatsApp message. 
+            const apiKey = process.env.OPENROUTER_API_KEY;
+            let result = null;
+
+            if (apiKey) {
+                const prompt = `Extract commerce data from this WhatsApp message. 
                 If it's an offer, need, or job, return JSON. 
                 If it's noise, return { "isNoise": true }.
                 
@@ -136,29 +137,88 @@ export const whatsappService = {
                     "location": string,
                     "contact": string,
                     "description": string
-                }`,
-                config: {
-                    responseMimeType: "application/json"
-                }
-            });
+                }`;
 
-            const result = JSON.parse(response.text || '{}');
-            if (result.isNoise) return;
+                const models = [
+                    "openrouter/auto", 
+                    "qwen/qwen-2.5-72b-instruct", 
+                    "qwen/qwen-3-80b-instruct:free", 
+                    "deepseek/deepseek-r1:free", 
+                    "google/gemini-2.0-flash-001"
+                ];
+                for (const model of models) {
+                    try {
+                        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                            method: "POST",
+                            headers: {
+                                "Authorization": `Bearer ${apiKey}`,
+                                "Content-Type": "application/json",
+                                "HTTP-Referer": "https://ubuntium.org",
+                                "X-Title": "Ubuntium Global Commons",
+                            },
+                            body: JSON.stringify({
+                                model,
+                                messages: [{ role: "user", content: prompt }],
+                                response_format: { type: "json_object" }
+                            }),
+                        });
+
+                        if (response.ok) {
+                            const data = await response.json();
+                            const content = data.choices?.[0]?.message?.content;
+                            if (content) {
+                                result = JSON.parse(content);
+                                break;
+                            }
+                        }
+                    } catch (e) {
+                        console.error(`OpenRouter Parsing Error (${model}):`, e);
+                    }
+                }
+            }
+
+            // Fallback to Gemini if OpenRouter fails or is not configured
+            if (!result) {
+                const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+                const response = await ai.models.generateContent({
+                    model: "gemini-3-flash-preview",
+                    contents: `Extract commerce data from this WhatsApp message. 
+                    If it's an offer, need, or job, return JSON. 
+                    If it's noise, return { "isNoise": true }.
+                    
+                    Message: "${text}"
+                    
+                    Format: {
+                        "isNoise": boolean,
+                        "type": "offer" | "need" | "job",
+                        "item": string,
+                        "price": string,
+                        "location": string,
+                        "contact": string,
+                        "description": string
+                    }`,
+                    config: {
+                        responseMimeType: "application/json"
+                    }
+                });
+                result = JSON.parse(response.text || '{}');
+            }
+
+            if (!result || result.isNoise) return;
 
             console.log(`[WA-${sessionId}] Extracted Commerce Event:`, result);
             
             // Save to Firestore (Zim Pulse)
-            const { addDoc, collection, serverTimestamp } = await import('firebase/firestore');
-            const { getDbInstance } = await import('./firebase');
-            const db = getDbInstance();
+            const { getAdminDb } = await import('./firebaseAdmin');
+            const db = await getAdminDb();
             
             if (db) {
-                await addDoc(collection(db, 'zim_pulse'), {
+                await db.collection('zim_pulse').add({
                     ...result,
                     source: isGroup ? 'group' : 'direct',
                     sessionId,
                     sender,
-                    timestamp: serverTimestamp()
+                    timestamp: new Date()
                 });
             } else {
                 console.warn(`[WA-${sessionId}] Firestore not configured, Zim Pulse event not saved.`);
@@ -214,15 +274,14 @@ export const whatsappService = {
 
     async recoverSessions() {
         try {
-            const { getDocs, collection } = await import('firebase/firestore');
-            const { getDbInstance } = await import('./firebase');
-            const db = getDbInstance();
+            const { getAdminDb } = await import('./firebaseAdmin');
+            const db = await getAdminDb();
             if (!db) {
                 console.warn('WhatsApp: Firestore not configured, session recovery skipped.');
                 return;
             }
-            const querySnapshot = await getDocs(collection(db, 'whatsapp_auth'));
-            const sessionIds = querySnapshot.docs.map(doc => doc.id);
+            const querySnapshot = await db.collection('whatsapp_sessions').get();
+            const sessionIds = querySnapshot.docs.map((doc: any) => doc.id);
             
             console.log(`Recovering ${sessionIds.length} WhatsApp sessions from Firestore...`);
             for (const sessionId of sessionIds) {

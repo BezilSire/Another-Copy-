@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { MemberDashboard } from './components/MemberDashboard';
 import { AuthPage } from './components/AuthPage';
@@ -20,7 +20,7 @@ import { RecoverySetup } from './components/RecoverySetup';
 import { AgenticShell } from './components/AgenticShell';
 import { GuardianOracle } from './components/GuardianOracle';
 
-const App: React.FC = () => {
+const App = () => {
   const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser } = useAuth();
   
   const isExplorer = false; // Forced to false to ensure login page shows

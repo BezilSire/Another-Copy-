@@ -10,16 +10,17 @@ import { getFunctions } from 'firebase/functions';
 let firebaseConfig: any = null;
 const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
 
+// Admin SDK for server-side operations to bypass security rules
+let adminApp: any = null;
+let adminDb: any = null;
+
 const getFirebaseConfig = () => {
     if (firebaseConfig !== null) return firebaseConfig;
     
     firebaseConfig = {};
     if (isNode) {
         try {
-            // In Node, we can use require if we are in CJS, but we are in ESM.
-            // We'll try to use sync fs if possible, but since we are in ESM, 
-            // we can't easily use require('fs').
-            // However, we can use process.env mostly.
+            // In Node, we can use process.env mostly.
         } catch (e) {}
     } else {
         try {
@@ -75,7 +76,7 @@ let functionsInstance: any = null;
 const getFirebaseApp = () => {
     if (!appInstance) {
         const config = getConfig();
-        if (!config.apiKey) {
+        if (!config.apiKey && !isNode) {
             console.warn("Firebase: No 'apiKey' provided in config. Firebase services will be unavailable.");
             appInstance = { isMock: true };
             return appInstance;
@@ -91,7 +92,7 @@ const getFirebaseApp = () => {
 
 // Helper to check if Firebase is properly configured
 export const isFirebaseConfigured = () => {
-    return !!getConfig().apiKey;
+    return !!getConfig().apiKey || isNode;
 };
 
 // Export getters instead of constants to ensure lazy initialization and caching
@@ -111,24 +112,29 @@ export const getDbInstance = () => {
     const firestoreId = getEnvVar('VITE_FIREBASE_FIRESTORE_DATABASE_ID') || (getFirebaseConfig() as any).firestoreDatabaseId;
     
     try {
-        dbInstance = (firestoreId && firestoreId !== '(default)') 
-            ? initializeFirestore(app, { 
-                ignoreUndefinedProperties: true,
-                experimentalAutoDetectLongPolling: true,
-                experimentalForceLongPolling: true
-              }, firestoreId)
-            : initializeFirestore(app, { 
-                ignoreUndefinedProperties: true,
-                experimentalAutoDetectLongPolling: true,
-                experimentalForceLongPolling: true
-              });
-    } catch (e) {
-        // If already initialized, we should use getFirestore if possible
-        console.debug("Firestore: Already initialized or failed to initialize with custom settings. Falling back to getFirestore.");
+        // Check if already initialized to avoid warnings
         dbInstance = (firestoreId && firestoreId !== '(default)') ? getFirestore(app, firestoreId) : getFirestore(app);
+    } catch (e) {
+        try {
+            dbInstance = (firestoreId && firestoreId !== '(default)') 
+                ? initializeFirestore(app, { 
+                    ignoreUndefinedProperties: true,
+                    experimentalAutoDetectLongPolling: true,
+                    experimentalForceLongPolling: true
+                  }, firestoreId)
+                : initializeFirestore(app, { 
+                    ignoreUndefinedProperties: true,
+                    experimentalAutoDetectLongPolling: true,
+                    experimentalForceLongPolling: true
+                  });
+        } catch (e2) {
+            dbInstance = (firestoreId && firestoreId !== '(default)') ? getFirestore(app, firestoreId) : getFirestore(app);
+        }
     }
     return dbInstance;
 };
+
+// Server-side Admin SDK instance moved to firebaseAdmin.ts to prevent client-side build errors
 
 export const getRtdbInstance = () => {
     if (rtdbInstance) return rtdbInstance;
@@ -162,7 +168,7 @@ export const storage = getStorageInstance();
 export const functions = getFunctionsInstance();
 
 const initPersistence = async () => {
-  if (!db) return;
+  if (!db || isNode) return;
   try {
     await enableMultiTabIndexedDbPersistence(db);
     console.log("Firestore: Persistence enabled.");

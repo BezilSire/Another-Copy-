@@ -1,6 +1,7 @@
 
 import { User } from '../types';
 import { safeJsonStringify } from '../utils';
+import { GoogleGenAI, Type } from "@google/genai";
 
 export interface AgentMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
@@ -12,38 +13,142 @@ export interface AgentMessage {
   widgets?: any[]; // For multiple widgets in a single response
 }
 
+const GEMINI_MODEL = "gemini-3-flash-preview";
+
 export const agentService = {
   async chat(messages: AgentMessage[], tools?: any[]) {
     // Strip non-serializable properties like 'widget' and 'widgets' before sending to API
     const serializableMessages = messages.map(({ widget, widgets, ...rest }) => rest);
     
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: safeJsonStringify({ messages: serializableMessages, tools }),
-    });
-
-    const text = await response.text();
-    let data;
     try {
-      data = text ? JSON.parse(text) : {};
-    } catch (e) {
-      console.error('Failed to parse Agent response:', text);
-      throw new Error('Agent returned an invalid response format.');
+      const response = await fetch('/api/chat', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: safeJsonStringify({ messages: serializableMessages, tools }),
+      });
+
+      const text = await response.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (e) {
+        console.error('Failed to parse Agent response:', text);
+        throw new Error('Agent returned an invalid response format.');
+      }
+
+      if (response.ok) {
+        if (!data.choices || data.choices.length === 0) {
+          console.error('Unexpected Agent Response:', data);
+          throw new Error('Agent returned an empty or invalid response.');
+        }
+        return data;
+      }
+
+      // If server-side chat fails, we'll try Gemini fallback below
+      console.warn('Server-side chat failed, attempting Gemini fallback...', data.error);
+    } catch (error) {
+      console.warn('Server-side chat failed with network error, attempting Gemini fallback...', error);
     }
 
-    if (!response.ok) {
-      throw new Error(data.error?.message || data.error || 'Failed to communicate with Agent');
+    // FALLBACK: Direct Gemini API call from frontend
+    return await this.geminiFallback(messages, tools);
+  },
+
+  async geminiFallback(messages: AgentMessage[], tools?: any[]) {
+    console.log('Using Gemini fallback...');
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      throw new Error('No AI service available. Please configure OpenRouter or Gemini API keys.');
     }
 
-    if (!data.choices || data.choices.length === 0) {
-      console.error('Unexpected Agent Response:', data);
-      throw new Error('Agent returned an empty or invalid response.');
-    }
+    const ai = new GoogleGenAI({ apiKey });
+    
+    // Convert messages to Gemini format
+    const systemInstruction = messages.find(m => m.role === 'system')?.content || '';
+    const chatMessages = messages
+      .filter(m => m.role !== 'system')
+      .map(m => {
+        const parts: any[] = [];
+        if (m.content) parts.push({ text: m.content });
+        
+        if (m.tool_calls) {
+          m.tool_calls.forEach(tc => {
+            parts.push({
+              functionCall: {
+                name: tc.function.name,
+                args: JSON.parse(tc.function.arguments)
+              }
+            });
+          });
+        }
 
-    return data;
+        if (m.role === 'tool') {
+          parts.push({
+            functionResponse: {
+              name: m.name || '',
+              response: { result: m.content }
+            }
+          });
+        }
+
+        return {
+          role: m.role === 'assistant' ? 'model' : 'user',
+          parts
+        };
+      });
+
+    // Convert tools to Gemini format
+    const geminiTools = tools ? [{
+      functionDeclarations: tools.map(t => ({
+        name: t.function.name,
+        description: t.function.description,
+        parameters: t.function.parameters
+      }))
+    }] : undefined;
+
+    try {
+      const response = await ai.models.generateContent({
+        model: GEMINI_MODEL,
+        contents: chatMessages,
+        config: {
+          systemInstruction,
+          tools: geminiTools as any,
+        }
+      });
+
+      const candidate = response.candidates?.[0];
+      if (!candidate || !candidate.content) throw new Error('Gemini returned no response content');
+
+      const parts = candidate.content.parts;
+      if (!parts) throw new Error('Gemini returned no response parts');
+
+      const textPart = parts.find(p => p.text);
+      const functionCallParts = parts.filter(p => p.functionCall);
+
+      const tool_calls = functionCallParts.map(p => ({
+        id: `call_${Math.random().toString(36).substr(2, 9)}`,
+        type: 'function',
+        function: {
+          name: p.functionCall!.name,
+          arguments: JSON.stringify(p.functionCall!.args)
+        }
+      }));
+
+      return {
+        choices: [{
+          message: {
+            role: 'assistant',
+            content: textPart?.text || '',
+            tool_calls: tool_calls.length > 0 ? tool_calls : undefined
+          }
+        }]
+      };
+    } catch (error: any) {
+      console.error('Gemini Fallback Error:', error);
+      throw new Error(`AI communication failed: ${error.message}`);
+    }
   },
 
   getProtocolSystemInstruction(user: User) {

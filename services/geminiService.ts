@@ -2,199 +2,92 @@ import { GoogleGenAI, Type } from "@google/genai";
 
 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 
-export const generateWelcomeMessage = async (name: string) => {
+const callAI = async (prompt: string, systemInstruction: string = "", jsonMode: boolean = false) => {
   try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Generate a short, inspiring, and futuristic welcome message for a new member named ${name} joining the Ubuntium Global Commons. Keep it under 50 words.`,
+    // Try server-side chat endpoint first (uses OpenRouter)
+    const response = await fetch('/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        messages: [
+          { role: 'system', content: systemInstruction || "You are a helpful AI assistant for the Ubuntium Global Commons." },
+          { role: 'user', content: prompt + (jsonMode ? " Respond ONLY with a valid JSON object." : "") }
+        ]
+      })
     });
-    return response.text || `Welcome, ${name}. Your node is now active in the Ubuntium Global Commons.`;
+
+    if (response.ok) {
+      const data = await response.json();
+      const content = data.choices?.[0]?.message?.content;
+      if (content) {
+        if (jsonMode) {
+          try {
+            // Clean up potential markdown code blocks
+            const cleanJson = content.replace(/```json/g, '').replace(/```/g, '').trim();
+            return JSON.parse(cleanJson);
+          } catch (e) {
+            console.error("Failed to parse JSON from OpenRouter:", e);
+          }
+        } else {
+          return content;
+        }
+      }
+    }
   } catch (error) {
-    console.error("Gemini error:", error);
-    return `Welcome, ${name}. Your node is now active in the Ubuntium Global Commons.`;
+    console.error("OpenRouter call failed, falling back to Gemini:", error);
   }
+
+  // Fallback to Gemini
+  try {
+    const geminiResponse = await ai.models.generateContent({
+      model: "gemini-3-flash-preview",
+      contents: prompt,
+      config: {
+        systemInstruction,
+        responseMimeType: jsonMode ? "application/json" : "text/plain"
+      }
+    });
+    const text = geminiResponse.text || "";
+    return jsonMode ? JSON.parse(text || '{}') : text;
+  } catch (error) {
+    console.error("Gemini fallback failed:", error);
+    return jsonMode ? {} : "";
+  }
+};
+
+export const generateWelcomeMessage = async (name: string) => {
+  const prompt = `Generate a short, inspiring, and futuristic welcome message for a new member named ${name} joining the Ubuntium Global Commons. Keep it under 50 words.`;
+  const result = await callAI(prompt);
+  return result || `Welcome, ${name}. Your node is now active in the Ubuntium Global Commons.`;
 };
 
 export const generateProjectIdea = async (skills: string[], interests: string[]) => {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Generate a detailed project idea for the Ubuntium Global Commons based on these skills: ${skills.join(', ')} and interests: ${interests.join(', ')}.`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            projectName: { type: Type.STRING },
-            category: { type: Type.STRING },
-            justification: {
-              type: Type.OBJECT,
-              properties: {
-                opportunity: { type: Type.STRING },
-                dataBackedReasoning: { type: Type.STRING }
-              },
-              required: ["opportunity", "dataBackedReasoning"]
-            },
-            requirements: {
-              type: Type.OBJECT,
-              properties: {
-                equipment: { type: Type.ARRAY, items: { type: Type.STRING } },
-                materials: { type: Type.ARRAY, items: { type: Type.STRING } },
-                skills: { type: Type.ARRAY, items: { type: Type.STRING } }
-              },
-              required: ["equipment", "materials", "skills"]
-            },
-            budgetBreakdown: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  item: { type: Type.STRING },
-                  cost: { type: Type.NUMBER },
-                  notes: { type: Type.STRING }
-                },
-                required: ["item", "cost", "notes"]
-              }
-            },
-            totalEstimatedCost: { type: Type.NUMBER },
-            executionPlan: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  step: { type: Type.NUMBER },
-                  action: { type: Type.STRING },
-                  details: { type: Type.STRING }
-                },
-                required: ["step", "action", "details"]
-              }
-            },
-            impactSummary: { type: Type.STRING }
-          },
-          required: ["projectName", "category", "justification", "requirements", "budgetBreakdown", "totalEstimatedCost", "executionPlan", "impactSummary"]
-        }
-      }
-    });
-    return JSON.parse(response.text || '{}');
-  } catch (error) {
-    console.error("Gemini error:", error);
-    throw error;
-  }
+  const prompt = `Generate a detailed project idea for the Ubuntium Global Commons based on these skills: ${skills.join(', ')} and interests: ${interests.join(', ')}. 
+  Return a JSON object with: projectName, category, justification (opportunity, dataBackedReasoning), requirements (equipment, materials, skills), budgetBreakdown (item, cost, notes), totalEstimatedCost, executionPlan (step, action, details), impactSummary.`;
+  return await callAI(prompt, "", true);
 };
 
 export const elaborateBusinessIdea = async (idea: string) => {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Elaborate on this business idea for a community venture: "${idea}". Provide a structured plan including suggested names, a detailed plan, and an impact analysis.`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            suggestedNames: { type: Type.ARRAY, items: { type: Type.STRING } },
-            detailedPlan: { type: Type.STRING },
-            impactAnalysis: {
-              type: Type.OBJECT,
-              properties: {
-                score: { type: Type.NUMBER },
-                reasoning: { type: Type.STRING }
-              },
-              required: ["score", "reasoning"]
-            }
-          },
-          required: ["suggestedNames", "detailedPlan", "impactAnalysis"]
-        }
-      }
-    });
-    return JSON.parse(response.text || '{}');
-  } catch (error) {
-    console.error("Gemini error:", error);
-    return {
-      suggestedNames: ["Community Venture"],
-      detailedPlan: "Plan for: " + idea,
-      impactAnalysis: { score: 70, reasoning: "Default impact analysis." }
-    };
-  }
+  const prompt = `Elaborate on this business idea for a community venture: "${idea}". 
+  Return a JSON object with: suggestedNames (array), detailedPlan (string), impactAnalysis (score, reasoning).`;
+  return await callAI(prompt, "", true);
 };
 
 export const analyzeTargetMarket = async (plan: string, market: string) => {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Analyze the target market "${market}" for this venture plan: "${plan}". Identify client personas and required skills for the team.`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            personas: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  name: { type: Type.STRING },
-                  demographics: { type: Type.STRING },
-                  needs: { type: Type.STRING },
-                  painPoints: { type: Type.STRING }
-                },
-                required: ["name", "demographics", "needs", "painPoints"]
-              }
-            },
-            requiredSkills: { type: Type.ARRAY, items: { type: Type.STRING } }
-          },
-          required: ["personas", "requiredSkills"]
-        }
-      }
-    });
-    return JSON.parse(response.text || '{}');
-  } catch (error) {
-    console.error("Gemini error:", error);
-    return {
-      personas: [{ name: "General User", demographics: "All", needs: "Access", painPoints: "None" }],
-      requiredSkills: ["Management"]
-    };
-  }
+  const prompt = `Analyze the target market "${market}" for this venture plan: "${plan}". 
+  Return a JSON object with: personas (array of {name, demographics, needs, painPoints}), requiredSkills (array).`;
+  return await callAI(prompt, "", true);
 };
 
 export const generatePitchDeck = async (plan: string) => {
-  try {
-    const response = await ai.models.generateContent({
-      model: "gemini-3-flash-preview",
-      contents: `Generate a 5-slide pitch deck outline for this venture plan: "${plan}".`,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            slides: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  title: { type: Type.STRING },
-                  content: { type: Type.STRING }
-                },
-                required: ["title", "content"]
-              }
-            }
-          },
-          required: ["title", "slides"]
-        }
-      }
-    });
-    return JSON.parse(response.text || '{}');
-  } catch (error) {
-    console.error("Gemini error:", error);
-    return {
-      title: "Pitch Deck",
-      slides: [{ title: "Introduction", content: "Venture Overview" }]
-    };
-  }
+  const prompt = `Generate a 5-slide pitch deck outline for this venture plan: "${plan}". 
+  Return a JSON object with: title, slides (array of {title, content}).`;
+  return await callAI(prompt, "", true);
 };
 
 export const initializeChat = async (systemInstruction: string) => {
+    // For direct chat, we still use Gemini as a base if needed, 
+    // but the main AgenticShell uses agentService which uses /api/chat.
     return ai.chats.create({
         model: "gemini-3-flash-preview",
         config: { systemInstruction }
@@ -202,6 +95,9 @@ export const initializeChat = async (systemInstruction: string) => {
 };
 
 export const getChatBotResponse = async (chat: any, message: string) => {
+    // Try to use the common AI caller if possible, but chat objects are stateful.
+    // For simplicity, we'll keep the chat object logic but it will use Gemini.
+    // The main app uses AgenticShell which is already updated to use OpenRouter.
     try {
         const response = await chat.sendMessage({ message });
         return response.text || "I'm sorry, I couldn't process that request.";

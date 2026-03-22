@@ -9,7 +9,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { serverTimestamp } from "firebase/firestore";
+// No client SDK imports on server
 
 process.on("uncaughtException", (err) => {
   console.error("CRITICAL: Uncaught Exception:", err);
@@ -149,27 +149,56 @@ SECURITY & PRIVACY RULES:
           { role: "user", content: text }
         ];
 
-        let response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${apiKey}`,
-            "Content-Type": "application/json",
-            "HTTP-Referer": "https://ubuntium.org",
-            "X-Title": "Ubuntium Global Commons",
-          },
-          body: JSON.stringify({
-            model: "qwen/qwen-2.5-72b-instruct",
-            messages,
-            tools: SERVER_TOOLS.map(t => ({ type: "function", function: t })),
-            tool_choice: "auto",
-          }),
-        });
+        const models = [
+          "openrouter/auto",
+          "qwen/qwen-2.5-72b-instruct",
+          "qwen/qwen-3-80b-instruct:free",
+          "deepseek/deepseek-r1:free",
+          "google/gemini-2.0-flash-001",
+          "anthropic/claude-3-haiku",
+          "openai/gpt-4o-mini"
+        ];
 
-        if (response.ok) {
-          let data = await response.json();
-          let assistantMessage = data.choices?.[0]?.message;
+        let assistantMessage = null;
+        let success = false;
 
-          if (assistantMessage?.tool_calls) {
+        for (const model of models) {
+          try {
+            console.log(`WhatsApp Agent: Attempting with model ${model}...`);
+            const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+              method: "POST",
+              headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://ubuntium.org",
+                "X-Title": "Ubuntium Global Commons",
+              },
+              body: JSON.stringify({
+                model,
+                messages,
+                tools: SERVER_TOOLS.map(t => ({ type: "function", function: t })),
+                tool_choice: "auto",
+              }),
+            });
+
+            if (response.ok) {
+              const data = await response.json();
+              assistantMessage = data.choices?.[0]?.message;
+              if (assistantMessage) {
+                success = true;
+                console.log(`WhatsApp Agent: Success with model ${model}`);
+                break;
+              }
+            } else {
+              console.error(`WhatsApp Agent Error (${model}):`, await response.text());
+            }
+          } catch (err) {
+            console.error(`WhatsApp Agent Fetch Error (${model}):`, err);
+          }
+        }
+
+        if (success && assistantMessage) {
+          if (assistantMessage.tool_calls) {
             messages.push(assistantMessage);
             for (const toolCall of assistantMessage.tool_calls) {
               let args = {};
@@ -187,35 +216,48 @@ SECURITY & PRIVACY RULES:
               } as any);
             }
 
-            // Get final response
-            const finalResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-              method: "POST",
-              headers: {
-                "Authorization": `Bearer ${apiKey}`,
-                "Content-Type": "application/json",
-                "HTTP-Referer": "https://ubuntium.org",
-                "X-Title": "Ubuntium Global Commons",
-              },
-              body: JSON.stringify({
-                model: "qwen/qwen-2.5-72b-instruct",
-                messages,
-              }),
-            });
+            // Get final response with fallback loop
+            let finalReply = null;
+            for (const model of models) {
+              try {
+                console.log(`WhatsApp Agent (Final): Attempting with model ${model}...`);
+                const finalResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+                  method: "POST",
+                  headers: {
+                    "Authorization": `Bearer ${apiKey}`,
+                    "Content-Type": "application/json",
+                    "HTTP-Referer": "https://ubuntium.org",
+                    "X-Title": "Ubuntium Global Commons",
+                  },
+                  body: JSON.stringify({
+                    model,
+                    messages,
+                  }),
+                });
 
-            if (finalResponse.ok) {
-              const finalData = await finalResponse.json();
-              const reply = finalData.choices?.[0]?.message?.content;
-              if (reply) {
-                await whatsappService.sendMessage(userId, from, reply);
+                if (finalResponse.ok) {
+                  const finalData = await finalResponse.json();
+                  finalReply = finalData.choices?.[0]?.message?.content;
+                  if (finalReply) {
+                    console.log(`WhatsApp Agent (Final): Success with model ${model}`);
+                    break;
+                  }
+                } else {
+                  console.error(`WhatsApp Agent Final Error (${model}):`, await finalResponse.text());
+                }
+              } catch (err) {
+                console.error(`WhatsApp Agent Final Fetch Error (${model}):`, err);
               }
-            } else {
-              console.error("OpenRouter Final Response Error:", await finalResponse.text());
             }
-          } else if (assistantMessage?.content) {
+
+            if (finalReply) {
+              await whatsappService.sendMessage(userId, from, finalReply);
+            }
+          } else if (assistantMessage.content) {
             await whatsappService.sendMessage(userId, from, assistantMessage.content);
           }
         } else {
-          console.error("OpenRouter Response Error:", await response.text());
+          console.error("WhatsApp Agent: All models failed to respond.");
         }
       } catch (err) {
         console.error("WhatsApp Agent Error:", err);
@@ -365,7 +407,7 @@ SECURITY & PRIVACY RULES:
             senderId,
             receiverId,
             amount,
-            timestamp: serverTimestamp(),
+            timestamp: new Date(),
             type: 'TRANSFER',
             protocol_mode: 'DIRECT',
             memo: memo || 'MCP Dispatch',
@@ -415,51 +457,77 @@ SECURITY & PRIVACY RULES:
     const apiKey = process.env.OPENROUTER_API_KEY;
 
     if (!apiKey) {
-      return res.status(500).json({ error: "OPENROUTER_API_KEY not configured on server" });
-    }
-
-    try {
-      const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json",
-          "HTTP-Referer": "https://ubuntium.org",
-          "X-Title": "Ubuntium Global Commons",
-        },
-        body: JSON.stringify({
-          model: "qwen/qwen-2.5-72b-instruct",
-          messages,
-          tools: tools || [],
-          tool_choice: tools ? "auto" : undefined,
-          max_tokens: 4096,
-        }),
+      console.error("OpenRouter Error: OPENROUTER_API_KEY is missing");
+      return res.status(500).json({ 
+        error: "OPENROUTER_API_KEY not configured. Please add it to your environment variables in the settings menu.",
+        code: "MISSING_API_KEY"
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error("OpenRouter Error Response:", errorText);
-        try {
-          const errorData = JSON.parse(errorText);
-          return res.status(response.status).json(errorData);
-        } catch {
-          return res.status(response.status).json({ error: errorText });
-        }
-      }
-
-      const text = await response.text();
-      let data;
-      try {
-        data = text ? JSON.parse(text) : {};
-      } catch (e) {
-        console.error("Failed to parse OpenRouter response:", text);
-        return res.status(500).json({ error: "Invalid response from AI provider" });
-      }
-      res.json(data);
-    } catch (error: any) {
-      console.error("OpenRouter Fetch Error:", error);
-      res.status(500).json({ error: error.message || "Internal Server Error" });
     }
+
+    // List of models to try in order of preference
+    const models = [
+      "openrouter/auto",
+      "qwen/qwen-2.5-72b-instruct",
+      "qwen/qwen-3-80b-instruct:free",
+      "deepseek/deepseek-r1:free",
+      "google/gemini-2.0-flash-001",
+      "anthropic/claude-3-haiku",
+      "openai/gpt-4o-mini"
+    ];
+
+    let lastError = null;
+
+    for (const model of models) {
+      try {
+        console.log(`OpenRouter: Attempting chat with model ${model}...`);
+        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${apiKey}`,
+            "Content-Type": "application/json",
+            "HTTP-Referer": "https://ubuntium.org",
+            "X-Title": "Ubuntium Global Commons",
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            tools: tools || [],
+            tool_choice: tools ? "auto" : undefined,
+            max_tokens: 4096,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          if (data.choices && data.choices.length > 0) {
+            console.log(`OpenRouter: Success with model ${model}`);
+            return res.json(data);
+          }
+        }
+
+        const errorText = await response.text();
+        console.error(`OpenRouter Error (${model}):`, errorText);
+        lastError = errorText;
+
+        // If it's a 401, don't bother trying other models
+        if (response.status === 401) {
+          return res.status(401).json({ 
+            error: "Invalid OpenRouter API Key. Please check your settings.",
+            code: "INVALID_API_KEY"
+          });
+        }
+
+      } catch (error: any) {
+        console.error(`OpenRouter Fetch Error (${model}):`, error);
+        lastError = error.message;
+      }
+    }
+
+    res.status(500).json({ 
+      error: "Failed to communicate with any AI model via OpenRouter.",
+      details: lastError,
+      code: "ALL_MODELS_FAILED"
+    });
   });
 
   // Vite Middleware for Development (Non-blocking initialization)

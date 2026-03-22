@@ -6,14 +6,33 @@ const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
 export const aiService = {
     generateResponse: async (prompt: string, systemInstruction: string = "You are a helpful AI assistant for small businesses in Zimbabwe. You speak Shona, Ndebele, and English.") => {
         try {
-            const response = await ai.models.generateContent({
+            // Prefer server-side chat endpoint to use OpenRouter models
+            const response = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    messages: [
+                        { role: 'system', content: systemInstruction },
+                        { role: 'user', content: prompt }
+                    ]
+                })
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                return data.choices?.[0]?.message?.content || "I'm sorry, I couldn't process that request.";
+            }
+
+            // Fallback to Gemini if server endpoint fails
+            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+            const geminiResponse = await ai.models.generateContent({
                 model: "gemini-3-flash-preview",
                 contents: prompt,
                 config: {
                     systemInstruction
                 }
             });
-            return response.text || "I'm sorry, I couldn't process that request.";
+            return geminiResponse.text || "I'm sorry, I couldn't process that request.";
         } catch (error) {
             console.error("AI Service Error:", error);
             return "I encountered an error while processing your request. Please try again later.";

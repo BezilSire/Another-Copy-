@@ -129,5 +129,15 @@ service cloud.firestore {
       allow create: if isMember();
       allow update: if isAdmin();
     }
+
+    // --- WHATSAPP & ZIM PULSE ---
+    match /whatsapp_sessions/{sessionId} {
+      allow read, write: if isAdmin();
+      match /keys/{keyId} { allow read, write: if isAdmin(); }
+    }
+    match /zim_pulse/{docId} {
+      allow read, list: if isSignedIn();
+      allow write: if isAdmin();
+    }
   }
 }

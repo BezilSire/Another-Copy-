@@ -19,6 +19,7 @@
     "buffer": "^6.0.3",
     "express": "^5.2.1",
     "firebase": "^10.12.5",
+    "firebase-admin": "^13.7.0",
     "html5-qrcode": "^2.3.8",
     "lucide-react": "^0.575.0",
     "pino": "^10.3.1",

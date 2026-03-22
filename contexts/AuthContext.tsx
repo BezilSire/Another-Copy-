@@ -1,5 +1,5 @@
 
-import React, { createContext, useState, useEffect, useContext, ReactNode, useCallback, useRef } from 'react';
+import { createContext, useState, useEffect, useContext, ReactNode, useCallback, useRef } from 'react';
 import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInAnonymously, sendEmailVerification, signInWithEmailAndPassword } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
 import { useToast } from './ToastContext';
@@ -27,7 +27,7 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const auth = getAuthInstance();
   const db = getDbInstance();
   const [currentUser, setCurrentUser] = useState<User | null>(null);

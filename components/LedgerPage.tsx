@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { UbtTransaction, GlobalEconomy, Block, User } from '../types';
 import { api } from '../services/apiService';
 import { auth } from '../services/firebase';
@@ -16,7 +16,7 @@ import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 import { safeJsonStringify } from '../utils';
 
-export const LedgerPage: React.FC = () => {
+export const LedgerPage = () => {
   const [transactions, setTransactions] = useState<UbtTransaction[]>([]);
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [mempool, setMempool] = useState<UbtTransaction[]>([]);

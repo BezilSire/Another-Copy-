@@ -6,41 +6,31 @@ import {
     BufferJSON, 
     proto 
 } from '@whiskeysockets/baileys';
-import { 
-    doc, 
-    getDoc, 
-    setDoc, 
-    deleteDoc, 
-    collection, 
-    getDocs, 
-    query, 
-    where,
-    writeBatch
-} from 'firebase/firestore';
-import { getDbInstance } from './firebase';
+import { getAdminDb } from './firebaseAdmin';
 
 /**
- * Custom Firestore-backed authentication state for Baileys.
- * This ensures WhatsApp sessions persist across server restarts in containerized environments.
+ * Custom Firestore-backed authentication state for Baileys using Firebase Admin SDK.
+ * This ensures WhatsApp sessions persist across server restarts and bypasses security rules.
  */
 export const useFirestoreAuthState = async (sessionId: string): Promise<{ state: AuthenticationState, saveCreds: () => Promise<void> }> => {
-    const db = getDbInstance();
+    const db = await getAdminDb();
     if (!db) {
-        throw new Error("Firestore is not configured. Cannot use FirestoreAuthState.");
+        throw new Error("Firestore Admin SDK is not configured. Cannot use FirestoreAuthState.");
     }
-    const sessionDoc = doc(db, 'whatsapp_sessions', sessionId);
-    const keysCol = collection(sessionDoc, 'keys');
+    
+    const sessionDoc = db.collection('whatsapp_sessions').doc(sessionId);
+    const keysCol = sessionDoc.collection('keys');
 
     const writeData = async (data: any, id: string) => {
         const json = JSON.stringify(data, BufferJSON.replacer);
-        await setDoc(doc(keysCol, id), { data: json });
+        await keysCol.doc(id).set({ data: json });
     };
 
     const readData = async (id: string) => {
         try {
-            const d = await getDoc(doc(keysCol, id));
-            if (d.exists()) {
-                return JSON.parse(d.data().data, BufferJSON.reviver);
+            const d = await keysCol.doc(id).get();
+            if (d.exists) {
+                return JSON.parse(d.data()!.data, BufferJSON.reviver);
             }
         } catch (error) {
             console.error(`Error reading key ${id} from Firestore:`, error);
@@ -50,17 +40,17 @@ export const useFirestoreAuthState = async (sessionId: string): Promise<{ state:
 
     const removeData = async (id: string) => {
         try {
-            await deleteDoc(doc(keysCol, id));
+            await keysCol.doc(id).delete();
         } catch (error) {
             console.error(`Error deleting key ${id} from Firestore:`, error);
         }
     };
 
     // Load initial creds
-    const credsDoc = await getDoc(sessionDoc);
+    const credsDoc = await sessionDoc.get();
     let creds: AuthenticationCreds;
-    if (credsDoc.exists() && credsDoc.data().creds) {
-        creds = JSON.parse(credsDoc.data().creds, BufferJSON.reviver);
+    if (credsDoc.exists && credsDoc.data()?.creds) {
+        creds = JSON.parse(credsDoc.data()!.creds, BufferJSON.reviver);
     } else {
         creds = initAuthCreds();
     }
@@ -100,7 +90,7 @@ export const useFirestoreAuthState = async (sessionId: string): Promise<{ state:
             }
         },
         saveCreds: async () => {
-            await setDoc(sessionDoc, { 
+            await sessionDoc.set({ 
                 creds: JSON.stringify(creds, BufferJSON.replacer),
                 updatedAt: new Date().toISOString()
             }, { merge: true });

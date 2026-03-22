@@ -1,11 +1,10 @@
-import React from 'react';
 import { useToast } from '../contexts/ToastContext';
 import { XCircleIcon } from './icons/XCircleIcon';
 import { CheckCircleIcon } from './icons/CheckCircleIcon';
 import { InfoIcon } from './icons/InfoIcon';
 import { AlertTriangleIcon } from './icons/AlertTriangleIcon';
 
-export const ToastContainer: React.FC = () => {
+export const ToastContainer = () => {
   const { toasts, removeToast } = useToast();
 
   return (
