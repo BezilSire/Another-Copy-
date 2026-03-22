@@ -1,15 +1,36 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
 import { getAuth, setPersistence, browserLocalPersistence } from 'firebase/auth';
-import { initializeFirestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
+import { initializeFirestore, getFirestore, enableMultiTabIndexedDbPersistence } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getDatabase } from 'firebase/database';
 import { getMessaging, isSupported } from 'firebase/messaging';
 import { getFunctions } from 'firebase/functions';
 
-// Safely attempt to load the local config file if it exists (it won't exist on Vercel/GitHub)
-// @ts-ignore
-const localConfigs = import.meta.glob('../firebase-applet-config.json', { eager: true });
-const firebaseConfig: any = (localConfigs['../firebase-applet-config.json'] as any)?.default || {};
+// Safely attempt to load the local config file if it exists
+let firebaseConfig: any = null;
+const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
+
+const getFirebaseConfig = () => {
+    if (firebaseConfig !== null) return firebaseConfig;
+    
+    firebaseConfig = {};
+    if (isNode) {
+        try {
+            // In Node, we can use require if we are in CJS, but we are in ESM.
+            // We'll try to use sync fs if possible, but since we are in ESM, 
+            // we can't easily use require('fs').
+            // However, we can use process.env mostly.
+        } catch (e) {}
+    } else {
+        try {
+            // In Vite environment (client-side)
+            // @ts-ignore
+            const localConfigs = import.meta.glob('../firebase-applet-config.json', { eager: true });
+            firebaseConfig = (localConfigs['../firebase-applet-config.json'] as any)?.default || {};
+        } catch (e) {}
+    }
+    return firebaseConfig;
+};
 
 const getEnvVar = (key: string) => {
     try {
@@ -29,48 +50,119 @@ const getEnvVar = (key: string) => {
     return null;
 };
 
-const config = {
-    apiKey: getEnvVar('VITE_FIREBASE_API_KEY') || firebaseConfig.apiKey,
-    authDomain: getEnvVar('VITE_FIREBASE_AUTH_DOMAIN') || firebaseConfig.authDomain,
-    projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID') || firebaseConfig.projectId,
-    storageBucket: getEnvVar('VITE_FIREBASE_STORAGE_BUCKET') || firebaseConfig.storageBucket,
-    messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID') || firebaseConfig.messagingSenderId,
-    appId: getEnvVar('VITE_FIREBASE_APP_ID') || firebaseConfig.appId,
-    measurementId: getEnvVar('VITE_FIREBASE_MEASUREMENT_ID') || firebaseConfig.measurementId,
-    databaseURL: getEnvVar('VITE_FIREBASE_DATABASE_URL') || firebaseConfig.databaseURL,
+const getConfig = () => {
+    const fbConfig = getFirebaseConfig();
+    return {
+        apiKey: getEnvVar('VITE_FIREBASE_API_KEY') || fbConfig.apiKey,
+        authDomain: getEnvVar('VITE_FIREBASE_AUTH_DOMAIN') || fbConfig.authDomain,
+        projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID') || fbConfig.projectId,
+        storageBucket: getEnvVar('VITE_FIREBASE_STORAGE_BUCKET') || fbConfig.storageBucket,
+        messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID') || fbConfig.messagingSenderId,
+        appId: getEnvVar('VITE_FIREBASE_APP_ID') || fbConfig.appId,
+        measurementId: getEnvVar('VITE_FIREBASE_MEASUREMENT_ID') || fbConfig.measurementId,
+        databaseURL: getEnvVar('VITE_FIREBASE_DATABASE_URL') || fbConfig.databaseURL,
+    };
 };
 
-const app = !getApps().length ? initializeApp(config) : getApp();
+// Lazy initialization to prevent crashes if config is missing during server startup
+let appInstance: any = null;
+let authInstance: any = null;
+let dbInstance: any = null;
+let rtdbInstance: any = null;
+let storageInstance: any = null;
+let functionsInstance: any = null;
 
-export const auth = getAuth(app);
+const getFirebaseApp = () => {
+    if (!appInstance) {
+        const config = getConfig();
+        if (!config.apiKey) {
+            console.warn("Firebase: No 'apiKey' provided in config. Firebase services will be unavailable.");
+            appInstance = { isMock: true };
+            return appInstance;
+        }
+        try {
+            appInstance = !getApps().length ? initializeApp(config) : getApp();
+        } catch (e) {
+            appInstance = getApp();
+        }
+    }
+    return appInstance;
+};
 
-// Set persistence as early as possible
-if (typeof window !== 'undefined') {
-    console.log("Auth: Initializing persistence...");
-    setPersistence(auth, browserLocalPersistence).then(() => {
-        console.log("Auth: Persistence set to local.");
-    }).catch(err => {
-        console.error("Auth: Persistence initialization failed:", err);
-    });
-}
+// Helper to check if Firebase is properly configured
+export const isFirebaseConfigured = () => {
+    return !!getConfig().apiKey;
+};
 
-const firestoreId = getEnvVar('VITE_FIREBASE_FIRESTORE_DATABASE_ID') || (firebaseConfig as any).firestoreDatabaseId;
+// Export getters instead of constants to ensure lazy initialization and caching
+export const getAuthInstance = () => {
+    if (authInstance) return authInstance;
+    const app = getFirebaseApp();
+    if (app.isMock) return null;
+    authInstance = getAuth(app);
+    return authInstance;
+};
 
-export const db = (firestoreId && firestoreId !== '(default)') 
-    ? initializeFirestore(app, { 
-        ignoreUndefinedProperties: true,
-        experimentalAutoDetectLongPolling: true
-      }, firestoreId)
-    : initializeFirestore(app, { 
-        ignoreUndefinedProperties: true,
-        experimentalAutoDetectLongPolling: true
-      });
+export const getDbInstance = () => {
+    if (dbInstance) return dbInstance;
+    const app = getFirebaseApp();
+    if (app.isMock) return null;
+    
+    const firestoreId = getEnvVar('VITE_FIREBASE_FIRESTORE_DATABASE_ID') || (getFirebaseConfig() as any).firestoreDatabaseId;
+    
+    try {
+        dbInstance = (firestoreId && firestoreId !== '(default)') 
+            ? initializeFirestore(app, { 
+                ignoreUndefinedProperties: true,
+                experimentalAutoDetectLongPolling: true,
+                experimentalForceLongPolling: true
+              }, firestoreId)
+            : initializeFirestore(app, { 
+                ignoreUndefinedProperties: true,
+                experimentalAutoDetectLongPolling: true,
+                experimentalForceLongPolling: true
+              });
+    } catch (e) {
+        // If already initialized, we should use getFirestore if possible
+        console.debug("Firestore: Already initialized or failed to initialize with custom settings. Falling back to getFirestore.");
+        dbInstance = (firestoreId && firestoreId !== '(default)') ? getFirestore(app, firestoreId) : getFirestore(app);
+    }
+    return dbInstance;
+};
 
-export const storage = getStorage(app);
-export const rtdb = getDatabase(app);
-export const functions = getFunctions(app);
+export const getRtdbInstance = () => {
+    if (rtdbInstance) return rtdbInstance;
+    const app = getFirebaseApp();
+    if (app.isMock) return null;
+    rtdbInstance = getDatabase(app);
+    return rtdbInstance;
+};
+
+export const getStorageInstance = () => {
+    if (storageInstance) return storageInstance;
+    const app = getFirebaseApp();
+    if (app.isMock) return null;
+    storageInstance = getStorage(app);
+    return storageInstance;
+};
+
+export const getFunctionsInstance = () => {
+    if (functionsInstance) return functionsInstance;
+    const app = getFirebaseApp();
+    if (app.isMock) return null;
+    functionsInstance = getFunctions(app);
+    return functionsInstance;
+};
+
+// For backward compatibility in client-side code
+export const auth = getAuthInstance();
+export const db = getDbInstance();
+export const rtdb = getRtdbInstance();
+export const storage = getStorageInstance();
+export const functions = getFunctionsInstance();
 
 const initPersistence = async () => {
+  if (!db) return;
   try {
     await enableMultiTabIndexedDbPersistence(db);
     console.log("Firestore: Persistence enabled.");
@@ -94,7 +186,7 @@ export const getMessagingInstance = async () => {
   try {
     const isMessagingSupported = await isSupported();
     if (isMessagingSupported) {
-      return getMessaging(app);
+      return getMessaging(getFirebaseApp());
     }
     return null;
   } catch (error) {

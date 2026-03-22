@@ -12,7 +12,7 @@ import {
     updateDoc,
     Timestamp
 } from 'firebase/firestore';
-import { db } from '../services/firebase';
+import { getDbInstance } from '../services/firebase';
 import { User, Simulation, SimAgent, SimMessage } from '../types';
 import { simulationService } from '../services/simulationService';
 import { api, OperationType } from '../services/apiService';
@@ -248,6 +248,7 @@ interface GuardianOracleProps {
 }
 
 export const GuardianOracle: React.FC<GuardianOracleProps> = ({ user, onBack }) => {
+    const db = getDbInstance();
     const [simulations, setSimulations] = useState<Simulation[]>([]);
     const [activeSimId, setActiveSimId] = useState<string | null>(null);
     const [messages, setMessages] = useState<SimMessage[]>([]);
@@ -262,7 +263,7 @@ export const GuardianOracle: React.FC<GuardianOracleProps> = ({ user, onBack }) 
     const chatEndRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        if (!user?.id) return;
+        if (!user?.id || !db) return;
 
         const q = query(
             collection(db, 'simulations'),
@@ -275,7 +276,7 @@ export const GuardianOracle: React.FC<GuardianOracleProps> = ({ user, onBack }) 
     }, [user.id]);
 
     useEffect(() => {
-        if (!activeSimId) return;
+        if (!activeSimId || !db) return;
 
         const agentsQ = collection(db, `simulations/${activeSimId}/agents`);
         const messagesQ = query(

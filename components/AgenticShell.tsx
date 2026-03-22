@@ -17,6 +17,7 @@ import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { SirenIcon } from './icons/SirenIcon';
 import { WalletDashboard } from './WalletDashboard';
 import { WhatsAppLink } from './WhatsAppLink';
+import { WhatsAppManager } from './WhatsAppManager';
 import { DistressCallModal } from './DistressCallModal';
 import ReactMarkdown from 'react-markdown';
 
@@ -99,6 +100,21 @@ const TOOLS = [
   {
     type: "function",
     function: {
+      name: "search_zim_pulse",
+      description: "Search the real-time Zimbabwe commerce pulse for offers, needs, or jobs (Maize, Transport, USD/ZiG rates, etc).",
+      parameters: {
+        type: "object",
+        properties: {
+          query: { type: "string", description: "The item or service to search for (e.g. 'Maize', 'Truck for hire')" },
+          location: { type: "string", description: "Optional location filter (e.g. 'Harare', 'Bulawayo')" }
+        },
+        required: ["query"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
       name: "get_security_status",
       description: "Check the cryptographic security status of your node, including vault and key anchors.",
       parameters: { type: "object", properties: {} }
@@ -126,6 +142,7 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
   const [isLoading, setIsLoading] = useState(false);
   const [showWhatsApp, setShowWhatsApp] = useState(false);
   const [isDistressModalOpen, setIsDistressModalOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'chat' | 'network'>('chat');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { addToast } = useToast();
 
@@ -438,6 +455,32 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
           );
           return { result: `Displayed the global public ledger with ${txs.length} transactions.`, widget };
         }
+        case 'search_zim_pulse': {
+          const results = await api.searchZimPulse(args.query, args.location);
+          const widget = (
+            <div className="mt-4 space-y-3">
+              <p className="text-[10px] font-black text-brand-gold uppercase tracking-widest">Zim Pulse Matches</p>
+              {results.length > 0 ? (
+                results.map((item: any, i: number) => (
+                  <div key={i} className="bg-white/5 p-4 rounded-2xl border border-white/10 flex flex-col gap-2">
+                    <div className="flex justify-between items-start">
+                      <span className="text-xs font-black text-white uppercase">{item.item}</span>
+                      <span className="text-xs font-black text-brand-gold">{item.price}</span>
+                    </div>
+                    <p className="text-[10px] text-white/60">{item.description}</p>
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-[9px] font-mono text-white/40">{item.location}</span>
+                      <a href={`https://wa.me/${item.sender?.split('@')[0]}`} target="_blank" rel="noreferrer" className="text-[9px] font-bold text-brand-gold hover:underline">Contact Seller</a>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <p className="text-xs text-white/40 italic">No active matches found in the pulse for this query.</p>
+              )}
+            </div>
+          );
+          return { result: `Found ${results.length} matches in the Zim Pulse for "${args.query}".`, widget };
+        }
         case 'get_security_status': {
           const hasVault = cryptoService.hasVault();
           const publicKey = cryptoService.getPublicKey();
@@ -646,7 +689,31 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
 
       {/* Main Content Area */}
       <main className="flex-1 overflow-hidden relative">
-        <div className="flex flex-col h-full">
+        {user.role === 'admin' && (
+          <div className="flex justify-center gap-4 py-3 bg-slate-900/40 border-b border-white/5 backdrop-blur-xl">
+            <button 
+              onClick={() => setActiveTab('chat')}
+              className={`px-6 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${activeTab === 'chat' ? 'bg-brand-gold text-slate-950 border-brand-gold shadow-glow-gold' : 'text-white/40 border-white/10 hover:text-white'}`}
+            >
+              Agentic Brain
+            </button>
+            <button 
+              onClick={() => setActiveTab('network')}
+              className={`px-6 py-1.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all border ${activeTab === 'network' ? 'bg-brand-gold text-slate-950 border-brand-gold shadow-glow-gold' : 'text-white/40 border-white/10 hover:text-white'}`}
+            >
+              WhatsApp Network
+            </button>
+          </div>
+        )}
+        
+        {activeTab === 'network' ? (
+          <div className="h-full overflow-y-auto p-8 custom-scrollbar">
+            <div className="max-w-6xl mx-auto">
+              <WhatsAppManager />
+            </div>
+          </div>
+        ) : (
+          <div className="flex flex-col h-full">
           <div className="flex-1 overflow-y-auto p-6 space-y-8 no-scrollbar">
             <div className="max-w-6xl mx-auto space-y-8">
               {messages.filter(m => m.role !== 'system' && m.role !== 'tool').map((msg, idx) => (
@@ -762,7 +829,8 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
             </div>
           </footer>
         </div>
-      </main>
+      )}
+    </main>
 
       <DistressCallModal 
         isOpen={isDistressModalOpen} 

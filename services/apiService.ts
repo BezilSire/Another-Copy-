@@ -44,7 +44,7 @@ import {
     onDisconnect,
     serverTimestamp as rtdbServerTimestamp
 } from 'firebase/database';
-import { auth, db, rtdb } from './firebase';
+import { getAuthInstance, getDbInstance, getRtdbInstance } from './firebase';
 import { generateWelcomeMessage } from './geminiService';
 import { sovereignService } from './sovereignService';
 import { cryptoService } from './cryptoService';
@@ -86,15 +86,16 @@ interface FirestoreErrorInfo {
 }
 
 export function handleFirestoreError(error: unknown, operationType: OperationType, path: string | null) {
+  const authInstance = getAuthInstance();
   const errInfo: FirestoreErrorInfo = {
     error: error instanceof Error ? error.message : String(error),
     authInfo: {
-      userId: auth.currentUser?.uid,
-      email: auth.currentUser?.email,
-      emailVerified: auth.currentUser?.emailVerified,
-      isAnonymous: auth.currentUser?.isAnonymous,
-      tenantId: auth.currentUser?.tenantId,
-      providerInfo: auth.currentUser?.providerData.map(provider => ({
+      userId: authInstance?.currentUser?.uid,
+      email: authInstance?.currentUser?.email,
+      emailVerified: authInstance?.currentUser?.emailVerified,
+      isAnonymous: authInstance?.currentUser?.isAnonymous,
+      tenantId: authInstance?.currentUser?.tenantId,
+      providerInfo: authInstance?.currentUser?.providerData.map((provider: any) => ({
         providerId: provider.providerId,
         displayName: provider.displayName,
         email: provider.email,
@@ -108,23 +109,44 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
   throw new Error(safeJsonStringify(errInfo));
 }
 
-const usersCollection = collection(db, 'users');
-const membersCollection = collection(db, 'members');
-const postsCollection = collection(db, 'posts');
-const activityCollection = collection(db, 'activity');
-const proposalsCollection = collection(db, 'proposals');
-const payoutsCollection = collection(db, 'payouts');
-const vaultsCollection = collection(db, 'treasury_vaults');
-const ledgerCollection = collection(db, 'ledger');
-const resourcesCollection = collection(db, 'resources');
-const disputesCollection = collection(db, 'disputes');
-const globalsCollection = collection(db, 'globals');
-const pendingPurchasesCollection = collection(db, 'pending_ubt_purchases');
-const candidatesCollection = collection(db, 'candidates');
-const broadcastsCollection = collection(db, 'broadcasts');
-const multisigCollection = collection(db, 'multisig_proposals');
-const blocksCollection = collection(db, 'blocks');
-const mempoolCollection = collection(db, 'mempool');
+const getDb = () => {
+    const d = getDbInstance();
+    if (!d) throw new Error("Firestore not configured");
+    return d;
+};
+
+const getAuth = () => {
+    const a = getAuthInstance();
+    if (!a) throw new Error("Auth not configured");
+    return a;
+};
+
+const getRtdb = () => {
+    const r = getRtdbInstance();
+    if (!r) throw new Error("RTDB not configured");
+    return r;
+};
+
+const collections = {
+    get users() { return collection(getDb(), 'users'); },
+    get members() { return collection(getDb(), 'members'); },
+    get posts() { return collection(getDb(), 'posts'); },
+    get activity() { return collection(getDb(), 'activity'); },
+    get proposals() { return collection(getDb(), 'proposals'); },
+    get payouts() { return collection(getDb(), 'payouts'); },
+    get vaults() { return collection(getDb(), 'treasury_vaults'); },
+    get ledger() { return collection(getDb(), 'ledger'); },
+    get resources() { return collection(getDb(), 'resources'); },
+    get disputes() { return collection(getDb(), 'disputes'); },
+    get globals() { return collection(getDb(), 'globals'); },
+    get pendingPurchases() { return collection(getDb(), 'pending_ubt_purchases'); },
+    get candidates() { return collection(getDb(), 'candidates'); },
+    get broadcasts() { return collection(getDb(), 'broadcasts'); },
+    get multisig() { return collection(getDb(), 'multisig_proposals'); },
+    get blocks() { return collection(getDb(), 'blocks'); },
+    get mempool() { return collection(getDb(), 'mempool'); },
+    get zimPulse() { return collection(getDb(), 'zim_pulse'); },
+};
 
 const sanitizeDocId = (id: string) => id.replace(/\//g, '_');
 
@@ -134,40 +156,40 @@ const MIN_FEE = 0.01;
 export const api = {
     handleFirestoreError,
     login: (email: string, password: string): Promise<FirebaseUser> => {
-        return signInWithEmailAndPassword(auth, email, password)
+        return signInWithEmailAndPassword(getAuth(), email, password)
             .then(userCredential => userCredential.user);
     },
     loginAnonymously: (displayName: string): Promise<FirebaseUser> => {
-        return signInAnonymously(auth)
+        return signInAnonymously(getAuth())
             .then(userCredential => userCredential.user);
     },
     loginWithGoogle: (): Promise<FirebaseUser> => {
         const provider = new GoogleAuthProvider();
-        return signInWithPopup(auth, provider)
+        return signInWithPopup(getAuth(), provider)
             .then(userCredential => userCredential.user);
     },
-    logout: () => signOut(auth),
-    sendPasswordReset: (email: string) => sendPasswordResetEmail(auth, email),
+    logout: () => signOut(getAuth()),
+    sendPasswordReset: (email: string) => sendPasswordResetEmail(getAuth(), email),
     sendEmailVerification: async () => {
-        if (auth.currentUser) await sendEmailVerification(auth.currentUser);
+        if (getAuth().currentUser) await sendEmailVerification(getAuth().currentUser!);
         else throw new Error("No user is currently signed in.");
     },
     setupPresence: (userId: string) => {
-        const userStatusDatabaseRef = ref(rtdb, '/status/' + userId);
+        const userStatusDatabaseRef = ref(getRtdb(), '/status/' + userId);
         const isOfflineForDatabase = { state: 'offline', last_changed: rtdbServerTimestamp() };
         const isOnlineForDatabase = { state: 'online', last_changed: rtdbServerTimestamp() };
-        onValue(ref(rtdb, '.info/connected'), (snapshot) => {
+        onValue(ref(getRtdb(), '.info/connected'), (snapshot) => {
             if (snapshot.val() === false) return;
             onDisconnect(userStatusDatabaseRef).set(isOfflineForDatabase).then(() => {
                 set(userStatusDatabaseRef, isOnlineForDatabase);
             });
         });
     },
-    goOffline: (userId: string) => set(ref(rtdb, '/status/' + userId), { state: 'offline', last_changed: rtdbServerTimestamp() }),
+    goOffline: (userId: string) => set(ref(getRtdb(), '/status/' + userId), { state: 'offline', last_changed: rtdbServerTimestamp() }),
 
     getUser: async (uid: string): Promise<User> => {
         try {
-            const userDoc = await getDoc(doc(db, 'users', uid));
+            const userDoc = await getDoc(doc(getDb(), 'users', uid));
             if (!userDoc.exists()) throw new Error("User data not found.");
             return { id: userDoc.id, ...userDoc.data() } as User;
         } catch (error) {
@@ -176,27 +198,27 @@ export const api = {
         }
     },
     getUserByEmail: async (email: string): Promise<User | null> => {
-        const q = query(usersCollection, where('email', '==', email), limit(1));
+        const q = query(collections.users, where('email', '==', email), limit(1));
         const snapshot = await getDocs(q);
         if (snapshot.empty) return null;
         return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as User;
     },
     getUserByPublicKey: async (publicKey: string): Promise<User | null> => {
-        const q = query(usersCollection, where('publicKey', '==', publicKey), limit(1));
+        const q = query(collections.users, where('publicKey', '==', publicKey), limit(1));
         const snapshot = await getDocs(q);
         if (snapshot.empty) return null;
         return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as User;
     },
 
     getLastTransactionHash: async (): Promise<string> => {
-        const q = query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(1));
+        const q = query(collections.ledger, orderBy('serverTimestamp', 'desc'), limit(1));
         const snapshot = await getDocs(q);
         if (snapshot.empty) return 'GENESIS';
         return snapshot.docs[0].data().hash || 'GENESIS';
     },
 
     getLatestBlock: async (): Promise<Block | null> => {
-        const q = query(blocksCollection, orderBy('index', 'desc'), limit(1));
+        const q = query(collections.blocks, orderBy('index', 'desc'), limit(1));
         const snapshot = await getDocs(q);
         if (snapshot.empty) return null;
         return { id: snapshot.docs[0].id, ...snapshot.docs[0].data() } as Block;
@@ -240,7 +262,7 @@ export const api = {
             throw new Error(validation.error || "INVALID_TRANSACTION");
         }
 
-        await addDoc(mempoolCollection, {
+        await addDoc(collections.mempool, {
             ...transaction,
             participants: [sender.id, receiverId],
             serverTimestamp: serverTimestamp()
@@ -253,7 +275,7 @@ export const api = {
         if (!lastBlock || lastBlock.index < 10) return 4;
         
         // Simple adjustment: fetch last 10 blocks to see average time
-        const q = query(blocksCollection, orderBy('index', 'desc'), limit(10));
+        const q = query(collections.blocks, orderBy('index', 'desc'), limit(10));
         const snap = await getDocs(q);
         const blocks = snap.docs.map(d => d.data() as Block);
         
@@ -291,7 +313,7 @@ export const api = {
         }
 
         // 3. Double Spending Check (Hash/Signature uniqueness in Ledger)
-        const ledgerRef = doc(ledgerCollection, sanitizeDocId(tx.signature || tx.id));
+        const ledgerRef = doc(collections.ledger, sanitizeDocId(tx.signature || tx.id));
         const ledgerSnap = await getDoc(ledgerRef);
         if (ledgerSnap.exists()) {
             return { valid: false, error: 'TRANSACTION_ALREADY_MINED' };
@@ -310,7 +332,7 @@ export const api = {
     },
 
     minePendingTransactions: async (minerId: string, onProgress?: (nonce: number) => void) => {
-        const q = query(mempoolCollection, orderBy('serverTimestamp', 'asc'), limit(50));
+        const q = query(collections.mempool, orderBy('serverTimestamp', 'asc'), limit(50));
         const snapshot = await getDocs(q);
         
         const lastBlock = await api.getLatestBlock();
@@ -343,7 +365,7 @@ export const api = {
             const userDocs = await api.getUsersByUids(chunk.filter(id => !['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(id)));
             userDocs.forEach(u => balanceMap.set(u.id, u.ubtBalance || 0));
             
-            const vaultDocs = await Promise.all(chunk.filter(id => ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(id)).map(id => getDoc(doc(vaultsCollection, id))));
+            const vaultDocs = await Promise.all(chunk.filter(id => ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(id)).map(id => getDoc(doc(collections.vaults, id))));
             vaultDocs.forEach(v => {
                 if (v.exists()) balanceMap.set(v.id, v.data().balance || 0);
             });
@@ -365,7 +387,7 @@ export const api = {
             } else {
                 console.warn(`Transaction ${tx.id} failed validation: ${result.error}`);
                 // Optionally remove invalid tx from mempool
-                await deleteDoc(doc(mempoolCollection, tx.id));
+                await deleteDoc(doc(collections.mempool, tx.id));
             }
         }
 
@@ -416,8 +438,8 @@ export const api = {
             difficulty
         };
 
-        await runTransaction(db, async (t) => {
-            t.set(doc(blocksCollection, newBlock.hash), {
+        await runTransaction(getDb(), async (t) => {
+            t.set(doc(collections.blocks, newBlock.hash), {
                 ...newBlock,
                 serverTimestamp: serverTimestamp()
             });
@@ -433,8 +455,8 @@ export const api = {
                 const isFloatSender = ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(tx.senderId);
                 const isFloatReceiver = ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(tx.receiverId);
                 
-                const senderRef = isFloatSender ? doc(vaultsCollection, tx.senderId) : doc(usersCollection, tx.senderId);
-                const receiverRef = isFloatReceiver ? doc(vaultsCollection, tx.receiverId) : doc(usersCollection, tx.receiverId);
+                const senderRef = isFloatSender ? doc(collections.vaults, tx.senderId) : doc(collections.users, tx.senderId);
+                const receiverRef = isFloatReceiver ? doc(collections.vaults, tx.receiverId) : doc(collections.users, tx.receiverId);
                 
                 const balKey = isFloatSender ? 'balance' : 'ubtBalance';
                 const recvBalKey = isFloatReceiver ? 'balance' : 'ubtBalance';
@@ -461,7 +483,7 @@ export const api = {
                     });
                 }
                 
-                t.set(doc(ledgerCollection, sanitizeDocId(tx.signature || tx.id)), {
+                t.set(doc(collections.ledger, sanitizeDocId(tx.signature || tx.id)), {
                     ...tx,
                     status: 'verified',
                     blockHash: newBlock.hash,
@@ -523,7 +545,7 @@ export const api = {
     },
 
     validateChain: async (): Promise<boolean> => {
-        const q = query(blocksCollection, orderBy('index', 'asc'));
+        const q = query(collections.blocks, orderBy('index', 'asc'));
         const snapshot = await getDocs(q);
         const blocks = snapshot.docs.map(d => d.data() as Block);
         
@@ -537,20 +559,37 @@ export const api = {
     },
 
     listenForMempool: (cb: (txs: UbtTransaction[]) => void): Unsubscribe => {
-        return onSnapshot(query(mempoolCollection, orderBy('serverTimestamp', 'desc')), s => {
+        return onSnapshot(query(collections.mempool, orderBy('serverTimestamp', 'desc')), s => {
             cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction)));
         }, (e) => api.handleFirestoreError(e, OperationType.LIST, 'mempool'));
     },
 
     listenForBlocks: (cb: (blocks: Block[]) => void): Unsubscribe => {
-        return onSnapshot(query(blocksCollection, orderBy('index', 'desc'), limit(20)), s => {
+        return onSnapshot(query(collections.blocks, orderBy('index', 'desc'), limit(20)), s => {
             cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Block)));
         }, (e) => api.handleFirestoreError(e, OperationType.LIST, 'blocks'));
     },
 
-    listenForZimPulse: (cb: (activity: Activity[]) => void, err?: (error: any) => void): Unsubscribe => {
-        const q = query(activityCollection, orderBy('timestamp', 'desc'), limit(20));
-        return onSnapshot(q, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'activity')));
+    listenForZimPulse: (cb: (activity: any[]) => void, err?: (error: any) => void): Unsubscribe => {
+        const q = query(collections.zimPulse, orderBy('timestamp', 'desc'), limit(20));
+        return onSnapshot(q, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as any))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'zim_pulse')));
+    },
+
+    searchZimPulse: async (q: string, loc?: string) => {
+        let baseQ = query(collections.zimPulse, orderBy('timestamp', 'desc'), limit(50));
+        if (loc) {
+            baseQ = query(collections.zimPulse, where('location', '==', loc), orderBy('timestamp', 'desc'), limit(50));
+        }
+        const s = await getDocs(baseQ);
+        const results = s.docs.map(d => ({ id: d.id, ...d.data() } as any));
+        if (q) {
+            const lowerQ = q.toLowerCase();
+            return results.filter(r => 
+                (r.item && r.item.toLowerCase().includes(lowerQ)) || 
+                (r.description && r.description.toLowerCase().includes(lowerQ))
+            );
+        }
+        return results;
     },
     updateUser: async (uid: string, data: Partial<User>) => {
         const privateFields = ['email', 'phone', 'address', 'id_card_number'];
@@ -565,25 +604,25 @@ export const api = {
             }
         });
 
-        const batch = writeBatch(db);
+        const batch = writeBatch(getDb());
         if (Object.keys(publicData).length > 0) {
-            batch.set(doc(db, 'users', uid), publicData, { merge: true });
+            batch.set(doc(getDb(), 'users', uid), publicData, { merge: true });
         }
         if (Object.keys(privateData).length > 0) {
-            batch.set(doc(db, 'users', uid, 'private', 'data'), privateData, { merge: true });
+            batch.set(doc(getDb(), 'users', uid, 'private', 'data'), privateData, { merge: true });
         }
         await batch.commit();
     },
 
     setRecoveryCommitment: async (uid: string, commitment: string) => {
-        return updateDoc(doc(db, 'users', uid), {
+        return updateDoc(doc(getDb(), 'users', uid), {
             recoveryCommitment: commitment,
             isKeyRotated: false
         });
     },
 
     rotateKey: async (uid: string, secret: string, newPublicKey: string) => {
-        const userDoc = await getDoc(doc(db, 'users', uid));
+        const userDoc = await getDoc(doc(getDb(), 'users', uid));
         if (!userDoc.exists()) throw new Error("USER_NOT_FOUND");
         
         const userData = userDoc.data() as User;
@@ -595,18 +634,18 @@ export const api = {
         }
         
         // Rotate key and burn the commitment (one-time use)
-        return updateDoc(doc(db, 'users', uid), {
+        return updateDoc(doc(getDb(), 'users', uid), {
             publicKey: newPublicKey,
             isKeyRotated: true,
             recoveryCommitment: null // Burn it
         });
     },
     
-    setUserStatus: (uid: string, status: User['status']) => updateDoc(doc(db, 'users', uid), { status }),
+    setUserStatus: (uid: string, status: User['status']) => updateDoc(doc(getDb(), 'users', uid), { status }),
 
     getPrivateData: async (uid: string): Promise<any> => {
         try {
-            const privateDoc = await getDoc(doc(db, 'users', uid, 'private', 'data'));
+            const privateDoc = await getDoc(doc(getDb(), 'users', uid, 'private', 'data'));
             if (!privateDoc.exists()) return null;
             return privateDoc.data();
         } catch (error) {
@@ -620,7 +659,7 @@ export const api = {
         const results: User[] = [];
         for (let i = 0; i < uids.length; i += 10) {
             const chunk = uids.slice(i, i + 10);
-            const q = query(usersCollection, where('__name__', 'in', chunk));
+            const q = query(collections.users, where('__name__', 'in', chunk));
             const snapshot = await getDocs(q);
             results.push(...snapshot.docs.map(d => ({ id: d.id, ...d.data() } as User)));
         }
@@ -643,7 +682,7 @@ export const api = {
         }
 
         // Add to Mempool for mining
-        await addDoc(mempoolCollection, {
+        await addDoc(collections.mempool, {
             ...transaction,
             participants: [transaction.senderId, transaction.receiverId],
             serverTimestamp: serverTimestamp(),
@@ -655,7 +694,7 @@ export const api = {
 
     getUserLedger: async (uid: string) => {
         try {
-            const q = query(ledgerCollection, 
+            const q = query(collections.ledger, 
                 where('participants', 'array-contains', uid),
                 limit(100)
             );
@@ -704,7 +743,7 @@ export const api = {
             throw new Error(validation.error || "INVALID_VAULT_SYNC");
         }
 
-        await addDoc(mempoolCollection, { 
+        await addDoc(collections.mempool, { 
             ...tx, 
             participants: [from.id, to.id],
             serverTimestamp: serverTimestamp() 
@@ -732,7 +771,7 @@ export const api = {
 
         // Validation
         const balanceMap = new Map<string, number>();
-        const vaultDoc = await getDoc(doc(vaultsCollection, sourceVaultId));
+        const vaultDoc = await getDoc(doc(collections.vaults, sourceVaultId));
         if (vaultDoc.exists()) balanceMap.set(sourceVaultId, vaultDoc.data().balance || 0);
         
         const validation = await api.validateTransaction(finalTx, balanceMap);
@@ -740,13 +779,13 @@ export const api = {
             throw new Error(validation.error || "INVALID_BRIDGE_TRANSACTION");
         }
 
-        await runTransaction(db, async t => {
-            const purchaseRef = doc(pendingPurchasesCollection, p.id);
-            const econRef = doc(globalsCollection, 'economy');
+        await runTransaction(getDb(), async t => {
+            const purchaseRef = doc(collections.pendingPurchases, p.id);
+            const econRef = doc(collections.globals, 'economy');
             t.update(purchaseRef, { status: 'VERIFIED', verifiedAt: serverTimestamp() });
             t.update(econRef, { cvp_usd_backing: increment(p.amountUsd) }); 
             
-            t.set(doc(mempoolCollection, finalTx.id), {
+            t.set(doc(collections.mempool, finalTx.id), {
                 ...finalTx,
                 participants: [sourceVaultId, p.userId],
                 serverTimestamp: serverTimestamp()
@@ -763,7 +802,7 @@ export const api = {
         }
 
         // Add to Mempool
-        await addDoc(mempoolCollection, {
+        await addDoc(collections.mempool, {
             ...tx,
             receiverId: finalRid || 'EXTERNAL_NODE',
             participants: [vid, finalRid || 'EXTERNAL_NODE'],
@@ -801,10 +840,10 @@ export const api = {
         const sourceId = isCredit ? 'GENESIS' : uid;
         
         if (isCredit) {
-            const genesisDoc = await getDoc(doc(vaultsCollection, 'GENESIS'));
+            const genesisDoc = await getDoc(doc(collections.vaults, 'GENESIS'));
             if (genesisDoc.exists()) balanceMap.set('GENESIS', genesisDoc.data().balance || 0);
         } else {
-            const userDoc = await getDoc(doc(usersCollection, uid));
+            const userDoc = await getDoc(doc(collections.users, uid));
             if (userDoc.exists()) balanceMap.set(uid, userDoc.data().ubtBalance || 0);
         }
         
@@ -814,7 +853,7 @@ export const api = {
             throw new Error(validation.error || "INVALID_ADMIN_TRANSACTION");
         }
 
-        await addDoc(mempoolCollection, {
+        await addDoc(collections.mempool, {
             ...tx,
             participants: [tx.senderId, tx.receiverId],
             serverTimestamp: serverTimestamp()
@@ -824,7 +863,7 @@ export const api = {
     },
 
     getPublicLedger: async (l: number = 200) => {
-        const s = await getDocs(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)));
+        const s = await getDocs(query(collections.ledger, orderBy('serverTimestamp', 'desc'), limit(l)));
         return s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
     },
 
@@ -837,13 +876,13 @@ export const api = {
     resolveNodeIdentity: async (identifier: string): Promise<PublicUserProfile | null> => {
         if (!identifier) return null;
         try {
-            const userDoc = await getDoc(doc(usersCollection, identifier));
+            const userDoc = await getDoc(doc(collections.users, identifier));
             if (userDoc.exists()) return { id: userDoc.id, ...userDoc.data() } as PublicUserProfile;
-            const vaultDoc = await getDoc(doc(vaultsCollection, identifier));
+            const vaultDoc = await getDoc(doc(collections.vaults, identifier));
             if (vaultDoc.exists()) return { id: vaultDoc.id, name: vaultDoc.data()?.name, ubtBalance: vaultDoc.data()?.balance, role: 'admin', circle: 'TREASURY' } as any;
             
             // Search by publicKey if identifier is not an ID
-            const q = query(usersCollection, where('publicKey', '==', identifier), limit(1));
+            const q = query(collections.users, where('publicKey', '==', identifier), limit(1));
             const snap = await getDocs(q);
             if (!snap.empty) return { id: snap.docs[0].id, ...snap.docs[0].data() } as PublicUserProfile;
         } catch (e) {}
@@ -852,7 +891,7 @@ export const api = {
 
     // Fix: Added getPublicUserProfile for profile views
     getPublicUserProfile: async (uid: string): Promise<PublicUserProfile | null> => {
-        const userDoc = await getDoc(doc(usersCollection, uid));
+        const userDoc = await getDoc(doc(collections.users, uid));
         return userDoc.exists() ? { id: userDoc.id, ...userDoc.data() } as PublicUserProfile : null;
     },
 
@@ -862,7 +901,7 @@ export const api = {
         const results: PublicUserProfile[] = [];
         for (let i = 0; i < uids.length; i += 10) {
             const chunk = uids.slice(i, i + 10);
-            const q = query(usersCollection, where('__name__', 'in', chunk));
+            const q = query(collections.users, where('__name__', 'in', chunk));
             const snapshot = await getDocs(q);
             results.push(...snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile)));
         }
@@ -870,8 +909,8 @@ export const api = {
     },
 
     reconcileAllBalances: async () => {
-        const usersSnap = await getDocs(usersCollection);
-        const ledgerSnap = await getDocs(ledgerCollection);
+        const usersSnap = await getDocs(collections.users);
+        const ledgerSnap = await getDocs(collections.ledger);
         const txs = ledgerSnap.docs.map(d => d.data() as UbtTransaction);
         
         const userMap = new Map<string, { balance: number, publicKey: string }>();
@@ -913,15 +952,15 @@ export const api = {
             }
         });
 
-        const batch = writeBatch(db);
+        const batch = writeBatch(getDb());
         userMap.forEach((data, uid) => {
-            batch.update(doc(usersCollection, uid), { ubtBalance: data.balance });
+            batch.update(doc(collections.users, uid), { ubtBalance: data.balance });
         });
         await batch.commit();
     },
 
     reconcileUserBalance: async (uid: string) => {
-        const userDoc = await getDoc(doc(usersCollection, uid));
+        const userDoc = await getDoc(doc(collections.users, uid));
         if (!userDoc.exists()) throw new Error("User not found");
         
         const userData = userDoc.data();
@@ -929,7 +968,7 @@ export const api = {
         const initialStake = Number(userData.initialUbtStake || 0);
 
         // Fetch all transactions where this user is either sender or receiver (by ID or Public Key)
-        const q = query(ledgerCollection, or(
+        const q = query(collections.ledger, or(
             where('participants', 'array-contains', uid),
             where('senderId', '==', uid),
             where('receiverId', '==', uid),
@@ -951,23 +990,23 @@ export const api = {
             if (isSender) calculatedBalance -= amt;
         });
 
-        await updateDoc(doc(usersCollection, uid), { ubtBalance: calculatedBalance });
+        await updateDoc(doc(collections.users, uid), { ubtBalance: calculatedBalance });
         return calculatedBalance;
     },
 
     // Fix: Added searchUsers for directory and dispatching
     searchUsers: async (queryStr: string, currentUser: User): Promise<PublicUserProfile[]> => {
-        const q = query(usersCollection, where('name_lowercase', '>=', queryStr.toLowerCase()), where('name_lowercase', '<=', queryStr.toLowerCase() + '\uf8ff'), limit(15));
+        const q = query(collections.users, where('name_lowercase', '>=', queryStr.toLowerCase()), where('name_lowercase', '<=', queryStr.toLowerCase() + '\uf8ff'), limit(15));
         const snapshot = await getDocs(q);
         return snapshot.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile)).filter(u => u.id !== currentUser.id);
     },
 
     // Fix: Added rejectUbtPurchase for Oracle administration
-    rejectUbtPurchase: (id: string) => updateDoc(doc(pendingPurchasesCollection, id), { status: 'REJECTED' }),
+    rejectUbtPurchase: (id: string) => updateDoc(doc(collections.pendingPurchases, id), { status: 'REJECTED' }),
 
     // Fix: Added governance candidacy methods
     applyForExecutive: async (candidateData: Omit<Candidate, 'id' | 'voteCount' | 'votes' | 'createdAt' | 'status'>) => {
-        return addDoc(candidatesCollection, {
+        return addDoc(collections.candidates, {
             ...candidateData,
             voteCount: 0,
             votes: [],
@@ -975,9 +1014,9 @@ export const api = {
             createdAt: serverTimestamp()
         });
     },
-    deleteCandidate: (candidateId: string) => deleteDoc(doc(candidatesCollection, candidateId)),
-    voteForCandidate: (candidateId: string, voterId: string) => runTransaction(db, async t => {
-        const ref = doc(candidatesCollection, candidateId);
+    deleteCandidate: (candidateId: string) => deleteDoc(doc(collections.candidates, candidateId)),
+    voteForCandidate: (candidateId: string, voterId: string) => runTransaction(getDb(), async t => {
+        const ref = doc(collections.candidates, candidateId);
         const snap = await t.get(ref);
         if (!snap.exists()) throw new Error("Candidate node lost.");
         const data = snap.data() as Candidate;
@@ -989,20 +1028,20 @@ export const api = {
         });
     }),
     listenForCandidates: (cb: (c: Candidate[]) => void): Unsubscribe => {
-        return onSnapshot(query(candidatesCollection, orderBy('voteCount', 'desc')), s => {
+        return onSnapshot(query(collections.candidates, orderBy('voteCount', 'desc')), s => {
             cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Candidate)));
         }, (e) => api.handleFirestoreError(e, OperationType.LIST, 'candidates'));
     },
 
     listenForGlobalEconomy: (cb: (e: GlobalEconomy | null) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(doc(globalsCollection, 'economy'), s => cb(s.exists() ? s.data() as GlobalEconomy : null), err || ((e) => api.handleFirestoreError(e, OperationType.GET, 'globals/economy'))),
+        onSnapshot(doc(collections.globals, 'economy'), s => cb(s.exists() ? s.data() as GlobalEconomy : null), err || ((e) => api.handleFirestoreError(e, OperationType.GET, 'globals/economy'))),
     listenToVaults: (cb: (v: TreasuryVault[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(vaultsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'treasury_vaults'))),
+        onSnapshot(collections.vaults, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as TreasuryVault))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'treasury_vaults'))),
     listenForNotifications: (uid: string, cb: (n: Notification[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(query(collection(db, 'users', uid, 'notifications'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Notification))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, `users/${uid}/notifications`))),
+        onSnapshot(query(collection(getDb(), 'users', uid, 'notifications'), orderBy('timestamp', 'desc'), limit(50)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Notification))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, `users/${uid}/notifications`))),
     listenForUserTransactions: (uid: string, cb: (txs: UbtTransaction[]) => void, err?: (error: any) => void): Unsubscribe => {
-        const ledgerQuery = query(ledgerCollection, where('participants', 'array-contains', uid), limit(50));
-        const mempoolQuery = query(mempoolCollection, where('participants', 'array-contains', uid), limit(50));
+        const ledgerQuery = query(collections.ledger, where('participants', 'array-contains', uid), limit(50));
+        const mempoolQuery = query(collections.mempool, where('participants', 'array-contains', uid), limit(50));
 
         let ledgerTxs: UbtTransaction[] = [];
         let mempoolTxs: UbtTransaction[] = [];
@@ -1032,56 +1071,56 @@ export const api = {
         };
     },
     listenToUserVaults: (uid: string, cb: (v: UserVault[]) => void): Unsubscribe => 
-        onSnapshot(query(collection(db, 'users', uid, 'vaults'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UserVault))), (e) => api.handleFirestoreError(e, OperationType.LIST, `users/${uid}/vaults`)),
+        onSnapshot(query(collection(getDb(), 'users', uid, 'vaults'), orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UserVault))), (e) => api.handleFirestoreError(e, OperationType.LIST, `users/${uid}/vaults`)),
     listenForActivity: (circle: string, cb: (a: Activity[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(query(activityCollection, where('causerCircle', '==', circle), orderBy('timestamp', 'desc'), limit(10)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'activity'))),
+        onSnapshot(query(collections.activity, where('causerCircle', '==', circle), orderBy('timestamp', 'desc'), limit(10)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Activity))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'activity'))),
     listenForAllUsers: (admin: User, cb: (u: User[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(usersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'users'))),
+        onSnapshot(collections.users, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as User))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'users'))),
     listenForAllMembers: (admin: User, cb: (m: Member[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(membersCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'members'))),
+        onSnapshot(collections.members, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'members'))),
     listenForPendingMembers: (admin: User, cb: (m: Member[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(query(membersCollection, where('payment_status', '==', 'pending_verification')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'members'))),
+        onSnapshot(query(collections.members, where('payment_status', '==', 'pending_verification')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Member))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'members'))),
     listenForReports: (admin: User, cb: (r: Report[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(collection(db, 'reports'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Report))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'reports'))),
+        onSnapshot(collection(getDb(), 'reports'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Report))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'reports'))),
     listenForPayoutRequests: (admin: User, cb: (r: PayoutRequest[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(payoutsCollection, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'payouts'))),
+        onSnapshot(collections.payouts, s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'payouts'))),
     listenForPendingPurchases: (cb: (p: PendingUbtPurchase[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(query(pendingPurchasesCollection, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'pending_ubt_purchases'))),
+        onSnapshot(query(collections.pendingPurchases, where('status', '==', 'PENDING')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PendingUbtPurchase))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'pending_ubt_purchases'))),
     listenForUserVentures: (uid: string, cb: (v: Venture[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(query(collection(db, 'ventures'), where('ownerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'ventures'))),
+        onSnapshot(query(collection(getDb(), 'ventures'), where('ownerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'ventures'))),
     listenForUserPayouts: (uid: string, cb: (p: PayoutRequest[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(query(payoutsCollection, where('userId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'payouts'))),
+        onSnapshot(query(collections.payouts, where('userId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PayoutRequest))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'payouts'))),
     listenForReferredUsers: (uid: string, cb: (u: PublicUserProfile[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(query(usersCollection, where('referrerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'users'))),
+        onSnapshot(query(collections.users, where('referrerId', '==', uid)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'users'))),
     listenForProposals: (cb: (p: Proposal[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(query(proposalsCollection, orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Proposal))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'proposals'))),
+        onSnapshot(query(collections.proposals, orderBy('createdAt', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Proposal))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'proposals'))),
     listenToResources: (circle: string, cb: (r: CitizenResource[]) => void): Unsubscribe => 
-        onSnapshot(circle === 'ANY' ? resourcesCollection : query(resourcesCollection, where('circle', '==', circle)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource))), (e) => api.handleFirestoreError(e, OperationType.LIST, 'resources')),
+        onSnapshot(circle === 'ANY' ? collections.resources : query(collections.resources, where('circle', '==', circle)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as CitizenResource))), (e) => api.handleFirestoreError(e, OperationType.LIST, 'resources')),
     listenToTribunals: (cb: (d: Dispute[]) => void): Unsubscribe => 
-        onSnapshot(query(disputesCollection, where('status', '==', 'TRIBUNAL')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Dispute))), (e) => api.handleFirestoreError(e, OperationType.LIST, 'disputes')),
+        onSnapshot(query(collections.disputes, where('status', '==', 'TRIBUNAL')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Dispute))), (e) => api.handleFirestoreError(e, OperationType.LIST, 'disputes')),
     listenForVentures: (admin: User, cb: (v: Venture[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(collection(db, 'ventures'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'ventures'))),
+        onSnapshot(collection(getDb(), 'ventures'), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'ventures'))),
     listenForCVP: (admin: User, cb: (c: CommunityValuePool | null) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(doc(globalsCollection, 'cvp'), s => cb(s.exists() ? { id: s.id, ...s.data() } as CommunityValuePool : null), err || ((e) => api.handleFirestoreError(e, OperationType.GET, 'globals/cvp'))),
+        onSnapshot(doc(collections.globals, 'cvp'), s => cb(s.exists() ? { id: s.id, ...s.data() } as CommunityValuePool : null), err || ((e) => api.handleFirestoreError(e, OperationType.GET, 'globals/cvp'))),
     listenForFundraisingVentures: (cb: (v: Venture[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(query(collection(db, 'ventures'), where('status', '==', 'fundraising')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'ventures'))),
+        onSnapshot(query(collection(getDb(), 'ventures'), where('status', '==', 'fundraising')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Venture))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'ventures'))),
     listenForPostsByAuthor: (authorId: string, cb: (posts: Post[]) => void, err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(query(postsCollection, where('authorId', '==', authorId), orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'posts'))),
+        onSnapshot(query(collections.posts, where('authorId', '==', authorId), orderBy('date', 'desc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Post))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, 'posts'))),
     listenForComments: (parentId: string, cb: (comments: Comment[]) => void, coll: 'posts' | 'proposals', err?: (error: any) => void): Unsubscribe => 
-        onSnapshot(query(collection(db, coll, parentId, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, `${coll}/${parentId}/comments`))),
+        onSnapshot(query(collection(getDb(), coll, parentId, 'comments'), orderBy('timestamp', 'asc')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as Comment))), err || ((e) => api.handleFirestoreError(e, OperationType.LIST, `${coll}/${parentId}/comments`))),
     listenForMultiSigProposals: (cb: (p: MultiSigProposal[]) => void): Unsubscribe => 
-        onSnapshot(query(multisigCollection, where('status', '==', 'pending')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as MultiSigProposal))), (e) => api.handleFirestoreError(e, OperationType.LIST, 'multisig_proposals')),
+        onSnapshot(query(collections.multisig, where('status', '==', 'pending')), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as MultiSigProposal))), (e) => api.handleFirestoreError(e, OperationType.LIST, 'multisig_proposals')),
     listenForPublicLedger: (cb: (txs: UbtTransaction[]) => void, l: number = 200): Unsubscribe => 
-        onSnapshot(query(ledgerCollection, orderBy('serverTimestamp', 'desc'), limit(l)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction))), (e) => api.handleFirestoreError(e, OperationType.LIST, 'ledger')),
+        onSnapshot(query(collections.ledger, orderBy('serverTimestamp', 'desc'), limit(l)), s => cb(s.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction))), (e) => api.handleFirestoreError(e, OperationType.LIST, 'ledger')),
 
     initializeTreasury: async (admin: Admin) => {
-        const genesisDoc = await getDoc(doc(vaultsCollection, 'GENESIS'));
+        const genesisDoc = await getDoc(doc(collections.vaults, 'GENESIS'));
         if (genesisDoc.exists()) {
             console.log("Treasury already initialized.");
             return;
         }
 
-        const batch = writeBatch(db);
+        const batch = writeBatch(getDb());
         const vaults = [
             { id: 'GENESIS', name: 'Genesis Mother Node', type: 'GENESIS', balance: 15000000, description: 'Protocol asset root.' },
             { id: 'FLOAT', name: 'Social Float', type: 'FLOAT', balance: 0, description: 'Assets for peer exchange.' },
@@ -1090,7 +1129,7 @@ export const api = {
             { id: 'VENTURE', name: 'Launchpad Treasury', type: 'VENTURE', balance: 0, description: 'Community growth capital.' }
         ];
         for (const v of vaults) {
-            batch.set(doc(vaultsCollection, v.id), { ...v, publicKey: `UBT-VAULT-${v.id}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`, isLocked: false });
+            batch.set(doc(collections.vaults, v.id), { ...v, publicKey: `UBT-VAULT-${v.id}-${Math.random().toString(36).substring(2, 10).toUpperCase()}`, isLocked: false });
         }
         const txId = `mint-${Date.now().toString(36)}`;
         const tx: UbtTransaction = { 
@@ -1108,7 +1147,7 @@ export const api = {
             protocol_mode: 'MAINNET', 
             status: 'verified'
         };
-        batch.set(doc(ledgerCollection, txId), {
+        batch.set(doc(collections.ledger, txId), {
             ...tx,
             participants: ['SYSTEM', 'GENESIS'],
             serverTimestamp: serverTimestamp() 
@@ -1116,67 +1155,67 @@ export const api = {
         await batch.commit();
         sovereignService.dispatchTransaction(tx).catch(console.error);
     },
-    toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(vaultsCollection, id), { isLocked: lock }),
-    registerResource: (data: Partial<CitizenResource>) => addDoc(resourcesCollection, { ...data, createdAt: serverTimestamp() }),
+    toggleVaultLock: (id: string, lock: boolean) => updateDoc(doc(collections.vaults, id), { isLocked: lock }),
+    registerResource: (data: Partial<CitizenResource>) => addDoc(collections.resources, { ...data, createdAt: serverTimestamp() }),
 
     createPost: async (u: User, content: string, type: Post['types'], award: number, skills: string[] = []) => {
-        return addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: skills, commentCount: 0, repostCount: 0, ccapAwarded: award });
+        return addDoc(collections.posts, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: type, requiredSkills: skills, commentCount: 0, repostCount: 0, ccapAwarded: award });
     },
-    deletePost: (id: string) => deleteDoc(doc(postsCollection, id)),
-    updatePost: (id: string, content: string) => updateDoc(doc(postsCollection, id), { content }),
+    deletePost: (id: string) => deleteDoc(doc(collections.posts, id)),
+    updatePost: (id: string, content: string) => updateDoc(doc(collections.posts, id), { content }),
     upvotePost: async (id: string, uid: string) => {
-        const snap = await getDoc(doc(postsCollection, id));
+        const snap = await getDoc(doc(collections.posts, id));
         if (snap.exists()) {
             const upvotes = snap.data().upvotes || [];
-            await updateDoc(doc(postsCollection, id), { upvotes: upvotes.includes(uid) ? arrayRemove(uid) : arrayUnion(uid) });
+            await updateDoc(doc(collections.posts, id), { upvotes: upvotes.includes(uid) ? arrayRemove(uid) : arrayUnion(uid) });
         }
     },
     fetchRegularPosts: async (count: number, filter: string, isAdmin: boolean, startAfterDoc?: DocumentSnapshot<DocumentData>, currentUser?: User) => {
         let q;
-        if (filter === 'all' || filter === 'foryou') q = query(postsCollection, orderBy('date', 'desc'), limit(count));
-        else if (filter === 'following' && currentUser?.following && currentUser.following.length > 0) q = query(postsCollection, where('authorId', 'in', currentUser.following), orderBy('date', 'desc'), limit(count));
-        else q = query(postsCollection, where('types', '==', filter), orderBy('date', 'desc'), limit(count));
+        if (filter === 'all' || filter === 'foryou') q = query(collections.posts, orderBy('date', 'desc'), limit(count));
+        else if (filter === 'following' && currentUser?.following && currentUser.following.length > 0) q = query(collections.posts, where('authorId', 'in', currentUser.following), orderBy('date', 'desc'), limit(count));
+        else q = query(collections.posts, where('types', '==', filter), orderBy('date', 'desc'), limit(count));
         if (startAfterDoc) q = query(q, startAfter(startAfterDoc));
         const s = await getDocs(q);
         return { posts: s.docs.map(d => ({ id: d.id, ...d.data() } as Post)), lastVisible: s.docs[s.docs.length - 1] };
     },
-    togglePinPost: (admin: User, id: string, pin: boolean) => updateDoc(doc(postsCollection, id), { isPinned: pin }),
+    togglePinPost: (admin: User, id: string, pin: boolean) => updateDoc(doc(collections.posts, id), { isPinned: pin }),
 
     sendDistressPost: async (u: User, content: string) => {
-        return addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress', commentCount: 0, repostCount: 0 });
+        return addDoc(collections.posts, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content, date: new Date().toISOString(), upvotes: [], types: 'distress', commentCount: 0, repostCount: 0 });
     },
 
     createProposal: async (u: User, data: { title: string, description: string }) => {
-        return addDoc(proposalsCollection, { ...data, status: 'active', authorId: u.id, authorName: u.name, createdAt: serverTimestamp(), voteCountFor: 0, voteCountAgainst: 0, votesFor: [], votesAgainst: [] });
+        return addDoc(collections.proposals, { ...data, status: 'active', authorId: u.id, authorName: u.name, createdAt: serverTimestamp(), voteCountFor: 0, voteCountAgainst: 0, votesFor: [], votesAgainst: [] });
     },
 
     closeProposal: async (admin: User, pid: string, status: 'passed' | 'failed') => {
-        return updateDoc(doc(proposalsCollection, pid), { status });
+        return updateDoc(doc(collections.proposals, pid), { status });
     },
 
     getCommunityValuePool: async (): Promise<CommunityValuePool> => {
-        const snap = await getDoc(doc(globalsCollection, 'cvp'));
+        const snap = await getDoc(doc(collections.globals, 'cvp'));
         if (!snap.exists()) throw new Error("CVP Offline");
         return { id: snap.id, ...snap.data() } as CommunityValuePool;
     },
 
     createVenture: async (v: any) => {
-        return addDoc(collection(db, 'ventures'), { ...v, status: 'fundraising', createdAt: serverTimestamp(), fundingRaisedCcap: 0, backers: [], totalSharesIssued: 0, totalProfitsDistributed: 0, ticker: `VEQ-${Math.random().toString(36).substring(2, 6).toUpperCase()}` });
+        return addDoc(collection(getDb(), 'ventures'), { ...v, status: 'fundraising', createdAt: serverTimestamp(), fundingRaisedCcap: 0, backers: [], totalSharesIssued: 0, totalProfitsDistributed: 0, ticker: `VEQ-${Math.random().toString(36).substring(2, 6).toUpperCase()}` });
     },
 
     getProposal: async (pid: string): Promise<Proposal | null> => {
-        const snap = await getDoc(doc(proposalsCollection, pid));
+        const snap = await getDoc(doc(collections.proposals, pid));
         return snap.exists() ? { id: snap.id, ...snap.data() } as Proposal : null;
     },
 
     getCurrentRedemptionCycle: async (): Promise<RedemptionCycle | null> => {
-        const snap = await getDoc(doc(globalsCollection, 'redemption_cycle'));
+        const snap = await getDoc(doc(collections.globals, 'redemption_cycle'));
         return snap.exists() ? { id: snap.id, ...snap.data() } as RedemptionCycle : null;
     },
 
     performDailyCheckin: async (uid: string) => {
-        return runTransaction(db, async t => {
-            const userRef = doc(usersCollection, uid);
+        return runTransaction(getDb(), async t => {
+            const userRef = doc(collections.users, uid);
             const userSnap = await t.get(userRef);
             if (!userSnap.exists()) return;
             const lastCheckin = userSnap.data().lastDailyCheckin as Timestamp | undefined;
@@ -1186,59 +1225,59 @@ export const api = {
     },
 
     submitPriceVerification: async (uid: string, item: string, price: number, shop: string) => {
-        const batch = writeBatch(db);
-        batch.set(doc(collection(db, 'price_verifications')), { userId: uid, item, price, shop, timestamp: serverTimestamp() });
-        batch.update(doc(usersCollection, uid), { ccap: increment(15) });
+        const batch = writeBatch(getDb());
+        batch.set(doc(collection(getDb(), 'price_verifications')), { userId: uid, item, price, shop, timestamp: serverTimestamp() });
+        batch.update(doc(collections.users, uid), { ccap: increment(15) });
         return batch.commit();
     },
 
     updatePayoutStatus: async (admin: Admin, payout: PayoutRequest, status: 'completed' | 'rejected') => {
-        return updateDoc(doc(payoutsCollection, payout.id), { status, completedAt: serverTimestamp(), processedBy: { adminId: admin.id, adminName: admin.name } });
+        return updateDoc(doc(collections.payouts, payout.id), { status, completedAt: serverTimestamp(), processedBy: { adminId: admin.id, adminName: admin.name } });
     },
 
     getVentureById: async (vid: string): Promise<Venture | null> => {
-        const snap = await getDoc(doc(db, 'ventures', vid));
+        const snap = await getDoc(doc(getDb(), 'ventures', vid));
         return snap.exists() ? { id: snap.id, ...snap.data() } as Venture : null;
     },
 
     getDistributionsForUserInVenture: async (uid: string, vid: string, shares: number, totalShares: number): Promise<Distribution[]> => {
-        const q = query(collection(db, 'ventures', vid, 'distributions'), orderBy('date', 'desc'));
+        const q = query(collection(getDb(), 'ventures', vid, 'distributions'), orderBy('date', 'desc'));
         const snap = await getDocs(q);
         return snap.docs.map(d => ({ id: d.id, ...d.data() } as Distribution));
     },
 
     redeemCcapForCash: async (u: MemberUser, name: string, phone: string, amount: number, ccap: number, rate: number) => {
-        const batch = writeBatch(db);
-        batch.set(doc(payoutsCollection), { userId: u.id, userName: u.name, type: 'ccap_redemption', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp(), meta: { ccapRedeemed: ccap, rate } });
-        batch.update(doc(usersCollection, u.id), { ccap: increment(-ccap), lastCycleChoice: 'REDEEM' });
+        const batch = writeBatch(getDb());
+        batch.set(doc(collections.payouts), { userId: u.id, userName: u.name, type: 'ccap_redemption', amount, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp(), meta: { ccapRedeemed: ccap, rate } });
+        batch.update(doc(collections.users, u.id), { ccap: increment(-ccap), lastCycleChoice: 'REDEEM' });
         return batch.commit();
     },
 
     stakeCcapForNextCycle: async (u: MemberUser) => {
-        return updateDoc(doc(usersCollection, u.id), { lastCycleChoice: 'STAKE' });
+        return updateDoc(doc(collections.users, u.id), { lastCycleChoice: 'STAKE' });
     },
 
     convertCcapToVeq: async (u: MemberUser, v: Venture, ccap: number, rate: number) => {
         const shares = Math.floor(ccap * 10);
         const holding: VentureEquityHolding = { ventureId: v.id, ventureName: v.name, ventureTicker: v.ticker, shares };
-        const batch = writeBatch(db);
-        batch.update(doc(usersCollection, u.id), { ccap: increment(-ccap), lastCycleChoice: 'INVEST', ventureEquity: arrayUnion(holding) });
-        batch.update(doc(db, 'ventures', v.id), { fundingRaisedCcap: increment(ccap), backers: arrayUnion(u.id), totalSharesIssued: increment(shares) });
+        const batch = writeBatch(getDb());
+        batch.update(doc(collections.users, u.id), { ccap: increment(-ccap), lastCycleChoice: 'INVEST', ventureEquity: arrayUnion(holding) });
+        batch.update(doc(getDb(), 'ventures', v.id), { fundingRaisedCcap: increment(ccap), backers: arrayUnion(u.id), totalSharesIssued: increment(shares) });
         return batch.commit();
     },
 
     getSustenanceFund: async (): Promise<SustenanceCycle | null> => {
-        const snap = await getDoc(doc(globalsCollection, 'sustenance'));
+        const snap = await getDoc(doc(collections.globals, 'sustenance'));
         return snap.exists() ? { id: snap.id, ...snap.data() } as SustenanceCycle : null;
     },
 
     getAllSustenanceVouchers: async (): Promise<SustenanceVoucher[]> => {
-        const snap = await getDocs(collection(db, 'vouchers'));
+        const snap = await getDocs(collection(getDb(), 'vouchers'));
         return snap.docs.map(d => ({ id: d.id, ...d.data() } as SustenanceVoucher));
     },
 
     initializeSustenanceFund: async (admin: User, balance: number, cost: number) => {
-        return setDoc(doc(globalsCollection, 'sustenance'), { slf_balance: balance, hamper_cost: cost, last_drop: serverTimestamp() });
+        return setDoc(doc(collections.globals, 'sustenance'), { slf_balance: balance, hamper_cost: cost, last_drop: serverTimestamp() });
     },
 
     runSustenanceLottery: async (admin: User) => {
@@ -1246,23 +1285,23 @@ export const api = {
     },
 
     requestVeqPayout: async (u: User, h: VentureEquityHolding, shares: number, name: string, phone: string) => {
-        return addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'veq_redemption', amount: shares, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp(), meta: { ventureId: h.ventureId, ventureName: h.ventureName } });
+        return addDoc(collections.payouts, { userId: u.id, userName: u.name, type: 'veq_redemption', amount: shares, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp(), meta: { ventureId: h.ventureId, ventureName: h.ventureName } });
     },
 
     addFundsToCVP: async (u: User, amount: number) => {
-        return updateDoc(doc(globalsCollection, 'cvp'), { total_usd_value: increment(amount), last_updated: serverTimestamp() });
+        return updateDoc(doc(collections.globals, 'cvp'), { total_usd_value: increment(amount), last_updated: serverTimestamp() });
     },
 
     deleteVenture: async (u: User, vid: string) => {
-        return deleteDoc(doc(db, 'ventures', vid));
+        return deleteDoc(doc(getDb(), 'ventures', vid));
     },
 
     claimBonusPayout: async (pid: string, name: string, phone: string) => {
-        return updateDoc(doc(payoutsCollection, pid), { ecocashName: name, ecocashNumber: phone, status: 'pending' });
+        return updateDoc(doc(collections.payouts, pid), { ecocashName: name, ecocashNumber: phone, status: 'pending' });
     },
 
     setGlobalEconomy: async (admin: Admin, data: Partial<GlobalEconomy>) => {
-        return updateDoc(doc(globalsCollection, 'economy'), data);
+        return updateDoc(doc(collections.globals, 'economy'), data);
     },
 
     updateUbtRedemptionWindow: async (admin: Admin, open: boolean) => {
@@ -1273,40 +1312,40 @@ export const api = {
             closesAt.setDate(closesAt.getDate() + 5);
             data.ubtRedemptionWindowClosesAt = Timestamp.fromDate(closesAt);
         }
-        return updateDoc(doc(globalsCollection, 'economy'), data);
+        return updateDoc(doc(collections.globals, 'economy'), data);
     },
 
     requestUbtRedemption: async (u: User, amount: number, usd: number, name: string, phone: string) => {
-        const batch = writeBatch(db);
-        batch.set(doc(payoutsCollection), { userId: u.id, userName: u.name, type: 'ccap_redemption', amount: usd, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp(), meta: { ubtRedeemed: amount } });
-        batch.update(doc(usersCollection, u.id), { ubtBalance: increment(-amount) });
+        const batch = writeBatch(getDb());
+        batch.set(doc(collections.payouts), { userId: u.id, userName: u.name, type: 'ccap_redemption', amount: usd, ecocashName: name, ecocashNumber: phone, status: 'pending', requestedAt: serverTimestamp(), meta: { ubtRedeemed: amount } });
+        batch.update(doc(collections.users, u.id), { ubtBalance: increment(-amount) });
         return batch.commit();
     },
 
     requestOnchainWithdrawal: async (u: User, amount: number, address: string) => {
-        const batch = writeBatch(db);
-        batch.set(doc(payoutsCollection), { userId: u.id, userName: u.name, type: 'onchain_withdrawal', amount, status: 'pending', requestedAt: serverTimestamp(), meta: { solanaAddress: address } });
-        batch.update(doc(usersCollection, u.id), { ubtBalance: increment(-amount) });
+        const batch = writeBatch(getDb());
+        batch.set(doc(collections.payouts), { userId: u.id, userName: u.name, type: 'onchain_withdrawal', amount, status: 'pending', requestedAt: serverTimestamp(), meta: { solanaAddress: address } });
+        batch.update(doc(collections.users, u.id), { ubtBalance: increment(-amount) });
         return batch.commit();
     },
 
     deleteDistressPost: async (admin: User, pid: string, authorId: string) => {
-        const batch = writeBatch(db);
-        batch.delete(doc(postsCollection, pid));
-        batch.update(doc(usersCollection, authorId), { credibility_score: increment(-25) });
+        const batch = writeBatch(getDb());
+        batch.delete(doc(collections.posts, pid));
+        batch.update(doc(collections.users, authorId), { credibility_score: increment(-25) });
         return batch.commit();
     },
 
     reportPost: async (u: User, post: Post, reason: string, details: string) => {
-        return addDoc(collection(db, 'reports'), { reporterId: u.id, reporterName: u.name, reportedUserId: post.authorId, reportedUserName: post.authorName, postId: post.id, postContent: post.content, reason, details, date: new Date().toISOString(), status: 'new' });
+        return addDoc(collection(getDb(), 'reports'), { reporterId: u.id, reporterName: u.name, reportedUserId: post.authorId, reportedUserName: post.authorName, postId: post.id, postContent: post.content, reason, details, date: new Date().toISOString(), status: 'new' });
     },
 
     repostPost: async (orig: Post, u: User, comment: string) => {
-        return addDoc(postsCollection, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content: comment, date: new Date().toISOString(), upvotes: [], types: 'general', repostedFrom: orig, commentCount: 0, repostCount: 0 });
+        return addDoc(collections.posts, { authorId: u.id, authorName: u.name, authorCircle: u.circle, authorRole: u.role, content: comment, date: new Date().toISOString(), upvotes: [], types: 'general', repostedFrom: orig, commentCount: 0, repostCount: 0 });
     },
 
     proposeMultiSigSync: (admin: Admin, from: TreasuryVault, to: TreasuryVault, amount: number, reason: string) => {
-        return addDoc(multisigCollection, {
+        return addDoc(collections.multisig, {
             fromVaultId: from.id,
             toVaultId: to.id,
             amount,
@@ -1319,8 +1358,8 @@ export const api = {
         });
     },
 
-    signMultiSigProposal: (adminId: string, proposalId: string) => runTransaction(db, async t => {
-        const ref = doc(multisigCollection, proposalId);
+    signMultiSigProposal: (adminId: string, proposalId: string) => runTransaction(getDb(), async t => {
+        const ref = doc(collections.multisig, proposalId);
         const snap = await t.get(ref);
         if (!snap.exists()) throw new Error("Proposal lost.");
         const data = snap.data() as MultiSigProposal;
@@ -1328,8 +1367,8 @@ export const api = {
         
         const newSigs = [...data.signatures, adminId];
         if (newSigs.length >= 2) {
-            const fromRef = doc(vaultsCollection, data.fromVaultId);
-            const toRef = doc(vaultsCollection, data.toVaultId);
+            const fromRef = doc(collections.vaults, data.fromVaultId);
+            const toRef = doc(collections.vaults, data.toVaultId);
             const fromSnap = await t.get(fromRef);
             if ((fromSnap.data()?.balance || 0) < data.amount) throw new Error("INSUFFICIENT_FUNDS_IN_VAULT");
             
@@ -1354,7 +1393,7 @@ export const api = {
                 protocol_mode: 'MAINNET', 
                 reason: `MultiSig: ${data.reason}`, 
             };
-            t.set(doc(ledgerCollection, txId), {
+            t.set(doc(collections.ledger, txId), {
                 ...tx,
                 participants: [data.fromVaultId, data.toVaultId],
                 serverTimestamp: serverTimestamp() 
@@ -1365,13 +1404,13 @@ export const api = {
         }
     }),
     
-    sendBroadcast: (u: User, m: string) => addDoc(broadcastsCollection, { authorId: u.id, authorName: u.name, message: m, date: new Date().toISOString() }),
+    sendBroadcast: (u: User, m: string) => addDoc(collections.broadcasts, { authorId: u.id, authorName: u.name, message: m, date: new Date().toISOString() }),
     getNearbyUsers: async (uid: string) => {
-        const snap = await getDocs(query(usersCollection, limit(20)));
+        const snap = await getDocs(query(collections.users, limit(20)));
         return snap.docs.map(d => ({ id: d.id, ...d.data() } as User)).filter(u => u.id !== uid);
     },
     getBroadcasts: async () => {
-        const q = query(broadcastsCollection, orderBy('date', 'desc'), limit(10));
+        const q = query(collections.broadcasts, orderBy('date', 'desc'), limit(10));
         const s = await getDocs(q);
         return s.docs.map(d => ({ id: d.id, ...d.data() } as any));
     },
@@ -1388,14 +1427,14 @@ export const api = {
             }
         });
 
-        const batch = writeBatch(db);
+        const batch = writeBatch(getDb());
         if (Object.keys(publicData).length > 0) {
-            batch.update(doc(usersCollection, uid), publicData);
+            batch.update(doc(collections.users, uid), publicData);
         }
         if (Object.keys(privateData).length > 0) {
-            batch.set(doc(db, 'users', uid, 'private', 'data'), privateData, { merge: true });
+            batch.set(doc(getDb(), 'users', uid, 'private', 'data'), privateData, { merge: true });
         }
-        batch.update(doc(membersCollection, mid), mData);
+        batch.update(doc(collections.members, mid), mData);
         await batch.commit();
     },
     vouchForCitizen: async (transaction: UbtTransaction) => {
@@ -1410,7 +1449,7 @@ export const api = {
         }
 
         // Add to Mempool
-        await addDoc(mempoolCollection, {
+        await addDoc(collections.mempool, {
             ...transaction,
             participants: [transaction.senderId, transaction.receiverId],
             serverTimestamp: serverTimestamp(),
@@ -1419,10 +1458,10 @@ export const api = {
         sovereignService.dispatchTransaction(transaction).catch(console.error);
     },
     initiateDispute: (c: User, r: User, reason: string, evidence: string) => 
-        addDoc(disputesCollection, { claimantId: c.id, claimantName: c.name, respondentId: r.id, respondentName: r.name, reason, evidence, status: 'TRIBUNAL', juryIds: [], votesForClaimant: 0, votesForRespondent: 0, signedVotes: {}, timestamp: serverTimestamp() }),
+        addDoc(collections.disputes, { claimantId: c.id, claimantName: c.name, respondentId: r.id, respondentName: r.name, reason, evidence, status: 'TRIBUNAL', juryIds: [], votesForClaimant: 0, votesForRespondent: 0, signedVotes: {}, timestamp: serverTimestamp() }),
     castJuryVote: (did: string, uid: string, vote: string, signature: string) => 
-        runTransaction(db, async t => {
-            const ref = doc(disputesCollection, did);
+        runTransaction(getDb(), async t => {
+            const ref = doc(collections.disputes, did);
             const snap = await t.get(ref);
             if (!snap.exists()) return;
             t.update(ref, { 
@@ -1431,37 +1470,37 @@ export const api = {
                 [vote === 'claimant' ? 'votesForClaimant' : 'votesForRespondent']: increment(1) 
             });
         }),
-    markNotificationAsRead: (uid: string, nid: string) => updateDoc(doc(db, 'users', uid, 'notifications', nid), { read: true }),
+    markNotificationAsRead: (uid: string, nid: string) => updateDoc(doc(getDb(), 'users', uid, 'notifications', nid), { read: true }),
     markAllNotificationsAsRead: async (uid: string) => {
-        const q = query(collection(db, 'users', uid, 'notifications'), where('read', '==', false));
+        const q = query(collection(getDb(), 'users', uid, 'notifications'), where('read', '==', false));
         const s = await getDocs(q);
-        const batch = writeBatch(db);
+        const batch = writeBatch(getDb());
         s.forEach(d => batch.update(d.ref, { read: true }));
         await batch.commit();
     },
-    awardKnowledgePoints: (uid: string) => updateDoc(doc(usersCollection, uid), { hasReadKnowledgeBase: true, knowledgePoints: increment(10) }).then(() => true),
+    awardKnowledgePoints: (uid: string) => updateDoc(doc(collections.users, uid), { hasReadKnowledgeBase: true, knowledgePoints: increment(10) }).then(() => true),
     
     requestPayout: (u: User, n: string, p: string, a: number) => {
-        return addDoc(payoutsCollection, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() });
+        return addDoc(collections.payouts, { userId: u.id, userName: u.name, type: 'referral', amount: a, ecocashName: n, ecocashNumber: p, status: 'pending', requestedAt: serverTimestamp() });
     },
     
     addComment: (pid: string, data: any, coll: 'posts' | 'proposals') => {
-        const batch = writeBatch(db);
-        const commentRef = doc(collection(db, coll, pid, 'comments'));
+        const batch = writeBatch(getDb());
+        const commentRef = doc(collection(getDb(), coll, pid, 'comments'));
         batch.set(commentRef, { ...data, timestamp: serverTimestamp() });
-        batch.update(doc(db, coll, pid), { commentCount: increment(1) });
+        batch.update(doc(getDb(), coll, pid), { commentCount: increment(1) });
         return batch.commit();
     },
 
     deleteComment: (pid: string, cid: string, coll: 'posts' | 'proposals') => {
-        const batch = writeBatch(db);
-        batch.delete(doc(db, coll, pid, 'comments', cid));
-        batch.update(doc(db, coll, pid), { commentCount: increment(-1) });
+        const batch = writeBatch(getDb());
+        batch.delete(doc(getDb(), coll, pid, 'comments', cid));
+        batch.update(doc(getDb(), coll, pid), { commentCount: increment(-1) });
         return batch.commit();
     },
 
     upvoteComment: async (pid: string, cid: string, uid: string, coll: 'posts' | 'proposals' = 'posts') => {
-        const ref = doc(db, coll, pid, 'comments', cid);
+        const ref = doc(getDb(), coll, pid, 'comments', cid);
         const snap = await getDoc(ref);
         if (snap.exists()) {
             const upvotes = snap.data().upvotes || [];
@@ -1469,7 +1508,7 @@ export const api = {
         }
     },
 
-    reportUser: (r: User, t: User, reason: string, details: string) => addDoc(collection(db, 'reports'), { 
+    reportUser: (r: User, t: User, reason: string, details: string) => addDoc(collection(getDb(), 'reports'), { 
         reporterId: r.id, 
         reporterName: r.name, 
         reportedUserId: t.id, 
@@ -1481,27 +1520,27 @@ export const api = {
     }),
 
     getVentureMembers: async (count: number) => {
-        const q = query(usersCollection, where('isLookingForPartners', '==', true), limit(count));
+        const q = query(collections.users, where('isLookingForPartners', '==', true), limit(count));
         const s = await getDocs(q);
         return { users: s.docs.map(d => ({ id: d.id, ...d.data() } as PublicUserProfile)) };
     },
 
     unfollowUser: async (uid: string, tid: string) => {
-        const batch = writeBatch(db);
-        batch.update(doc(usersCollection, uid), { following: arrayRemove(tid) });
-        batch.update(doc(usersCollection, tid), { followers: arrayRemove(uid) });
+        const batch = writeBatch(getDb());
+        batch.update(doc(collections.users, uid), { following: arrayRemove(tid) });
+        batch.update(doc(collections.users, tid), { followers: arrayRemove(uid) });
         await batch.commit();
     },
 
     followUser: async (u: User, tid: string) => {
-        const batch = writeBatch(db);
-        batch.update(doc(usersCollection, u.id), { following: arrayUnion(tid) });
-        batch.update(doc(usersCollection, tid), { followers: arrayUnion(u.id) });
+        const batch = writeBatch(getDb());
+        batch.update(doc(collections.users, u.id), { following: arrayUnion(tid) });
+        batch.update(doc(collections.users, tid), { followers: arrayUnion(u.id) });
         await batch.commit();
     },
 
-    voteOnProposal: (pid: string, uid: string, v: 'for' | 'against') => runTransaction(db, async t => {
-        const ref = doc(proposalsCollection, pid);
+    voteOnProposal: (pid: string, uid: string, v: 'for' | 'against') => runTransaction(getDb(), async t => {
+        const ref = doc(collections.proposals, pid);
         const snap = await t.get(ref);
         if (!snap.exists()) throw new Error("Proposal expired.");
         const data = snap.data();
@@ -1513,12 +1552,12 @@ export const api = {
     }),
 
     getFundraisingVentures: async () => {
-        const q = query(collection(db, 'ventures'), where('status', '==', 'fundraising'));
+        const q = query(collection(getDb(), 'ventures'), where('status', '==', 'fundraising'));
         const s = await getDocs(q);
         return s.docs.map(d => ({ id: d.id, ...d.data() } as any));
     },
 
-    createPendingUbtPurchase: (u: User, val: number, amt: number) => addDoc(pendingPurchasesCollection, { 
+    createPendingUbtPurchase: (u: User, val: number, amt: number) => addDoc(collections.pendingPurchases, { 
         userId: u.id, 
         userName: u.name, 
         amountUsd: val, 
@@ -1528,7 +1567,7 @@ export const api = {
         payment_method: 'FIAT' 
     }),
 
-    updatePendingPurchaseReference: (purchaseId: string, ref: string) => updateDoc(doc(pendingPurchasesCollection, purchaseId), { 
+    updatePendingPurchaseReference: (purchaseId: string, ref: string) => updateDoc(doc(collections.pendingPurchases, purchaseId), { 
         ecocashRef: ref, 
         status: 'AWAITING_CONFIRMATION' 
     }),

@@ -9,9 +9,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import { api } from "./services/apiService";
 import { serverTimestamp } from "firebase/firestore";
-import { whatsappService } from "./services/whatsappService";
 
 process.on("uncaughtException", (err) => {
   console.error("CRITICAL: Uncaught Exception:", err);
@@ -43,6 +41,10 @@ async function startServer() {
     res.json({ status: "ok", uptime: process.uptime() });
   });
 
+  // Lazy load services to prevent startup crashes
+  const { api } = await import("./services/apiService");
+  const { whatsappService } = await import("./services/whatsappService");
+
   console.log("Server: Setting up tools...");
   const SERVER_TOOLS = [
     {
@@ -69,6 +71,19 @@ async function startServer() {
       name: "get_public_ledger",
       description: "View the global public ledger of all UBT transactions in the Commons.",
       parameters: { type: "object", properties: { limit: { type: "number", description: "Number of transactions to show." } } }
+    },
+    {
+      name: "whatsapp_send_message",
+      description: "Send a message via a WhatsApp agent",
+      parameters: {
+        type: "object",
+        properties: {
+          agentId: { type: "string", description: "The ID of the WhatsApp agent" },
+          to: { type: "string", description: "The recipient's phone number (with country code)" },
+          message: { type: "string", description: "The message content" }
+        },
+        required: ["agentId", "to", "message"]
+      }
     }
   ];
 
@@ -98,6 +113,14 @@ async function startServer() {
       case "get_public_ledger": {
         const ledger = await api.getPublicLedger(args.limit || 5);
         return JSON.stringify(ledger);
+      }
+      case "whatsapp_send_message": {
+        try {
+          await whatsappService.sendMessage(args.agentId, args.to, args.message);
+          return "Message sent";
+        } catch (error) {
+          return `Failed: ${error}`;
+        }
       }
       default:
         return "Tool not implemented on server.";
@@ -149,7 +172,13 @@ SECURITY & PRIVACY RULES:
           if (assistantMessage?.tool_calls) {
             messages.push(assistantMessage);
             for (const toolCall of assistantMessage.tool_calls) {
-              const result = await executeServerTool(toolCall.function.name, { ...JSON.parse(toolCall.function.arguments), userId });
+              let args = {};
+              try {
+                args = JSON.parse(toolCall.function.arguments || '{}');
+              } catch (e) {
+                console.error("Failed to parse tool arguments from AI:", toolCall.function.arguments);
+              }
+              const result = await executeServerTool(toolCall.function.name, { ...args, userId });
               messages.push({
                 role: "tool",
                 tool_call_id: toolCall.id,
@@ -195,16 +224,38 @@ SECURITY & PRIVACY RULES:
   });
 
   // WhatsApp Endpoints
+  app.get("/api/whatsapp/instances", (req, res) => {
+    res.json(whatsappService.listInstances());
+  });
+
+  app.post("/api/whatsapp/instance/create", async (req, res) => {
+    const { sessionId } = req.body;
+    if (!sessionId) return res.status(400).json({ error: "sessionId is required" });
+    try {
+      const instance = await whatsappService.createInstance(sessionId);
+      res.json({ id: instance.id, status: instance.status, qr: instance.qr });
+    } catch (error) {
+      res.status(500).json({ error: String(error) });
+    }
+  });
+
+  app.delete("/api/whatsapp/instance/:id", (req, res) => {
+    whatsappService.removeInstance(req.params.id);
+    res.json({ success: true });
+  });
+
   app.get("/api/whatsapp/status", (req, res) => {
-    const userId = req.query.userId as string;
-    if (!userId) return res.status(400).json({ error: "userId required" });
-    res.json(whatsappService.getStatus(userId));
+    const instances = whatsappService.listInstances();
+    res.json({
+      connected: instances.some(i => i.status === 'open'),
+      instances
+    });
   });
 
   app.post("/api/whatsapp/logout", async (req, res) => {
-    const { userId } = req.body;
-    if (!userId) return res.status(400).json({ error: "userId required" });
-    await whatsappService.logout(userId);
+    const { sessionId } = req.body;
+    if (!sessionId) return res.status(400).json({ error: "sessionId required" });
+    whatsappService.removeInstance(sessionId);
     res.json({ success: true });
   });
 
@@ -396,7 +447,14 @@ SECURITY & PRIVACY RULES:
         }
       }
 
-      const data = await response.json();
+      const text = await response.text();
+      let data;
+      try {
+        data = text ? JSON.parse(text) : {};
+      } catch (e) {
+        console.error("Failed to parse OpenRouter response:", text);
+        return res.status(500).json({ error: "Invalid response from AI provider" });
+      }
       res.json(data);
     } catch (error: any) {
       console.error("OpenRouter Fetch Error:", error);
@@ -437,20 +495,7 @@ SECURITY & PRIVACY RULES:
   }
 
     // WhatsApp Service Setup (Asynchronous, non-blocking)
-    console.log("Server: Recovering WhatsApp sessions...");
-    const AUTH_PATH = path.join(process.cwd(), 'wa_auth');
-    if (fs.existsSync(AUTH_PATH)) {
-      try {
-        const sessions = fs.readdirSync(AUTH_PATH);
-        for (const userId of sessions) {
-          if (fs.statSync(path.join(AUTH_PATH, userId)).isDirectory()) {
-            whatsappService.init(userId).catch(err => console.error(`WhatsApp Init Error for ${userId}:`, err));
-          }
-        }
-      } catch (e) {
-        console.error("WhatsApp Session Recovery Failed:", e);
-      }
-    }
+    whatsappService.recoverSessions();
 }
 
 startServer().catch(err => {

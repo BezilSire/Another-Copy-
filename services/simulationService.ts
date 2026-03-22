@@ -12,19 +12,23 @@ import {
     orderBy, 
     limit
 } from 'firebase/firestore';
-import { db } from './firebase';
+import { getDbInstance } from './firebase';
 import { safeJsonStringify } from '../utils';
 import { Simulation, SimAgent, SimMessage, User } from '../types';
 import { agentService } from './agentService';
 
-const simulationsCollection = collection(db, 'simulations');
+const getSimulationsCollection = () => {
+    const db = getDbInstance();
+    if (!db) throw new Error("Firestore not configured");
+    return collection(db, 'simulations');
+};
 
 export const simulationService = {
     /**
      * Step 1 & 2: Initialize Simulation and Create Agents
      */
     initializeSimulation: async (user: User, title: string, seedMaterial: string): Promise<string> => {
-        const simDoc = await addDoc(simulationsCollection, {
+        const simDoc = await addDoc(getSimulationsCollection(), {
             userId: user.id,
             title,
             seedMaterial,
@@ -62,7 +66,7 @@ export const simulationService = {
             const data = JSON.parse(jsonMatch[0]);
             const agents = data.agents;
 
-            const agentsCollection = collection(db, `simulations/${simId}/agents`);
+            const agentsCollection = collection(getSimulationsCollection(), simId, 'agents');
             for (const agentData of agents) {
                 await addDoc(agentsCollection, {
                     ...agentData,
@@ -71,12 +75,12 @@ export const simulationService = {
                 });
             }
 
-            await updateDoc(doc(simulationsCollection, simId), { status: 'simulating' });
+            await updateDoc(doc(getSimulationsCollection(), simId), { status: 'simulating' });
             return simId;
 
         } catch (error) {
             console.error("Simulation Initialization Error:", error);
-            await updateDoc(doc(simulationsCollection, simId), { status: 'failed' });
+            await updateDoc(doc(getSimulationsCollection(), simId), { status: 'failed' });
             throw error;
         }
     },
@@ -85,11 +89,11 @@ export const simulationService = {
      * Step 3: Run Simulation Step (Agents Interacting)
      */
     runSimulationStep: async (simId: string): Promise<void> => {
-        const agentsSnap = await getDocs(collection(db, `simulations/${simId}/agents`));
+        const agentsSnap = await getDocs(collection(getSimulationsCollection(), simId, 'agents'));
         const agents = agentsSnap.docs.map(d => ({ id: d.id, ...d.data() } as SimAgent));
         
         const messagesSnap = await getDocs(query(
-            collection(db, `simulations/${simId}/messages`),
+            collection(getSimulationsCollection(), simId, 'messages'),
             orderBy('timestamp', 'desc'),
             limit(10)
         ));
@@ -120,7 +124,7 @@ export const simulationService = {
             const jsonMatch = content.match(/\{[\s\S]*\}/);
             if (!jsonMatch) throw new Error("No JSON found in response");
             const data = JSON.parse(jsonMatch[0]);
-            const messagesCollection = collection(db, `simulations/${simId}/messages`);
+            const messagesCollection = collection(getSimulationsCollection(), simId, 'messages');
             
             for (const msg of data.messages) {
                 const agent = agents.find(a => a.name === msg.agentName);
@@ -140,13 +144,13 @@ export const simulationService = {
      * Step 4: Generate Final Report
      */
     generateFinalReport: async (simId: string): Promise<void> => {
-        const simDocRef = doc(db, 'simulations', simId);
+        const simDocRef = doc(getSimulationsCollection(), simId);
         const simSnap = await getDoc(simDocRef);
         
         if (!simSnap.exists()) return;
         const simData = simSnap.data() as Simulation;
         
-        const messagesSnap = await getDocs(collection(db, `simulations/${simId}/messages`));
+        const messagesSnap = await getDocs(collection(getSimulationsCollection(), simId, 'messages'));
         const allMessages = messagesSnap.docs.map(d => d.data() as SimMessage);
 
         const prompt = `
@@ -172,14 +176,14 @@ export const simulationService = {
             const jsonMatch = content.match(/\{[\s\S]*\}/);
             if (!jsonMatch) throw new Error("No JSON found in response");
             const data = JSON.parse(jsonMatch[0]);
-            await updateDoc(doc(simulationsCollection, simId), {
+            await updateDoc(doc(getSimulationsCollection(), simId), {
                 ...data,
                 status: 'completed',
                 completedAt: serverTimestamp()
             });
         } catch (error) {
             console.error("Report Generation Error:", error);
-            await updateDoc(doc(simulationsCollection, simId), { status: 'failed' });
+            await updateDoc(doc(getSimulationsCollection(), simId), { status: 'failed' });
         }
     },
 

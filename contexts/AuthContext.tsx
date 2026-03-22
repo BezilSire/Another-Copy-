@@ -5,7 +5,7 @@ import { doc, onSnapshot, setDoc, getDoc, writeBatch, serverTimestamp, collectio
 import { useToast } from './ToastContext';
 import { api, handleFirestoreError, OperationType } from '../services/apiService';
 import { cryptoService, VaultData, UGC_DEFAULT_NODE_PIN } from '../services/cryptoService';
-import { auth, db } from '../services/firebase';
+import { getAuthInstance, getDbInstance } from '../services/firebase';
 import { User, NewPublicMemberData, LoginCredentials } from '../types';
 import { generateReferralCode, formatFirestoreError } from '../utils';
 
@@ -28,6 +28,8 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  const auth = getAuthInstance();
+  const db = getDbInstance();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoadingAuth, setIsLoadingAuth] = useState(false);
@@ -56,7 +58,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         console.log("Auth: Auto-migrating legacy vault to UID-based anchoring...");
         await cryptoService.saveVault(vaultData, uid);
         const encryptedVault = localStorage.getItem('gcn_encrypted_vault');
-        if (encryptedVault) {
+        if (encryptedVault && db) {
             await setDoc(doc(db, 'users', uid), { encryptedVault }, { merge: true });
         }
         sessionStorage.setItem('ugc_temp_pin', uid);
@@ -70,6 +72,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
   // Optimized Sync: Establish entry first, enrich data second
   const syncIdentity = useCallback(async (uid: string, email: string | null, displayName?: string | null) => {
+    if (!db) return;
     try {
         console.log("Identity Sync: Starting for UID:", uid);
         const userDocRef = doc(db, 'users', uid);
@@ -131,7 +134,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setCurrentUser(skeletalUser);
             
             // Attempt to save if it's a real auth session
-            if (auth.currentUser && !auth.currentUser.isAnonymous) {
+            if (auth && auth.currentUser && !auth.currentUser.isAnonymous) {
                 const batch = writeBatch(db);
                 batch.set(userDocRef, skeletalUser);
                 batch.set(doc(db, 'users', uid, 'private', 'data'), { email: email || '' });
@@ -150,11 +153,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [addToast]);
 
   const refreshIdentity = async () => {
-    if (firebaseUser) {
-        setIsProcessingAuth(true);
-        await syncIdentity(firebaseUser.uid, firebaseUser.email);
-        setIsProcessingAuth(false);
-    }
+    if (!firebaseUser || !db) return;
+    setIsProcessingAuth(true);
+    await syncIdentity(firebaseUser.uid, firebaseUser.email);
+    setIsProcessingAuth(false);
   };
 
   useEffect(() => {
@@ -162,7 +164,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     console.log("Auth: Initializing onAuthStateChanged listener...");
     
-    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+    const unsubscribeAuth = auth ? onAuthStateChanged(auth, async (user) => {
       console.log("Auth: State changed. User:", user ? user.uid : "null");
       setFirebaseUser(user);
       
@@ -183,42 +185,44 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
 
         // Background Sync: Load user data without blocking the UI
-        const userDocRef = doc(db, 'users', user.uid);
-        
-        console.log("Auth: Setting up user document listener for UID:", user.uid);
-        userDocListener = onSnapshot(userDocRef, async (userDoc) => {
-          if (userDoc.exists()) {
-            const userData = { id: userDoc.id, ...userDoc.data() } as User;
-            setCurrentUser(userData);
+        if (db) {
+          const userDocRef = doc(db, 'users', user.uid);
+          
+          console.log("Auth: Setting up user document listener for UID:", user.uid);
+          userDocListener = onSnapshot(userDocRef, async (userDoc) => {
+            if (userDoc.exists()) {
+              const userData = { id: userDoc.id, ...userDoc.data() } as User;
+              setCurrentUser(userData);
 
-            const serverVault = (userData as any).encryptedVault;
-            if (serverVault && !cryptoService.hasVault()) {
-                cryptoService.injectVault(serverVault);
-            }
+              const serverVault = (userData as any).encryptedVault;
+              if (serverVault && !cryptoService.hasVault()) {
+                  cryptoService.injectVault(serverVault);
+              }
 
-            const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
-            if (!isUnlocked) {
-                attemptAutoUnlock(user.uid);
+              const isUnlocked = sessionStorage.getItem('ugc_node_unlocked') === 'true';
+              if (!isUnlocked) {
+                  attemptAutoUnlock(user.uid);
+              }
+            } else {
+              // If user doc doesn't exist, we might need to create it, but we don't block
+              console.warn("User document does not exist for UID:", user.uid);
+              // Provision skeletal user in background if needed
+              const skeletalUser: any = {
+                  id: user.uid,
+                  name: user.displayName || user.email?.split('@')[0] || 'Citizen',
+                  email: user.email || '',
+                  role: 'member',
+                  status: 'active',
+                  circle: 'GLOBAL',
+                  isProfileComplete: true,
+                  createdAt: Timestamp.now(),
+              };
+              setCurrentUser(skeletalUser);
             }
-          } else {
-            // If user doc doesn't exist, we might need to create it, but we don't block
-            console.warn("User document does not exist for UID:", user.uid);
-            // Provision skeletal user in background if needed
-            const skeletalUser: any = {
-                id: user.uid,
-                name: user.displayName || user.email?.split('@')[0] || 'Citizen',
-                email: user.email || '',
-                role: 'member',
-                status: 'active',
-                circle: 'GLOBAL',
-                isProfileComplete: true,
-                createdAt: Timestamp.now(),
-            };
-            setCurrentUser(skeletalUser);
-          }
-        }, (error) => {
-          console.error("User document listener error:", error);
-        });
+          }, (error) => {
+            console.error("User document listener error:", error);
+          });
+        }
         
         try {
             api.setupPresence(user.uid);
@@ -234,7 +238,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       console.error("Auth: onAuthStateChanged error:", error);
       setIsLoadingAuth(false);
       setIsProcessingAuth(false);
-    });
+    }) : () => {};
 
     return () => {
       unsubscribeAuth();
@@ -278,6 +282,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [addToast]);
 
   const loginAnonymously = useCallback(async (displayName: string) => {
+    if (!auth) {
+        addToast("Auth not configured", "error");
+        return;
+    }
     setIsProcessingAuth(true);
     try {
         sessionStorage.setItem('ugc_guest_name', displayName);
@@ -286,7 +294,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         setIsProcessingAuth(false);
         addToast("Bridge access failed.", "error");
     }
-  }, [addToast]);
+  }, [auth, addToast]);
 
   const logout = useCallback(async () => {
     if (currentUser) api.goOffline(currentUser.id);
@@ -298,6 +306,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [currentUser]);
 
   const signup = useCallback(async (memberData: NewPublicMemberData & { mnemonic?: string }, password: string) => {
+    if (!auth) {
+        addToast("Auth not configured", "error");
+        return;
+    }
     setIsProcessingAuth(true);
     console.log("Starting signup protocol for:", memberData.email);
     try {
@@ -324,6 +336,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         await cryptoService.saveVault({ mnemonic, email: memberData.email }, user.uid);
         const encryptedVault = localStorage.getItem('gcn_encrypted_vault') || "";
 
+        const db = getDbInstance();
+        if (!db) throw new Error("Firestore not configured");
         const batch = writeBatch(db);
         let referrerId = '';
         if (memberData.referralCode) {
@@ -402,6 +416,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   }, [addToast]);
 
   const restoreWallet = useCallback(async (mnemonic: string, email: string, password: string) => {
+    if (!auth) {
+        addToast("Auth not configured", "error");
+        return;
+    }
     setIsProcessingAuth(true);
     try {
         if (!cryptoService.validateMnemonic(mnemonic)) {

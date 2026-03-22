@@ -43,8 +43,10 @@ export const aiService = {
         try {
             // Clean up potential markdown code blocks
             const cleanJson = aiAnalysis.replace(/```json/g, '').replace(/```/g, '').trim();
-            const parsed = JSON.parse(cleanJson);
-            tools = parsed.tools_required || [];
+            if (cleanJson) {
+                const parsed = JSON.parse(cleanJson);
+                tools = parsed.tools_required || [];
+            }
         } catch (e) {
             // Fallback if AI doesn't return perfect JSON
             if (aiAnalysis.includes("search_zim_news")) tools.push("search_zim_news");

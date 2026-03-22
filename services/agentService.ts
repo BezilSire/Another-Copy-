@@ -25,7 +25,14 @@ export const agentService = {
       body: safeJsonStringify({ messages: serializableMessages, tools }),
     });
 
-    const data = await response.json();
+    const text = await response.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : {};
+    } catch (e) {
+      console.error('Failed to parse Agent response:', text);
+      throw new Error('Agent returned an invalid response format.');
+    }
 
     if (!response.ok) {
       throw new Error(data.error?.message || data.error || 'Failed to communicate with Agent');

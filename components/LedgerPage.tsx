@@ -33,7 +33,7 @@ export const LedgerPage: React.FC = () => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
 
   useEffect(() => {
-    const unsubAuth = auth.onAuthStateChanged(async (user) => {
+    const unsubAuth = auth.onAuthStateChanged(async (user: any) => {
       if (user) {
         const userData = await api.getUser(user.uid);
         setCurrentUser(userData);
