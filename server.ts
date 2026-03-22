@@ -22,16 +22,11 @@ process.on("unhandledRejection", (reason, promise) => {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+const app = express();
+const PORT = 3000;
+
 async function startServer() {
   console.log("Server: Starting initialization...");
-  const app = express();
-  const PORT = 3000;
-
-  // Start server immediately to satisfy proxy health checks
-  app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-    console.log(`MCP Endpoint: http://localhost:${PORT}/mcp`);
-  });
 
   app.use(cors());
   app.use(express.json());
@@ -562,11 +557,28 @@ SECURITY & PRIVACY RULES:
     });
   }
 
-    // WhatsApp Service Setup (Asynchronous, non-blocking)
-    whatsappService.recoverSessions();
+  // WhatsApp Service Setup (Asynchronous, non-blocking)
+  whatsappService.recoverSessions();
+
+  return app;
 }
 
-startServer().catch(err => {
-  console.error("Critical Server Startup Error:", err);
-  process.exit(1);
-});
+const appPromise = startServer();
+
+// For local development
+if (process.env.NODE_ENV !== "production" || !process.env.VERCEL) {
+  appPromise.then(app => {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on http://localhost:${PORT}`);
+      console.log(`MCP Endpoint: http://localhost:${PORT}/mcp`);
+    });
+  }).catch(err => {
+    console.error("Critical Server Startup Error:", err);
+    process.exit(1);
+  });
+}
+
+export default async (req: any, res: any) => {
+  const app = await appPromise;
+  return app(req, res);
+};

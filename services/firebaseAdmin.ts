@@ -9,7 +9,8 @@ export const getAdminDb = () => {
     if (!adminApp) {
         const projectId = process.env.VITE_FIREBASE_PROJECT_ID || process.env.FIREBASE_PROJECT_ID;
         
-        if (!admin.apps.length) {
+        const apps = admin.apps || [];
+        if (!apps.length) {
             adminApp = admin.initializeApp({
                 projectId: projectId
             });

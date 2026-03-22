@@ -281,7 +281,7 @@ export const whatsappService = {
                 return;
             }
             const querySnapshot = await db.collection('whatsapp_sessions').get();
-            const sessionIds = querySnapshot.docs.map((doc: any) => doc.id);
+            const sessionIds = querySnapshot?.docs?.map((doc: any) => doc.id) || [];
             
             console.log(`Recovering ${sessionIds.length} WhatsApp sessions from Firestore...`);
             for (const sessionId of sessionIds) {
