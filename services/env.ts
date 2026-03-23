@@ -1,14 +1,16 @@
 
 export const getEnvVar = (key: string) => {
+    // 1. Try Vite's import.meta.env (Client-side)
     try {
-        // @ts-ignore - Vite environment
-        if (typeof import.meta !== 'undefined' && (import.meta as any).env && (import.meta as any).env[key]) {
-            return (import.meta as any).env[key];
+        // @ts-ignore
+        const meta = import.meta as any;
+        if (typeof meta !== 'undefined' && meta.env && meta.env[key]) {
+            return meta.env[key];
         }
     } catch (e) {}
     
+    // 2. Try Node's process.env (Server-side)
     try {
-        // Node.js environment
         if (typeof process !== 'undefined' && process.env && process.env[key]) {
             return process.env[key];
         }
@@ -17,4 +19,5 @@ export const getEnvVar = (key: string) => {
     return null;
 };
 
+// For client-side, we MUST use VITE_ prefix for variables to be exposed
 export const GEMINI_API_KEY = getEnvVar('VITE_GEMINI_API_KEY') || getEnvVar('GEMINI_API_KEY') || '';

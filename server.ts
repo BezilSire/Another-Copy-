@@ -686,25 +686,47 @@ SECURITY & PRIVACY RULES:
       const geminiKey = process.env.GEMINI_API_KEY;
       if (geminiKey) {
         const genAI = new GoogleGenAI({ apiKey: geminiKey });
-        const model = genAI.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: messages.map((m: any) => ({
+        
+        const systemMessage = messages.find((m: any) => m.role === "system");
+        const chatContents = messages
+          .filter((m: any) => m.role !== "system")
+          .map((m: any) => ({
             role: m.role === "assistant" ? "model" : "user",
-            parts: [{ text: m.content }]
-          })),
+            parts: [{ text: m.content || "" }]
+          }));
+
+        // Ensure we have at least one message for Gemini
+        if (chatContents.length === 0) {
+          chatContents.push({ role: "user", parts: [{ text: "Hello" }] });
+        }
+
+        const response = await genAI.models.generateContent({
+          model: "gemini-3-flash-preview",
+          contents: chatContents,
+          config: {
+            systemInstruction: systemMessage?.content || "You are a helpful assistant."
+          }
         });
-        const response = await model;
-        return res.json({
-          choices: [{
-            message: {
-              role: "assistant",
-              content: response.text
-            }
-          }]
-        });
+
+        if (response.text) {
+          console.log("Gemini: Success with direct fallback");
+          return res.json({
+            choices: [{
+              message: {
+                role: "assistant",
+                content: response.text
+              }
+            }]
+          });
+        } else {
+          throw new Error("Gemini returned an empty response.");
+        }
+      } else {
+        console.warn("Gemini: No GEMINI_API_KEY found on server.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("OpenRouter: Gemini Fallback Error:", err);
+      lastError = `Gemini Fallback Error: ${err.message}`;
     }
 
     res.status(500).json({ 

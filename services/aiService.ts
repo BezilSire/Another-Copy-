@@ -25,7 +25,7 @@ export const aiService = {
             }
 
             // Fallback to Gemini if server endpoint fails
-            const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+            const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
             const geminiResponse = await ai.models.generateContent({
                 model: "gemini-3-flash-preview",
                 contents: prompt,

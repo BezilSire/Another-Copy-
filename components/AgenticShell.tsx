@@ -689,8 +689,15 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
         setMessages([...currentMessages, finalWithWidgets]);
       }
     } catch (error: any) {
-      addToast(error.message, 'error');
-      setMessages(prev => [...prev, { role: 'assistant', content: "I encountered a synchronization error. Please retry your request." }]);
+      let displayMessage = error.message;
+      try {
+        // Try to parse as FirestoreErrorInfo JSON
+        const errInfo = JSON.parse(error.message);
+        if (errInfo.error) displayMessage = errInfo.error;
+      } catch (e) {}
+      
+      addToast(displayMessage, 'error');
+      setMessages(prev => [...prev, { role: 'assistant', content: `I encountered a synchronization error: ${displayMessage}. Please verify your connection or retry your request.` }]);
     } finally {
       setIsLoading(false);
     }

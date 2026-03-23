@@ -21,6 +21,7 @@ export const agentService = {
     // Strip non-serializable properties like 'widget' and 'widgets' before sending to API
     const serializableMessages = messages.map(({ widget, widgets, ...rest }) => rest);
     
+    let lastServerError = '';
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
@@ -47,14 +48,21 @@ export const agentService = {
         return data;
       }
 
+      lastServerError = data.details || data.error || 'Server-side chat failed';
       // If server-side chat fails, we'll try Gemini fallback below
-      console.warn('Server-side chat failed, attempting Gemini fallback...', data.error);
-    } catch (error) {
-      console.warn('Server-side chat failed with network error, attempting Gemini fallback...', error);
+      console.warn('Server-side chat failed, attempting Gemini fallback...', lastServerError);
+    } catch (error: any) {
+      lastServerError = error.message;
+      console.warn('Server-side chat failed with network error, attempting Gemini fallback...', lastServerError);
     }
 
     // FALLBACK: Direct Gemini API call from frontend
-    return await this.geminiFallback(messages, tools);
+    try {
+      return await this.geminiFallback(messages, tools);
+    } catch (fallbackError: any) {
+      // If fallback also fails, throw the original server error if it exists
+      throw new Error(lastServerError || fallbackError.message);
+    }
   },
 
   async geminiFallback(messages: AgentMessage[], tools?: any[]) {
