@@ -20,7 +20,30 @@ const getFirebaseConfig = () => {
     firebaseConfig = {};
     if (isNode) {
         try {
-            // In Node, we can use process.env mostly.
+            // Use dynamic import for Node.js modules if needed, but since this is a sync function
+            // and we're in a Node environment, we can try to use the global require if available
+            // or just skip it if we can't do it synchronously.
+            // However, in many modern Node environments, we can't easily do sync dynamic imports.
+            // Let's try to use the process.cwd() and fs if we can get them.
+            // A better way is to just use the environment variables which should be set.
+            // But if we really need the file, we might need to make this async or use a different approach.
+            
+            // For now, let's try to use the fact that we might be in a CommonJS environment or use a hack.
+            // Actually, I'll just use the environment variables for now, as they should be set by the platform.
+            // If they are not, we might have issues anyway.
+            
+            // Wait, I'll try to use the 'fs' module if it's available globally or via require.
+            // @ts-ignore
+            const fs = typeof require !== 'undefined' ? require('fs') : null;
+            // @ts-ignore
+            const path = typeof require !== 'undefined' ? require('path') : null;
+            
+            if (fs && path) {
+                const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+                if (fs.existsSync(configPath)) {
+                    firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+                }
+            }
         } catch (e) {}
     } else {
         try {
@@ -101,6 +124,14 @@ export const getAuthInstance = () => {
     const app = getFirebaseApp();
     if (app.isMock) return null;
     authInstance = getAuth(app);
+    
+    // Set persistence to local to ensure sessions are remembered
+    if (typeof window !== 'undefined') {
+        setPersistence(authInstance, browserLocalPersistence).catch(err => {
+            console.warn("Auth: Failed to set persistence:", err);
+        });
+    }
+    
     return authInstance;
 };
 

@@ -16,7 +16,6 @@ import { BriefcaseIcon } from './icons/BriefcaseIcon';
 import { ShieldCheckIcon } from './icons/ShieldCheckIcon';
 import { SirenIcon } from './icons/SirenIcon';
 import { WalletDashboard } from './WalletDashboard';
-import { WhatsAppLink } from './WhatsAppLink';
 import { WhatsAppManager } from './WhatsAppManager';
 import { DistressCallModal } from './DistressCallModal';
 import ReactMarkdown from 'react-markdown';
@@ -132,6 +131,29 @@ const TOOLS = [
         },
         required: ["topic"]
       }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "spawn_whatsapp_agent",
+      description: "ADMIN ONLY: Spawn a new WhatsApp agent to index commerce data from a specific session or region.",
+      parameters: {
+        type: "object",
+        properties: {
+          sessionId: { type: "string", description: "The unique ID for the session (e.g., 'Ghost-Harare', 'Speaker-Bulawayo')" },
+          forceReset: { type: "boolean", description: "Whether to clear existing session data and force a new QR code." }
+        },
+        required: ["sessionId"]
+      }
+    }
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_whatsapp_agents",
+      description: "ADMIN ONLY: List all active WhatsApp agents and their current connection status.",
+      parameters: { type: "object", properties: {} }
     }
   }
 ];
@@ -569,6 +591,29 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
           onSwitchView('oracle');
           return { result: `Switching to the Guardian Oracle to simulate: "${args.topic}". Please proceed there to initialize the agents.` };
         }
+        case 'spawn_whatsapp_agent': {
+          if (user.role !== 'admin') throw new Error("Unauthorized: WhatsApp agent management is restricted to administrators.");
+          
+          const res = await fetch('/api/whatsapp/instance/create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: args.sessionId, forceReset: args.forceReset || false })
+          });
+          
+          if (!res.ok) throw new Error("Failed to spawn WhatsApp agent.");
+          
+          return { 
+            result: `Successfully initiated spawning for WhatsApp agent: ${args.sessionId}. I will now display the network manager so you can scan the QR code if needed.`,
+            widget: <WhatsAppManager />
+          };
+        }
+        case 'list_whatsapp_agents': {
+          if (user.role !== 'admin') throw new Error("Unauthorized: WhatsApp agent management is restricted to administrators.");
+          return { 
+            result: "Retrieving active WhatsApp agents from the network...",
+            widget: <WhatsAppManager />
+          };
+        }
         default:
           return { result: `Tool ${name} not implemented yet.` };
       }
@@ -762,9 +807,9 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
           </div>
 
           {/* WhatsApp Modal */}
-          {showWhatsApp && (
-            <div className="absolute inset-0 z-40 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6">
-              <div className="max-w-md w-full animate-in fade-in zoom-in duration-300">
+          {showWhatsApp && user.role === 'admin' && (
+            <div className="absolute inset-0 z-40 bg-slate-950/80 backdrop-blur-md flex items-center justify-center p-6 overflow-y-auto">
+              <div className="max-w-4xl w-full animate-in fade-in zoom-in duration-300 my-auto">
                 <div className="flex justify-end mb-4">
                   <button 
                     onClick={() => setShowWhatsApp(false)}
@@ -775,7 +820,7 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
                     </svg>
                   </button>
                 </div>
-                <WhatsAppLink userId={user.id} />
+                <WhatsAppManager />
               </div>
             </div>
           )}
@@ -816,7 +861,9 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
                 </button>
               </form>
               <div className="flex gap-6 mt-6 px-6 overflow-x-auto no-scrollbar pb-2">
-                 <QuickAction icon={<GlobeIcon className="h-3 w-3 text-emerald-400" />} label="WhatsApp Gateway" onClick={() => setShowWhatsApp(true)} />
+                 {user.role === 'admin' && (
+                   <QuickAction icon={<GlobeIcon className="h-3 w-3 text-emerald-400" />} label="WhatsApp Gateway" onClick={() => setShowWhatsApp(true)} />
+                 )}
                  <QuickAction icon={<SparkleIcon className="h-3 w-3 text-brand-gold" />} label="Guardian Oracle" onClick={() => onSwitchView('oracle')} />
                  <QuickAction icon={<WalletIcon className="h-3 w-3" />} label="Wallet Balance" onClick={() => setInput("Show me my wallet balance")} />
                  <QuickAction icon={<GlobeIcon className="h-3 w-3" />} label="Public Ledger" onClick={() => setInput("Show me the public ledger")} />

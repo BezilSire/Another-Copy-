@@ -1,7 +1,8 @@
 import { GoogleGenAI } from "@google/genai";
 import { ZimNews, AgenticTask, User } from '../types';
+import { GEMINI_API_KEY } from "./env";
 
-const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 export const aiService = {
     generateResponse: async (prompt: string, systemInstruction: string = "You are a helpful AI assistant for small businesses in Zimbabwe. You speak Shona, Ndebele, and English.") => {

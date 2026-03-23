@@ -11,6 +11,7 @@ import pino from 'pino';
 import QRCode from 'qrcode';
 import { useFirestoreAuthState } from './whatsappAuthStore';
 import { GoogleGenAI } from "@google/genai";
+import axios from "axios";
 
 const logger = pino({ level: 'silent' });
 
@@ -28,27 +29,69 @@ const instances = new Map<string, WhatsAppInstance>();
  * WhatsApp Service to manage multiple agents (Ghosts and Speakers).
  */
 export const whatsappService = {
-    async createInstance(sessionId: string) {
+    async createInstance(sessionId: string, forceReset: boolean = false) {
         if (instances.has(sessionId)) {
             const existing = instances.get(sessionId)!;
-            if (existing.status === 'open') return existing;
-            // If it's stuck, we'll recreate it
+            if (existing.status === 'open' && !forceReset) return existing;
+            // If it's stuck or we want to reset, we'll recreate it
             this.removeInstance(sessionId);
         }
 
+        if (forceReset) {
+            console.log(`WhatsApp [${sessionId}]: Force resetting session data...`);
+            try {
+                console.log(`WhatsApp [${sessionId}]: Clearing session data via Client SDK...`);
+                const { db: clientDb } = await import('./firebase');
+                const { doc, collection, getDocs, writeBatch } = await import('firebase/firestore');
+                
+                if (clientDb) {
+                    const sessionDocRef = doc(clientDb, 'whatsapp_sessions', sessionId);
+                    const keysColRef = collection(sessionDocRef, 'keys');
+                    
+                    console.log(`WhatsApp [${sessionId}]: Fetching keys...`);
+                    const keysSnap = await getDocs(keysColRef);
+                    console.log(`WhatsApp [${sessionId}]: Found ${keysSnap.size} keys to clear.`);
+                    
+                    const batch = writeBatch(clientDb);
+                    keysSnap.forEach(d => batch.delete(d.ref));
+                    batch.delete(sessionDocRef);
+                    await batch.commit();
+                    console.log(`WhatsApp [${sessionId}]: Session data cleared successfully.`);
+                } else {
+                    console.warn(`WhatsApp [${sessionId}]: Client DB not available for clearing session.`);
+                }
+            } catch (err) {
+                console.error(`WhatsApp [${sessionId}]: Failed to clear session data:`, err);
+            }
+        }
+
         const { state, saveCreds } = await useFirestoreAuthState(sessionId);
-        const { version, isLatest } = await fetchLatestBaileysVersion();
+        console.log(`WhatsApp [${sessionId}]: Auth state loaded. Initialized: ${!!state.creds.me}`);
+
+        let version: any;
+        try {
+            const latest = await fetchLatestBaileysVersion();
+            version = latest.version;
+            console.log(`WhatsApp [${sessionId}]: Using Baileys version ${version.join('.')}`);
+        } catch (err) {
+            console.warn(`WhatsApp [${sessionId}]: Failed to fetch latest Baileys version, using default. Error:`, err);
+            version = [2, 3000, 1015901307]; // Fallback version
+        }
 
         const sock = makeWASocket({
             version,
-            printQRInTerminal: false,
+            printQRInTerminal: true, // Log QR in terminal for debugging
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, logger),
             },
-            logger,
+            logger: logger as any,
             browser: ['Ubuntium Global Commons', 'Chrome', '1.0.0'],
             generateHighQualityLinkPreview: true,
+            connectTimeoutMs: 60000,
+            defaultQueryTimeoutMs: 60000,
+            syncFullHistory: false,
+            markOnlineOnConnect: true,
         });
 
         const instance: WhatsAppInstance = {
@@ -59,29 +102,50 @@ export const whatsappService = {
         };
         instances.set(sessionId, instance);
 
+        // Connection Timeout to detect stuck connections
+        const connectionTimeout = setTimeout(() => {
+            if (instance.status === 'connecting') {
+                console.warn(`WhatsApp [${sessionId}]: Connection is taking too long (60s). Status: ${instance.status}`);
+            }
+        }, 60000);
+
         sock.ev.on('connection.update', async (update: Partial<ConnectionState>) => {
             const { connection, lastDisconnect, qr } = update;
             instance.lastUpdate = Date.now();
 
+            console.log(`WhatsApp [${sessionId}]: Connection update:`, { connection, qr: !!qr, status: instance.status });
+
             if (qr) {
+                console.log(`WhatsApp [${sessionId}]: New QR received. Length: ${qr.length}`);
                 instance.status = 'qr';
-                instance.qr = await QRCode.toDataURL(qr);
+                try {
+                    const qrDataUrl = await QRCode.toDataURL(qr);
+                    instance.qr = qrDataUrl;
+                    console.log(`WhatsApp [${sessionId}]: QR Data URL generated successfully.`);
+                } catch (err) {
+                    console.error(`WhatsApp [${sessionId}]: Failed to generate QR Data URL:`, err);
+                }
             }
 
             if (connection === 'close') {
-                const shouldReconnect = (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+                clearTimeout(connectionTimeout);
+                const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+                const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
                 instance.status = 'close';
-                console.log(`WhatsApp connection closed for ${sessionId}. Reconnecting: ${shouldReconnect}`);
+                console.log(`WhatsApp [${sessionId}]: Connection closed. Status: ${statusCode}. Reconnecting: ${shouldReconnect}`);
                 
                 if (shouldReconnect) {
-                    this.createInstance(sessionId);
+                    console.log(`WhatsApp [${sessionId}]: Reconnecting in 5 seconds...`);
+                    setTimeout(() => this.createInstance(sessionId), 5000);
                 } else {
+                    console.log(`WhatsApp [${sessionId}]: Logged out, removing instance.`);
                     this.removeInstance(sessionId);
                 }
             } else if (connection === 'open') {
+                clearTimeout(connectionTimeout);
                 instance.status = 'open';
                 instance.qr = undefined;
-                console.log(`WhatsApp connection opened for ${sessionId}`);
+                console.log(`WhatsApp [${sessionId}]: Connection opened successfully. Node is online.`);
             }
         });
 
@@ -148,23 +212,21 @@ export const whatsappService = {
                 ];
                 for (const model of models) {
                     try {
-                        const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                            method: "POST",
+                        const response = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
+                            model,
+                            messages: [{ role: "user", content: prompt }],
+                            response_format: { type: "json_object" }
+                        }, {
                             headers: {
                                 "Authorization": `Bearer ${apiKey}`,
                                 "Content-Type": "application/json",
                                 "HTTP-Referer": "https://ubuntium.org",
                                 "X-Title": "Ubuntium Global Commons",
-                            },
-                            body: JSON.stringify({
-                                model,
-                                messages: [{ role: "user", content: prompt }],
-                                response_format: { type: "json_object" }
-                            }),
+                            }
                         });
 
-                        if (response.ok) {
-                            const data = await response.json();
+                        if (response.status === 200) {
+                            const data = response.data;
                             const content = data.choices?.[0]?.message?.content;
                             if (content) {
                                 result = JSON.parse(content);
@@ -177,7 +239,37 @@ export const whatsappService = {
                 }
             }
 
-            // Fallback to Gemini if OpenRouter fails or is not configured
+            // NVIDIA Fallback if OpenRouter fails
+            if (!result) {
+                const nvidiaKey = process.env.NVIDIA_API_KEY;
+                if (nvidiaKey) {
+                    try {
+                        console.log(`[WA-${sessionId}] Falling back to NVIDIA for parsing...`);
+                        const response = await axios.post("https://integrate.api.nvidia.com/v1/chat/completions", {
+                            model: "moonshotai/kimi-k2.5",
+                            messages: [{ role: "user", content: prompt }],
+                            response_format: { type: "json_object" }
+                        }, {
+                            headers: {
+                                "Authorization": `Bearer ${nvidiaKey}`,
+                                "Content-Type": "application/json",
+                            }
+                        });
+
+                        if (response.status === 200) {
+                            const data = response.data;
+                            const content = data.choices?.[0]?.message?.content;
+                            if (content) {
+                                result = JSON.parse(content);
+                            }
+                        }
+                    } catch (e) {
+                        console.error(`[WA-${sessionId}] NVIDIA Parsing Error:`, e);
+                    }
+                }
+            }
+
+            // Fallback to Gemini if OpenRouter and NVIDIA fail or are not configured
             if (!result) {
                 const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
                 const response = await ai.models.generateContent({
@@ -209,11 +301,11 @@ export const whatsappService = {
             console.log(`[WA-${sessionId}] Extracted Commerce Event:`, result);
             
             // Save to Firestore (Zim Pulse)
-            const { getAdminDb } = await import('./firebaseAdmin');
-            const db = await getAdminDb();
+            const { db } = await import('./firebase');
             
             if (db) {
-                await db.collection('zim_pulse').add({
+                const { collection, addDoc } = await import('firebase/firestore');
+                await addDoc(collection(db, 'zim_pulse'), {
                     ...result,
                     source: isGroup ? 'group' : 'direct',
                     sessionId,
@@ -221,7 +313,7 @@ export const whatsappService = {
                     timestamp: new Date()
                 });
             } else {
-                console.warn(`[WA-${sessionId}] Firestore not configured, Zim Pulse event not saved.`);
+                console.warn(`[WA-${sessionId}] Firestore Client SDK not configured, Zim Pulse event not saved.`);
             }
 
         } catch (error) {
@@ -268,19 +360,19 @@ export const whatsappService = {
         }
     },
 
-    async init(sessionId: string) {
-        return this.createInstance(sessionId);
+    async init(sessionId: string, forceReset: boolean = false) {
+        return this.createInstance(sessionId, forceReset);
     },
 
     async recoverSessions() {
         try {
-            const { getAdminDb } = await import('./firebaseAdmin');
-            const db = await getAdminDb();
+            const { db } = await import('./firebase');
             if (!db) {
-                console.warn('WhatsApp: Firestore not configured, session recovery skipped.');
+                console.warn('WhatsApp: Firestore Client SDK not configured, session recovery skipped.');
                 return;
             }
-            const querySnapshot = await db.collection('whatsapp_sessions').get();
+            const { collection, getDocs } = await import('firebase/firestore');
+            const querySnapshot = await getDocs(collection(db, 'whatsapp_sessions'));
             const sessionIds = querySnapshot?.docs?.map((doc: any) => doc.id) || [];
             
             console.log(`Recovering ${sessionIds.length} WhatsApp sessions from Firestore...`);

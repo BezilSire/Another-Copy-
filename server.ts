@@ -10,6 +10,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { GoogleGenAI } from "@google/genai";
+import axios from "axios";
 // No client SDK imports on server
 
 process.on("uncaughtException", (err) => {
@@ -36,6 +37,23 @@ async function startServer() {
   app.get("/api/health", (req, res) => {
     res.json({ status: "ok", uptime: process.uptime() });
   });
+
+  // Sign in the Client SDK as an admin on the server to bypass security rules
+  try {
+    const { getAdminAuth } = await import("./services/firebaseAdmin");
+    const { getAuthInstance } = await import("./services/firebase");
+    const { signInWithCustomToken } = await import("firebase/auth");
+    
+    const adminAuth = getAdminAuth();
+    const customToken = await adminAuth.createCustomToken("server-admin", { admin: true });
+    const auth = getAuthInstance();
+    if (auth) {
+      await signInWithCustomToken(auth, customToken);
+      console.log("Server: Client SDK authenticated as Admin.");
+    }
+  } catch (err) {
+    console.error("Server: Failed to authenticate Client SDK as Admin:", err);
+  }
 
   // Lazy load services to prevent startup crashes
   const { api } = await import("./services/apiService");
@@ -161,24 +179,22 @@ SECURITY & PRIVACY RULES:
           for (const model of models) {
             try {
               console.log(`WhatsApp Agent: Attempting with model ${model}...`);
-              const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                method: "POST",
+              const response = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
+                model,
+                messages,
+                tools: SERVER_TOOLS.map(t => ({ type: "function", function: t })),
+                tool_choice: "auto",
+              }, {
                 headers: {
                   "Authorization": `Bearer ${apiKey}`,
                   "Content-Type": "application/json",
                   "HTTP-Referer": "https://ubuntium.org",
                   "X-Title": "Ubuntium Global Commons",
-                },
-                body: JSON.stringify({
-                  model,
-                  messages,
-                  tools: SERVER_TOOLS.map(t => ({ type: "function", function: t })),
-                  tool_choice: "auto",
-                }),
+                }
               });
   
-              if (response.ok) {
-                const data = await response.json();
+              if (response.status === 200) {
+                const data = response.data;
                 assistantMessage = data.choices?.[0]?.message;
                 if (assistantMessage) {
                   success = true;
@@ -186,7 +202,7 @@ SECURITY & PRIVACY RULES:
                   break;
                 }
               } else {
-                console.error(`WhatsApp Agent Error (${model}):`, await response.text());
+                console.error(`WhatsApp Agent Error (${model}):`, response.data);
               }
             } catch (err) {
               console.error(`WhatsApp Agent Fetch Error (${model}):`, err);
@@ -197,7 +213,41 @@ SECURITY & PRIVACY RULES:
         }
       }
 
-      // Gemini Fallback if OpenRouter fails or is missing
+      // NVIDIA Fallback if OpenRouter fails
+      if (!success) {
+        const nvidiaKey = process.env.NVIDIA_API_KEY;
+        if (nvidiaKey) {
+          try {
+            console.log("WhatsApp Agent: Falling back to NVIDIA...");
+            const response = await axios.post("https://integrate.api.nvidia.com/v1/chat/completions", {
+              model: "moonshotai/kimi-k2.5",
+              messages,
+              tools: SERVER_TOOLS.map(t => ({ type: "function", function: t })),
+              tool_choice: "auto",
+            }, {
+              headers: {
+                "Authorization": `Bearer ${nvidiaKey}`,
+                "Content-Type": "application/json",
+              }
+            });
+
+            if (response.status === 200) {
+              const data = response.data;
+              assistantMessage = data.choices?.[0]?.message;
+              if (assistantMessage) {
+                success = true;
+                console.log("WhatsApp Agent: Success with NVIDIA");
+              }
+            } else {
+              console.error("WhatsApp Agent: NVIDIA Error:", response.data);
+            }
+          } catch (err) {
+            console.error("WhatsApp Agent: NVIDIA Fetch Error:", err);
+          }
+        }
+      }
+
+      // Gemini Fallback if OpenRouter and NVIDIA fail or are missing
       if (!success) {
         try {
           console.log("WhatsApp Agent: Falling back to direct Gemini...");
@@ -251,33 +301,61 @@ SECURITY & PRIVACY RULES:
               for (const model of models) {
                 try {
                   console.log(`WhatsApp Agent (Final): Attempting with model ${model}...`);
-                  const finalResponse = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-                    method: "POST",
+                  const finalResponse = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
+                    model,
+                    messages,
+                  }, {
                     headers: {
                       "Authorization": `Bearer ${apiKey}`,
                       "Content-Type": "application/json",
                       "HTTP-Referer": "https://ubuntium.org",
                       "X-Title": "Ubuntium Global Commons",
-                    },
-                    body: JSON.stringify({
-                      model,
-                      messages,
-                    }),
+                    }
                   });
   
-                  if (finalResponse.ok) {
-                    const finalData = await finalResponse.json();
+                  if (finalResponse.status === 200) {
+                    const finalData = finalResponse.data;
                     finalReply = finalData.choices?.[0]?.message?.content;
                     if (finalReply) {
                       console.log(`WhatsApp Agent (Final): Success with model ${model}`);
                       break;
                     }
                   } else {
-                    console.error(`WhatsApp Agent Final Error (${model}):`, await finalResponse.text());
+                    console.error(`WhatsApp Agent Final Error (${model}):`, finalResponse.data);
                   }
                 } catch (err) {
                   console.error(`WhatsApp Agent Final Fetch Error (${model}):`, err);
                 }
+              }
+            }
+
+            // NVIDIA Fallback for final response
+            if (!finalReply) {
+              try {
+                const nvidiaKey = process.env.NVIDIA_API_KEY;
+                if (nvidiaKey) {
+                  console.log("WhatsApp Agent (Final): Falling back to NVIDIA (moonshotai/kimi-k2.5)...");
+                  const response = await axios.post("https://integrate.api.nvidia.com/v1/chat/completions", {
+                    model: "moonshotai/kimi-k2.5",
+                    messages,
+                    max_tokens: 4096,
+                  }, {
+                    headers: {
+                      "Authorization": `Bearer ${nvidiaKey}`,
+                      "Content-Type": "application/json",
+                    }
+                  });
+
+                  if (response.status === 200) {
+                    const data = response.data;
+                    finalReply = data.choices?.[0]?.message?.content;
+                    if (finalReply) {
+                      console.log("WhatsApp Agent (Final): Success with NVIDIA");
+                    }
+                  }
+                }
+              } catch (err) {
+                console.error("WhatsApp Agent (Final): NVIDIA Fallback Error:", err);
               }
             }
 
@@ -325,10 +403,10 @@ SECURITY & PRIVACY RULES:
   });
 
   app.post("/api/whatsapp/instance/create", async (req, res) => {
-    const { sessionId } = req.body;
+    const { sessionId, forceReset } = req.body;
     if (!sessionId) return res.status(400).json({ error: "sessionId is required" });
     try {
-      const instance = await whatsappService.createInstance(sessionId);
+      const instance = await whatsappService.createInstance(sessionId, forceReset);
       res.json({ id: instance.id, status: instance.status, qr: instance.qr });
     } catch (error) {
       res.status(500).json({ error: String(error) });
@@ -356,9 +434,9 @@ SECURITY & PRIVACY RULES:
   });
 
   app.post("/api/whatsapp/init", async (req, res) => {
-    const { userId } = req.body;
+    const { userId, forceReset } = req.body;
     if (!userId) return res.status(400).json({ error: "userId required" });
-    await whatsappService.init(userId);
+    await whatsappService.init(userId, forceReset);
     res.json({ success: true });
   });
 
@@ -527,34 +605,32 @@ SECURITY & PRIVACY RULES:
       for (const model of models) {
         try {
           console.log(`OpenRouter: Attempting chat with model ${model}...`);
-          const response = await fetch("https://openrouter.ai/api/v1/chat/completions", {
-            method: "POST",
+          const response = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
+            model,
+            messages,
+            tools: tools || [],
+            tool_choice: tools ? "auto" : undefined,
+            max_tokens: 4096,
+          }, {
             headers: {
               "Authorization": `Bearer ${apiKey}`,
               "Content-Type": "application/json",
               "HTTP-Referer": "https://ubuntium.org",
               "X-Title": "Ubuntium Global Commons",
-            },
-            body: JSON.stringify({
-              model,
-              messages,
-              tools: tools || [],
-              tool_choice: tools ? "auto" : undefined,
-              max_tokens: 4096,
-            }),
+            }
           });
   
-          if (response.ok) {
-            const data = await response.json();
+          if (response.status === 200) {
+            const data = response.data;
             if (data.choices && data.choices.length > 0) {
               console.log(`OpenRouter: Success with model ${model}`);
               return res.json(data);
             }
           }
   
-          const errorText = await response.text();
-          console.error(`OpenRouter Error (${model}):`, errorText);
-          lastError = errorText;
+          const errorData = response.data;
+          console.error(`OpenRouter Error (${model}):`, errorData);
+          lastError = JSON.stringify(errorData);
   
           // If it's a 401, don't bother trying other models
           if (response.status === 401) {
@@ -569,6 +645,39 @@ SECURITY & PRIVACY RULES:
           lastError = error.message;
         }
       }
+    }
+
+    // NVIDIA Fallback for /api/chat
+    try {
+      const nvidiaKey = process.env.NVIDIA_API_KEY;
+      if (nvidiaKey) {
+        console.log("OpenRouter: Falling back to NVIDIA (moonshotai/kimi-k2.5)...");
+        const response = await axios.post("https://integrate.api.nvidia.com/v1/chat/completions", {
+          model: "moonshotai/kimi-k2.5",
+          messages,
+          tools: tools || [],
+          tool_choice: tools ? "auto" : undefined,
+          max_tokens: 4096,
+        }, {
+          headers: {
+            "Authorization": `Bearer ${nvidiaKey}`,
+            "Content-Type": "application/json",
+          }
+        });
+
+        if (response.status === 200) {
+          const data = response.data;
+          if (data.choices && data.choices.length > 0) {
+            console.log("NVIDIA: Success with model moonshotai/kimi-k2.5");
+            return res.json(data);
+          }
+        } else {
+          const errorData = response.data;
+          console.error("NVIDIA Error:", errorData);
+        }
+      }
+    } catch (err) {
+      console.error("OpenRouter: NVIDIA Fallback Error:", err);
     }
 
     // Gemini Fallback for /api/chat

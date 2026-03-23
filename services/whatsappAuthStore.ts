@@ -6,50 +6,58 @@ import {
     BufferJSON, 
     proto 
 } from '@whiskeysockets/baileys';
-import { getAdminDb } from './firebaseAdmin';
 
 /**
  * Custom Firestore-backed authentication state for Baileys using Firebase Admin SDK.
  * This ensures WhatsApp sessions persist across server restarts and bypasses security rules.
  */
 export const useFirestoreAuthState = async (sessionId: string): Promise<{ state: AuthenticationState, saveCreds: () => Promise<void> }> => {
-    const db = await getAdminDb();
+    const { db } = await import('./firebase');
     if (!db) {
-        throw new Error("Firestore Admin SDK is not configured. Cannot use FirestoreAuthState.");
+        throw new Error("Firestore Client SDK is not configured. Cannot use FirestoreAuthState.");
     }
     
-    const sessionDoc = db.collection('whatsapp_sessions').doc(sessionId);
-    const keysCol = sessionDoc.collection('keys');
+    const { doc, collection, getDoc, setDoc, deleteDoc, getDocs } = await import('firebase/firestore');
+    
+    const sessionDocRef = doc(db, 'whatsapp_sessions', sessionId);
+    const keysColRef = collection(sessionDocRef, 'keys');
 
     const writeData = async (data: any, id: string) => {
         const json = JSON.stringify(data, BufferJSON.replacer);
-        await keysCol.doc(id).set({ data: json });
+        try {
+            const docRef = doc(db, 'whatsapp_sessions', sessionId, 'keys', id);
+            await setDoc(docRef, { data: json });
+        } catch (error) {
+            console.error(`WhatsApp [${sessionId}]: Error writing key ${id} to Firestore:`, error);
+        }
     };
 
     const readData = async (id: string) => {
         try {
-            const d = await keysCol.doc(id).get();
-            if (d.exists) {
-                return JSON.parse(d.data()!.data, BufferJSON.reviver);
+            const docRef = doc(db, 'whatsapp_sessions', sessionId, 'keys', id);
+            const snap = await getDoc(docRef);
+            if (snap.exists()) {
+                return JSON.parse(snap.data()!.data, BufferJSON.reviver);
             }
         } catch (error) {
-            console.error(`Error reading key ${id} from Firestore:`, error);
+            console.error(`WhatsApp [${sessionId}]: Error reading key ${id} from Firestore:`, error);
         }
         return null;
     };
 
     const removeData = async (id: string) => {
         try {
-            await keysCol.doc(id).delete();
+            const docRef = doc(db, 'whatsapp_sessions', sessionId, 'keys', id);
+            await deleteDoc(docRef);
         } catch (error) {
-            console.error(`Error deleting key ${id} from Firestore:`, error);
+            console.error(`WhatsApp [${sessionId}]: Error deleting key ${id} from Firestore:`, error);
         }
     };
 
     // Load initial creds
-    const credsDoc = await sessionDoc.get();
+    const credsDoc = await getDoc(sessionDocRef);
     let creds: AuthenticationCreds;
-    if (credsDoc.exists && credsDoc.data()?.creds) {
+    if (credsDoc.exists() && credsDoc.data()?.creds) {
         creds = JSON.parse(credsDoc.data()!.creds, BufferJSON.reviver);
     } else {
         creds = initAuthCreds();
@@ -90,10 +98,15 @@ export const useFirestoreAuthState = async (sessionId: string): Promise<{ state:
             }
         },
         saveCreds: async () => {
-            await sessionDoc.set({ 
+            const data = { 
                 creds: JSON.stringify(creds, BufferJSON.replacer),
                 updatedAt: new Date().toISOString()
-            }, { merge: true });
+            };
+            try {
+                await setDoc(sessionDocRef, data, { merge: true });
+            } catch (error) {
+                console.error(`WhatsApp [${sessionId}]: Error saving creds to Firestore:`, error);
+            }
         }
     };
 };

@@ -21,7 +21,7 @@ import { AgenticShell } from './components/AgenticShell';
 import { GuardianOracle } from './components/GuardianOracle';
 
 const App = () => {
-  const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser } = useAuth();
+  const { currentUser, isLoadingAuth, isProcessingAuth, logout, updateUser, firebaseUser, isAuthReady } = useAuth();
   
   const isExplorer = false; // Forced to false to ensure login page shows
   
@@ -68,6 +68,17 @@ const App = () => {
   const handleViewProfile = (userId: string | null) => { setViewingProfileId(userId); };
   
   const renderMainContent = () => {
+    if (!isAuthReady) {
+        return (
+            <div className="flex-1 flex items-center justify-center bg-slate-950 min-h-screen">
+                <div className="flex flex-col items-center gap-4">
+                    <LoaderIcon className="w-12 h-12 text-brand-gold animate-spin" />
+                    <p className="text-slate-400 font-mono text-sm animate-pulse">Initializing Identity Protocol...</p>
+                </div>
+            </div>
+        );
+    }
+
     if (isExplorer) return <LedgerPage />;
     
     if (currentUser || firebaseUser) {
@@ -106,17 +117,6 @@ const App = () => {
         return <AgenticShell user={userToRender as MemberUser} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={handleViewProfile} onSwitchView={setCurrentView} chatTargetId={chatTargetId} onChatStarted={() => setChatTargetId(null)} onOpenRecoverySetup={() => setIsRecoverySetupOpen(true)} />;
     }
     
-    if (isLoadingAuth && !firebaseUser) {
-        return (
-            <div className="flex-1 flex items-center justify-center bg-slate-950">
-                <div className="flex flex-col items-center gap-4">
-                    <LoaderIcon className="w-12 h-12 text-brand-gold animate-spin" />
-                    <p className="text-slate-400 font-mono text-sm animate-pulse">Initializing Identity Protocol...</p>
-                </div>
-            </div>
-        );
-    }
-
     return <AuthPage />;
   };
 
@@ -127,6 +127,15 @@ const App = () => {
             <ToastContainer />
             <ConfirmationDialog isOpen={isLogoutConfirmOpen} onClose={() => setIsLogoutConfirmOpen(false)} onConfirm={confirmLogout} title="Log Out" message="Are you sure you want to log out of your account?" confirmButtonText="Log Out" />
             {isRadarOpen && currentUser && <RadarModal isOpen={isRadarOpen} onClose={() => setIsRadarOpen(false)} currentUser={currentUser} onViewProfile={handleViewProfile} onStartChat={async (id) => { }} />}
+            
+            {isProcessingAuth && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/80 backdrop-blur-sm animate-in fade-in duration-300">
+                    <div className="flex flex-col items-center gap-4 p-8 bg-slate-900 rounded-2xl border border-white/10 shadow-2xl">
+                        <LoaderIcon className="w-10 h-10 text-brand-gold animate-spin" />
+                        <p className="text-slate-300 font-mono text-sm">Processing Identity Protocol...</p>
+                    </div>
+                </div>
+            )}
       </div>
     </div>
   );

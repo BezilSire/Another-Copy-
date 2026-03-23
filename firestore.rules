@@ -10,7 +10,10 @@ service cloud.firestore {
     // Improved robust Admin check
     function isAdmin() { 
       return isSignedIn() && 
-             ((request.auth.token.email == "bezilsire00@gmail.com" || request.auth.token.email == "bezilsire01@gmail.com") && 
+             (request.auth.token.admin == true || 
+              request.auth.uid == "server-admin" ||
+              request.auth.token.uid == "server-admin" ||
+              (request.auth.token.email == "bezilsire00@gmail.com" || request.auth.token.email == "bezilsire01@gmail.com") && 
               request.auth.token.email_verified == true); 
     }
     
@@ -133,7 +136,9 @@ service cloud.firestore {
     // --- WHATSAPP & ZIM PULSE ---
     match /whatsapp_sessions/{sessionId} {
       allow read, write: if isAdmin();
-      match /keys/{keyId} { allow read, write: if isAdmin(); }
+      match /{allPaths=**} {
+        allow read, write: if isAdmin();
+      }
     }
     match /zim_pulse/{docId} {
       allow read, list: if isSignedIn();

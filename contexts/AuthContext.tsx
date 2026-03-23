@@ -1,6 +1,6 @@
 
 import { createContext, useState, useEffect, useContext, ReactNode, useCallback, useRef } from 'react';
-import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInAnonymously, sendEmailVerification, signInWithEmailAndPassword } from 'firebase/auth';
+import { onAuthStateChanged, User as FirebaseUser, createUserWithEmailAndPassword, signInAnonymously, sendEmailVerification, signInWithEmailAndPassword, setPersistence, browserLocalPersistence } from 'firebase/auth';
 import { doc, onSnapshot, setDoc, getDoc, writeBatch, serverTimestamp, collection, query, where, getDocs, limit, Timestamp } from 'firebase/firestore';
 import { useToast } from './ToastContext';
 import { api, handleFirestoreError, OperationType } from '../services/apiService';
@@ -14,6 +14,7 @@ interface AuthContextType {
   firebaseUser: FirebaseUser | null;
   isLoadingAuth: boolean;
   isProcessingAuth: boolean;
+  isAuthReady: boolean;
   login: (credentials: LoginCredentials) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   loginAnonymously: (displayName: string) => Promise<void>;
@@ -32,8 +33,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const db = getDbInstance();
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
-  const [isLoadingAuth, setIsLoadingAuth] = useState(false);
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true);
   const [isProcessingAuth, setIsProcessingAuth] = useState(false);
+  const [isAuthReady, setIsAuthReady] = useState(false);
 
   const attemptAutoUnlock = useCallback(async (uid: string) => {
     if (!cryptoService.hasVault()) return false;
@@ -164,7 +166,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
     console.log("Auth: Initializing onAuthStateChanged listener...");
     
-    const unsubscribeAuth = auth ? onAuthStateChanged(auth, async (user) => {
+    if (!auth) {
+      setIsLoadingAuth(false);
+      setIsAuthReady(true);
+      return;
+    }
+
+    // Set persistence to local to ensure sessions are remembered
+    setPersistence(auth, browserLocalPersistence).catch(err => {
+        console.warn("Auth: Failed to set persistence:", err);
+    });
+
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
       console.log("Auth: State changed. User:", user ? user.uid : "null");
       setFirebaseUser(user);
       
@@ -174,17 +187,15 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       }
 
       if (user) {
-        // Immediate Entry Protocol: Don't wait for Firestore to show the app
-        setIsLoadingAuth(false);
-        setIsProcessingAuth(false);
-
         if (user.isAnonymous) {
             const guestName = sessionStorage.getItem('ugc_guest_name') || 'Guest Citizen';
             setCurrentUser({ id: user.uid, name: guestName, role: 'member', status: 'active', circle: 'GLOBAL', isProfileComplete: true, distress_calls_available: 0 } as any);
+            setIsLoadingAuth(false);
+            setIsAuthReady(true);
             return;
         }
 
-        // Background Sync: Load user data without blocking the UI
+        // Background Sync: Load user data
         if (db) {
           const userDocRef = doc(db, 'users', user.uid);
           
@@ -204,9 +215,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                   attemptAutoUnlock(user.uid);
               }
             } else {
-              // If user doc doesn't exist, we might need to create it, but we don't block
               console.warn("User document does not exist for UID:", user.uid);
-              // Provision skeletal user in background if needed
               const skeletalUser: any = {
                   id: user.uid,
                   name: user.displayName || user.email?.split('@')[0] || 'Citizen',
@@ -219,9 +228,16 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
               };
               setCurrentUser(skeletalUser);
             }
+            setIsLoadingAuth(false);
+            setIsAuthReady(true);
           }, (error) => {
             console.error("User document listener error:", error);
+            setIsLoadingAuth(false);
+            setIsAuthReady(true);
           });
+        } else {
+          setIsLoadingAuth(false);
+          setIsAuthReady(true);
         }
         
         try {
@@ -232,19 +248,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       } else {
         setCurrentUser(null);
         setIsLoadingAuth(false);
-        setIsProcessingAuth(false);
+        setIsAuthReady(true);
       }
     }, (error) => {
       console.error("Auth: onAuthStateChanged error:", error);
       setIsLoadingAuth(false);
-      setIsProcessingAuth(false);
-    }) : () => {};
+      setIsAuthReady(true);
+    });
 
     return () => {
       unsubscribeAuth();
       if (userDocListener) userDocListener();
     };
-  }, [addToast]);
+  }, [auth, db, addToast, attemptAutoUnlock]);
 
   const login = useCallback(async (credentials: LoginCredentials) => {
     setIsProcessingAuth(true);
@@ -501,6 +517,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     firebaseUser,
     isLoadingAuth,
     isProcessingAuth,
+    isAuthReady,
     login,
     loginWithGoogle,
     loginAnonymously,

@@ -2,6 +2,7 @@
 import { User } from '../types';
 import { safeJsonStringify } from '../utils';
 import { GoogleGenAI, Type } from "@google/genai";
+import { GEMINI_API_KEY } from "./env";
 
 export interface AgentMessage {
   role: 'user' | 'assistant' | 'system' | 'tool';
@@ -58,12 +59,11 @@ export const agentService = {
 
   async geminiFallback(messages: AgentMessage[], tools?: any[]) {
     console.log('Using Gemini fallback...');
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
+    if (!GEMINI_API_KEY) {
       throw new Error('No AI service available. Please configure OpenRouter or Gemini API keys.');
     }
 
-    const ai = new GoogleGenAI({ apiKey });
+    const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
     
     // Convert messages to Gemini format
     const systemInstruction = messages.find(m => m.role === 'system')?.content || '';
@@ -169,6 +169,7 @@ YOUR CAPABILITIES:
 - You can check the 'get_security_status' of the user's node (vault status, key anchors).
 - You can search the Commons Registry for members and ventures using 'search_commons_registry'.
 - You can monitor the Zim Pulse for the latest updates using 'get_zim_pulse'.
+${user.role === 'admin' ? `- ADMIN CAPABILITIES: You can manage the WhatsApp Agent Network. Use 'spawn_whatsapp_agent' to create new indexing nodes and 'list_whatsapp_agents' to monitor the network status. When spawning, you must provide a sessionId.` : ''}
 
 OPERATING PRINCIPLES:
 1. EVERYTHING IN CHAT: All wallet operations, balance checks, and address sharing MUST happen directly in the chat via widgets. Do not refer the user to a separate dashboard.
