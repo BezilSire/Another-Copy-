@@ -10,7 +10,7 @@ import { Boom } from '@hapi/boom';
 import pino from 'pino';
 import QRCode from 'qrcode';
 import { useFirestoreAuthState } from './whatsappAuthStore';
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import axios from "axios";
 
 const logger = pino({ level: 'silent' });
@@ -271,26 +271,30 @@ export const whatsappService = {
 
             // Fallback to Gemini if OpenRouter and NVIDIA fail or are not configured
             if (!result) {
-                const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY || '' });
+                const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
+                const ai = new GoogleGenAI({ apiKey: geminiKey || '' });
                 const response = await ai.models.generateContent({
                     model: "gemini-3-flash-preview",
                     contents: `Extract commerce data from this WhatsApp message. 
                     If it's an offer, need, or job, return JSON. 
                     If it's noise, return { "isNoise": true }.
                     
-                    Message: "${text}"
-                    
-                    Format: {
-                        "isNoise": boolean,
-                        "type": "offer" | "need" | "job",
-                        "item": string,
-                        "price": string,
-                        "location": string,
-                        "contact": string,
-                        "description": string
-                    }`,
+                    Message: "${text}"`,
                     config: {
-                        responseMimeType: "application/json"
+                        responseMimeType: "application/json",
+                        responseSchema: {
+                            type: Type.OBJECT,
+                            properties: {
+                                isNoise: { type: Type.BOOLEAN },
+                                type: { type: Type.STRING, enum: ["offer", "need", "job"] },
+                                item: { type: Type.STRING },
+                                price: { type: Type.STRING },
+                                location: { type: Type.STRING },
+                                contact: { type: Type.STRING },
+                                description: { type: Type.STRING }
+                            },
+                            required: ["isNoise"]
+                        }
                     }
                 });
                 result = JSON.parse(response.text || '{}');

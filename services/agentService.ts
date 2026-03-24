@@ -37,7 +37,9 @@ export const agentService = {
         data = text ? JSON.parse(text) : {};
       } catch (e) {
         console.error('Failed to parse Agent response:', text);
-        throw new Error('Agent returned an invalid response format.');
+        // If it's not JSON, it might be an HTML error page or something else
+        const snippet = text ? text.substring(0, 100) : 'Empty response';
+        throw new Error(`Agent returned an invalid response format (not JSON). Response snippet: ${snippet}`);
       }
 
       if (response.ok) {

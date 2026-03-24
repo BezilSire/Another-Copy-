@@ -587,6 +587,11 @@ SECURITY & PRIVACY RULES:
   app.post("/api/chat", async (req: Request, res: Response) => {
     try {
       const { messages, tools } = req.body;
+      
+      if (!messages || !Array.isArray(messages)) {
+        return res.status(400).json({ error: "Invalid request: 'messages' must be an array." });
+      }
+
       const apiKey = process.env.OPENROUTER_API_KEY;
 
       // List of models to try in order of preference
@@ -688,38 +693,87 @@ SECURITY & PRIVACY RULES:
       // Gemini Fallback for /api/chat
       try {
         console.log("OpenRouter: Falling back to direct Gemini...");
-        const geminiKey = process.env.GEMINI_API_KEY;
+        const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
         if (geminiKey) {
           const genAI = new GoogleGenAI({ apiKey: geminiKey });
           
           const systemMessage = messages.find((m: any) => m.role === "system");
           const chatContents = messages
             .filter((m: any) => m.role !== "system")
-            .map((m: any) => ({
-              role: m.role === "assistant" ? "model" : "user",
-              parts: [{ text: m.content || "" }]
-            }));
+            .map((m: any) => {
+              const parts: any[] = [];
+              if (m.content) parts.push({ text: m.content });
+              
+              if (m.tool_calls) {
+                m.tool_calls.forEach((tc: any) => {
+                  parts.push({
+                    functionCall: {
+                      name: tc.function.name,
+                      args: typeof tc.function.arguments === 'string' ? JSON.parse(tc.function.arguments) : tc.function.arguments
+                    }
+                  });
+                });
+              }
+
+              if (m.role === 'tool') {
+                parts.push({
+                  functionResponse: {
+                    name: m.name || '',
+                    response: { result: m.content }
+                  }
+                });
+              }
+
+              return {
+                role: m.role === "assistant" ? "model" : "user",
+                parts
+              };
+            });
 
           // Ensure we have at least one message for Gemini
           if (chatContents.length === 0) {
             chatContents.push({ role: "user", parts: [{ text: "Hello" }] });
           }
 
+          const geminiTools = tools ? [{
+            functionDeclarations: tools.map((t: any) => ({
+              name: t.function.name,
+              description: t.function.description,
+              parameters: t.function.parameters
+            }))
+          }] : undefined;
+
           const response = await genAI.models.generateContent({
             model: "gemini-3-flash-preview",
             contents: chatContents,
             config: {
-              systemInstruction: systemMessage?.content || "You are a helpful assistant."
+              systemInstruction: systemMessage?.content || "You are a helpful assistant.",
+              tools: geminiTools as any
             }
           });
 
-          if (response.text) {
+          const candidate = response.candidates?.[0];
+          if (candidate && candidate.content && candidate.content.parts) {
+            const parts = candidate.content.parts;
+            const textPart = parts.find(p => p.text);
+            const functionCallParts = parts.filter(p => p.functionCall);
+
+            const tool_calls = functionCallParts.map(p => ({
+              id: `call_${Math.random().toString(36).substr(2, 9)}`,
+              type: 'function',
+              function: {
+                name: p.functionCall!.name,
+                arguments: JSON.stringify(p.functionCall!.args)
+              }
+            }));
+
             console.log("Gemini: Success with direct fallback");
             return res.json({
               choices: [{
                 message: {
                   role: "assistant",
-                  content: response.text
+                  content: textPart?.text || "",
+                  tool_calls: tool_calls.length > 0 ? tool_calls : undefined
                 }
               }]
             });

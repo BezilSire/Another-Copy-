@@ -21,6 +21,11 @@ export const getEnvVar = (key: string) => {
 
 // For client-side, we MUST use VITE_ prefix for variables to be exposed
 // However, we've also exposed GEMINI_API_KEY via vite.config.ts define
-// @ts-ignore
-const clientGeminiKey = (typeof process !== 'undefined' && process.env && process.env.GEMINI_API_KEY) || '';
+// We use a try-catch to safely access process.env which might be defined by Vite
+let clientGeminiKey = '';
+try {
+    // @ts-ignore - Vite will replace this string if it's defined in vite.config.ts
+    clientGeminiKey = process.env.GEMINI_API_KEY || '';
+} catch (e) {}
+
 export const GEMINI_API_KEY = getEnvVar('VITE_GEMINI_API_KEY') || clientGeminiKey || getEnvVar('GEMINI_API_KEY') || '';
