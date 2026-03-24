@@ -27,6 +27,7 @@ export default defineConfig({
     'process.env.GITHUB_TOKEN': JSON.stringify(process.env.GITHUB_TOKEN || ''),
     'process.env.GITHUB_REPO': JSON.stringify(process.env.GITHUB_REPO || ''),
     'process.env.SITE_MODE': JSON.stringify(process.env.SITE_MODE || ''),
+    'process.env.GEMINI_API_KEY': JSON.stringify(process.env.GEMINI_API_KEY || ''),
     'global': 'window'
   }
 });

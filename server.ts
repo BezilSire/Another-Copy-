@@ -585,154 +585,167 @@ SECURITY & PRIVACY RULES:
   });
 
   app.post("/api/chat", async (req: Request, res: Response) => {
-    const { messages, tools } = req.body;
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    try {
+      const { messages, tools } = req.body;
+      const apiKey = process.env.OPENROUTER_API_KEY;
 
-    // List of models to try in order of preference
-    const models = [
-      "openrouter/auto",
-      "qwen/qwen-2.5-72b-instruct",
-      "qwen/qwen-3-80b-instruct:free",
-      "deepseek/deepseek-r1:free",
-      "google/gemini-2.0-flash-001",
-      "anthropic/claude-3-haiku",
-      "openai/gpt-4o-mini"
-    ];
+      // List of models to try in order of preference
+      const models = [
+        "openrouter/auto",
+        "qwen/qwen-2.5-72b-instruct",
+        "qwen/qwen-3-80b-instruct:free",
+        "deepseek/deepseek-r1:free",
+        "google/gemini-2.0-flash-001",
+        "anthropic/claude-3-haiku",
+        "openai/gpt-4o-mini"
+      ];
 
-    let lastError = null;
+      let lastError = null;
 
-    if (apiKey) {
-      for (const model of models) {
-        try {
-          console.log(`OpenRouter: Attempting chat with model ${model}...`);
-          const response = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
-            model,
+      if (apiKey) {
+        for (const model of models) {
+          try {
+            console.log(`OpenRouter: Attempting chat with model ${model}...`);
+            const response = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
+              model,
+              messages,
+              tools: tools || [],
+              tool_choice: tools ? "auto" : undefined,
+              max_tokens: 4096,
+            }, {
+              headers: {
+                "Authorization": `Bearer ${apiKey}`,
+                "Content-Type": "application/json",
+                "HTTP-Referer": "https://ubuntium.org",
+                "X-Title": "Ubuntium Global Commons",
+              },
+              validateStatus: () => true // Handle all status codes
+            });
+    
+            if (response.status === 200) {
+              const data = response.data;
+              if (data.choices && data.choices.length > 0) {
+                console.log(`OpenRouter: Success with model ${model}`);
+                return res.json(data);
+              }
+            }
+    
+            const errorData = response.data;
+            console.error(`OpenRouter Error (${model}):`, errorData);
+            lastError = typeof errorData === 'object' ? JSON.stringify(errorData) : String(errorData);
+    
+            // If it's a 401, don't bother trying other models
+            if (response.status === 401) {
+              return res.status(401).json({ 
+                error: "Invalid OpenRouter API Key. Please check your settings.",
+                code: "INVALID_API_KEY"
+              });
+            }
+    
+          } catch (error: any) {
+            console.error(`OpenRouter Fetch Error (${model}):`, error);
+            lastError = error.response?.data ? JSON.stringify(error.response.data) : error.message;
+          }
+        }
+      }
+
+      // NVIDIA Fallback for /api/chat
+      try {
+        const nvidiaKey = process.env.NVIDIA_API_KEY;
+        if (nvidiaKey) {
+          console.log("OpenRouter: Falling back to NVIDIA (moonshotai/kimi-k2.5)...");
+          const response = await axios.post("https://integrate.api.nvidia.com/v1/chat/completions", {
+            model: "moonshotai/kimi-k2.5",
             messages,
             tools: tools || [],
             tool_choice: tools ? "auto" : undefined,
             max_tokens: 4096,
           }, {
             headers: {
-              "Authorization": `Bearer ${apiKey}`,
+              "Authorization": `Bearer ${nvidiaKey}`,
               "Content-Type": "application/json",
-              "HTTP-Referer": "https://ubuntium.org",
-              "X-Title": "Ubuntium Global Commons",
-            }
+            },
+            validateStatus: () => true
           });
-  
+
           if (response.status === 200) {
             const data = response.data;
             if (data.choices && data.choices.length > 0) {
-              console.log(`OpenRouter: Success with model ${model}`);
+              console.log("NVIDIA: Success with model moonshotai/kimi-k2.5");
               return res.json(data);
             }
+          } else {
+            const errorData = response.data;
+            console.error("NVIDIA Error:", errorData);
+            lastError = typeof errorData === 'object' ? JSON.stringify(errorData) : String(errorData);
           }
-  
-          const errorData = response.data;
-          console.error(`OpenRouter Error (${model}):`, errorData);
-          lastError = JSON.stringify(errorData);
-  
-          // If it's a 401, don't bother trying other models
-          if (response.status === 401) {
-            return res.status(401).json({ 
-              error: "Invalid OpenRouter API Key. Please check your settings.",
-              code: "INVALID_API_KEY"
-            });
-          }
-  
-        } catch (error: any) {
-          console.error(`OpenRouter Fetch Error (${model}):`, error);
-          lastError = error.message;
         }
+      } catch (err: any) {
+        console.error("OpenRouter: NVIDIA Fallback Error:", err);
+        lastError = err.response?.data ? JSON.stringify(err.response.data) : err.message;
       }
-    }
 
-    // NVIDIA Fallback for /api/chat
-    try {
-      const nvidiaKey = process.env.NVIDIA_API_KEY;
-      if (nvidiaKey) {
-        console.log("OpenRouter: Falling back to NVIDIA (moonshotai/kimi-k2.5)...");
-        const response = await axios.post("https://integrate.api.nvidia.com/v1/chat/completions", {
-          model: "moonshotai/kimi-k2.5",
-          messages,
-          tools: tools || [],
-          tool_choice: tools ? "auto" : undefined,
-          max_tokens: 4096,
-        }, {
-          headers: {
-            "Authorization": `Bearer ${nvidiaKey}`,
-            "Content-Type": "application/json",
+      // Gemini Fallback for /api/chat
+      try {
+        console.log("OpenRouter: Falling back to direct Gemini...");
+        const geminiKey = process.env.GEMINI_API_KEY;
+        if (geminiKey) {
+          const genAI = new GoogleGenAI({ apiKey: geminiKey });
+          
+          const systemMessage = messages.find((m: any) => m.role === "system");
+          const chatContents = messages
+            .filter((m: any) => m.role !== "system")
+            .map((m: any) => ({
+              role: m.role === "assistant" ? "model" : "user",
+              parts: [{ text: m.content || "" }]
+            }));
+
+          // Ensure we have at least one message for Gemini
+          if (chatContents.length === 0) {
+            chatContents.push({ role: "user", parts: [{ text: "Hello" }] });
           }
-        });
 
-        if (response.status === 200) {
-          const data = response.data;
-          if (data.choices && data.choices.length > 0) {
-            console.log("NVIDIA: Success with model moonshotai/kimi-k2.5");
-            return res.json(data);
-          }
-        } else {
-          const errorData = response.data;
-          console.error("NVIDIA Error:", errorData);
-        }
-      }
-    } catch (err) {
-      console.error("OpenRouter: NVIDIA Fallback Error:", err);
-    }
-
-    // Gemini Fallback for /api/chat
-    try {
-      console.log("OpenRouter: Falling back to direct Gemini...");
-      const geminiKey = process.env.GEMINI_API_KEY;
-      if (geminiKey) {
-        const genAI = new GoogleGenAI({ apiKey: geminiKey });
-        
-        const systemMessage = messages.find((m: any) => m.role === "system");
-        const chatContents = messages
-          .filter((m: any) => m.role !== "system")
-          .map((m: any) => ({
-            role: m.role === "assistant" ? "model" : "user",
-            parts: [{ text: m.content || "" }]
-          }));
-
-        // Ensure we have at least one message for Gemini
-        if (chatContents.length === 0) {
-          chatContents.push({ role: "user", parts: [{ text: "Hello" }] });
-        }
-
-        const response = await genAI.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: chatContents,
-          config: {
-            systemInstruction: systemMessage?.content || "You are a helpful assistant."
-          }
-        });
-
-        if (response.text) {
-          console.log("Gemini: Success with direct fallback");
-          return res.json({
-            choices: [{
-              message: {
-                role: "assistant",
-                content: response.text
-              }
-            }]
+          const response = await genAI.models.generateContent({
+            model: "gemini-3-flash-preview",
+            contents: chatContents,
+            config: {
+              systemInstruction: systemMessage?.content || "You are a helpful assistant."
+            }
           });
-        } else {
-          throw new Error("Gemini returned an empty response.");
-        }
-      } else {
-        console.warn("Gemini: No GEMINI_API_KEY found on server.");
-      }
-    } catch (err: any) {
-      console.error("OpenRouter: Gemini Fallback Error:", err);
-      lastError = `Gemini Fallback Error: ${err.message}`;
-    }
 
-    res.status(500).json({ 
-      error: "All AI models failed to respond.",
-      details: lastError || "Unknown error"
-    });
+          if (response.text) {
+            console.log("Gemini: Success with direct fallback");
+            return res.json({
+              choices: [{
+                message: {
+                  role: "assistant",
+                  content: response.text
+                }
+              }]
+            });
+          } else {
+            throw new Error("Gemini returned an empty response.");
+          }
+        } else {
+          console.warn("Gemini: No GEMINI_API_KEY found on server.");
+          lastError = lastError || "No API keys configured (OpenRouter, NVIDIA, or Gemini).";
+        }
+      } catch (err: any) {
+        console.error("OpenRouter: Gemini Fallback Error:", err);
+        lastError = `Gemini Fallback Error: ${err.message}`;
+      }
+
+      return res.status(500).json({ 
+        error: "All AI models failed to respond.",
+        details: lastError || "Unknown error"
+      });
+    } catch (globalError: any) {
+      console.error("CRITICAL: /api/chat global error:", globalError);
+      return res.status(500).json({
+        error: "Internal server error in chat endpoint.",
+        details: globalError.message
+      });
+    }
   });
 
   // Vite Middleware for Development (Non-blocking initialization)
