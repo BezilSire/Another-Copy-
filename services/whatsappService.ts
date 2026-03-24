@@ -206,8 +206,6 @@ export const whatsappService = {
                 const models = [
                     "openrouter/auto", 
                     "qwen/qwen-2.5-72b-instruct", 
-                    "qwen/qwen-3-80b-instruct:free", 
-                    "deepseek/deepseek-r1:free", 
                     "google/gemini-2.0-flash-001"
                 ];
                 for (const model of models) {
@@ -222,19 +220,24 @@ export const whatsappService = {
                                 "Content-Type": "application/json",
                                 "HTTP-Referer": "https://ubuntium.org",
                                 "X-Title": "Ubuntium Global Commons",
-                            }
+                            },
+                            timeout: 10000 // 10s timeout
                         });
 
                         if (response.status === 200) {
                             const data = response.data;
                             const content = data.choices?.[0]?.message?.content;
                             if (content) {
-                                result = JSON.parse(content);
-                                break;
+                                try {
+                                    result = JSON.parse(content);
+                                    break;
+                                } catch (parseError) {
+                                    console.error(`OpenRouter Parsing Error (${model}): Failed to parse JSON:`, content);
+                                }
                             }
                         }
-                    } catch (e) {
-                        console.error(`OpenRouter Parsing Error (${model}):`, e);
+                    } catch (e: any) {
+                        console.error(`OpenRouter Parsing Error (${model}):`, e.message || e);
                     }
                 }
             }
@@ -253,18 +256,23 @@ export const whatsappService = {
                             headers: {
                                 "Authorization": `Bearer ${nvidiaKey}`,
                                 "Content-Type": "application/json",
-                            }
+                            },
+                            timeout: 12000 // 12s timeout
                         });
 
                         if (response.status === 200) {
                             const data = response.data;
                             const content = data.choices?.[0]?.message?.content;
                             if (content) {
-                                result = JSON.parse(content);
+                                try {
+                                    result = JSON.parse(content);
+                                } catch (parseError) {
+                                    console.error(`[WA-${sessionId}] NVIDIA Parsing Error: Failed to parse JSON:`, content);
+                                }
                             }
                         }
-                    } catch (e) {
-                        console.error(`[WA-${sessionId}] NVIDIA Parsing Error:`, e);
+                    } catch (e: any) {
+                        console.error(`[WA-${sessionId}] NVIDIA Parsing Error:`, e.message || e);
                     }
                 }
             }
@@ -297,7 +305,12 @@ export const whatsappService = {
                         }
                     }
                 });
-                result = JSON.parse(response.text || '{}');
+                try {
+                    result = JSON.parse(response.text || '{}');
+                } catch (parseError) {
+                    console.error(`[WA-${sessionId}] Gemini Parsing Error: Failed to parse JSON:`, response.text);
+                    result = { isNoise: true };
+                }
             }
 
             if (!result || result.isNoise) return;

@@ -1,41 +1,62 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { GEMINI_API_KEY } from "./env";
+import axios from "axios";
 
 const ai = new GoogleGenAI({ apiKey: GEMINI_API_KEY });
 
 const callAI = async (prompt: string, systemInstruction: string = "", jsonMode: boolean = false) => {
   try {
     // Try server-side chat endpoint first (uses OpenRouter)
-    const response = await fetch('/api/chat', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    // In browser, this is relative. On server, we might need full URL or handle it differently.
+    // However, since this is used in components, it's mostly client-side.
+    // For server-side calls, we should ideally call the logic directly.
+    
+    const isServer = typeof window === 'undefined';
+    if (!isServer) {
+      const response = await axios.post('/api/chat', {
         messages: [
           { role: 'system', content: systemInstruction || "You are a helpful AI assistant for the Ubuntium Global Commons." },
           { role: 'user', content: prompt + (jsonMode ? " Respond ONLY with a valid JSON object." : "") }
         ]
-      })
-    });
+      });
 
-    if (response.ok) {
-      const data = await response.json();
-      const content = data.choices?.[0]?.message?.content;
-      if (content) {
-        if (jsonMode) {
-          try {
-            // Clean up potential markdown code blocks
-            const cleanJson = content.replace(/```json/g, '').replace(/```/g, '').trim();
-            return JSON.parse(cleanJson);
-          } catch (e) {
-            console.error("Failed to parse JSON from OpenRouter:", e);
+      if (response.status === 200) {
+        const data = response.data;
+        const content = data.choices?.[0]?.message?.content;
+        if (content) {
+          if (jsonMode) {
+            try {
+              // Clean up potential markdown code blocks
+              const cleanJson = content.replace(/```json/g, '').replace(/```/g, '').trim();
+              try {
+                return JSON.parse(cleanJson);
+              } catch (innerError) {
+                // Try to find the first { and last } if parsing failed
+                const start = cleanJson.indexOf('{');
+                const end = cleanJson.lastIndexOf('}');
+                if (start !== -1 && end !== -1 && end > start) {
+                  const extracted = cleanJson.substring(start, end + 1);
+                  try {
+                    return JSON.parse(extracted);
+                  } catch (secondError) {
+                    console.error("Aggressive JSON extraction failed:", secondError);
+                    throw innerError;
+                  }
+                }
+                throw innerError;
+              }
+            } catch (e) {
+              console.error("Failed to parse JSON from AI response:", e);
+              return {};
+            }
+          } else {
+            return content;
           }
-        } else {
-          return content;
         }
       }
     }
   } catch (error) {
-    console.error("OpenRouter call failed, falling back to Gemini:", error);
+    console.error("AI call failed, falling back to Gemini:", error);
   }
 
   // Fallback to Gemini
