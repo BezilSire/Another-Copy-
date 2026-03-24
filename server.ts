@@ -28,7 +28,8 @@ const app = express();
 const PORT = 3000;
 
 async function startServer() {
-  console.log("Server: Starting initialization...");
+  try {
+    console.log("Server: Starting initialization...");
 
   let api: any;
   let whatsappService: any;
@@ -43,8 +44,16 @@ async function startServer() {
   });
 
   // Start listening immediately to satisfy infrastructure health checks
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server: Listening on http://localhost:${PORT}`);
+  });
+
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Server: Port ${PORT} is already in use. This might be normal in some environments.`);
+    } else {
+      console.error("Server: HTTP Server Error:", err);
+    }
   });
 
   // Perform heavy initialization in the background
@@ -409,7 +418,11 @@ SECURITY & PRIVACY RULES:
       return { api, whatsappService };
     } catch (err) {
       console.error("Server: Background initialization failed:", err);
-      throw err;
+      if (err instanceof Error) {
+        console.error("Stack:", err.stack);
+      }
+      (global as any).serverInitializationError = err;
+      return { api: null, whatsappService: null };
     }
   })();
 
@@ -976,7 +989,7 @@ SECURITY & PRIVACY RULES:
   } else {
     const distPath = path.join(__dirname, "dist");
     app.use(express.static(distPath));
-    app.get("*", (req, res) => {
+    app.get("*all", (req, res) => {
       res.sendFile(path.join(distPath, "index.html"));
     });
   }
@@ -985,6 +998,14 @@ SECURITY & PRIVACY RULES:
   // Already called inside initPromise
 
   return app;
+  } catch (error) {
+    console.error("Server: CRITICAL STARTUP ERROR:", error);
+    if (error instanceof Error) {
+      console.error("Stack:", error.stack);
+    }
+    // Return the app anyway so the process doesn't exit immediately and we can see logs
+    return app;
+  }
 }
 
 const appPromise = startServer();
