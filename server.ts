@@ -494,9 +494,7 @@ SECURITY & PRIVACY RULES:
 
       const response = await llmService.chat(messages, {
         tools: tools || [],
-        jsonMode: jsonMode || false,
-        timeout: 30000,
-        retries: 2
+        jsonMode: jsonMode || false
       });
       return res.json(response);
     } catch (globalError: any) {

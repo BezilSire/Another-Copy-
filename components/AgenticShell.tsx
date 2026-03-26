@@ -232,11 +232,12 @@ export const AgenticShell: React.FC<AgenticShellProps> = ({ user, onLogout, onVi
           }
 
           const txs = await new Promise<any[]>((resolve, reject) => {
-             const unsub = api.listenForUserTransactions(user.id, (data) => {
-                unsub();
+             let unsub: (() => void) | undefined;
+             unsub = api.listenForUserTransactions(user.id, (data) => {
+                if (unsub) unsub();
                 resolve(data);
              }, (err) => {
-                unsub();
+                if (unsub) unsub();
                 reject(err);
              });
           });
