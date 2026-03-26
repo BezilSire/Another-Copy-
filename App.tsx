@@ -30,7 +30,7 @@ const App = () => {
   const [viewingProfileId, setViewingProfileId] = useState<string | null>(null);
   const [chatTargetId, setChatTargetId] = useState<string | null>(null);
   const [isRadarOpen, setIsRadarOpen] = useState(false);
-  const [currentView, setCurrentView] = useState<'brain' | 'oracle'>('brain');
+  const [currentView, setCurrentView] = useState<'dashboard' | 'oracle'>('dashboard');
   const [forceView, setForceView] = useState<string | null>(null);
   const [isRecoverySetupOpen, setIsRecoverySetupOpen] = useState(false);
 
@@ -98,7 +98,7 @@ const App = () => {
         }} onViewProfile={(id) => setViewingProfileId(id)} isAdminView={userToRender.role === 'admin'} /></div>;
         
         if (currentView === 'oracle') {
-            return <GuardianOracle user={userToRender} onBack={() => setCurrentView('brain')} />;
+            return <GuardianOracle user={userToRender} onBack={() => setCurrentView('dashboard')} />;
         }
 
         if (isRecoverySetupOpen) {
