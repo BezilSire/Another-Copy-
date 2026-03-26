@@ -12,6 +12,7 @@ import QRCode from 'qrcode';
 import { useFirestoreAuthState } from './whatsappAuthStore';
 import { GoogleGenAI, Type } from "@google/genai";
 import axios from "axios";
+import { llmService } from "./llmService";
 
 const logger = pino({ level: 'silent' });
 
@@ -183,135 +184,26 @@ export const whatsappService = {
 
         // AI Parsing Logic for Zim Pulse
         try {
-            const apiKey = process.env.OPENROUTER_API_KEY;
-            let result = null;
+            const prompt = `Extract commerce data from this WhatsApp message. 
+            If it's an offer, need, or job, return JSON. 
+            If it's noise, return { "isNoise": true }.
+            
+            Message: "${text}"
+            
+            Format: {
+                "isNoise": boolean,
+                "type": "offer" | "need" | "job",
+                "item": string,
+                "price": string,
+                "location": string,
+                "contact": string,
+                "description": string
+            }`;
 
-            if (apiKey) {
-                const prompt = `Extract commerce data from this WhatsApp message. 
-                If it's an offer, need, or job, return JSON. 
-                If it's noise, return { "isNoise": true }.
-                
-                Message: "${text}"
-                
-                Format: {
-                    "isNoise": boolean,
-                    "type": "offer" | "need" | "job",
-                    "item": string,
-                    "price": string,
-                    "location": string,
-                    "contact": string,
-                    "description": string
-                }`;
-
-                const models = [
-                    "openrouter/auto", 
-                    "qwen/qwen-2.5-72b-instruct", 
-                    "google/gemini-2.0-flash-001"
-                ];
-                for (const model of models) {
-                    try {
-                        const response = await axios.post("https://openrouter.ai/api/v1/chat/completions", {
-                            model,
-                            messages: [{ role: "user", content: prompt }],
-                            response_format: { type: "json_object" }
-                        }, {
-                            headers: {
-                                "Authorization": `Bearer ${apiKey}`,
-                                "Content-Type": "application/json",
-                                "HTTP-Referer": "https://ubuntium.org",
-                                "X-Title": "Ubuntium Global Commons",
-                            },
-                            timeout: 10000 // 10s timeout
-                        });
-
-                        if (response.status === 200) {
-                            const data = response.data;
-                            const content = data.choices?.[0]?.message?.content;
-                            if (content) {
-                                try {
-                                    result = JSON.parse(content);
-                                    break;
-                                } catch (parseError) {
-                                    console.error(`OpenRouter Parsing Error (${model}): Failed to parse JSON:`, content);
-                                }
-                            }
-                        }
-                    } catch (e: any) {
-                        console.error(`OpenRouter Parsing Error (${model}):`, e.message || e);
-                    }
-                }
-            }
-
-            // NVIDIA Fallback if OpenRouter fails
-            if (!result) {
-                const nvidiaKey = process.env.NVIDIA_API_KEY;
-                if (nvidiaKey) {
-                    try {
-                        console.log(`[WA-${sessionId}] Falling back to NVIDIA for parsing...`);
-                        const response = await axios.post("https://integrate.api.nvidia.com/v1/chat/completions", {
-                            model: "moonshotai/kimi-k2.5",
-                            messages: [{ role: "user", content: prompt }],
-                            response_format: { type: "json_object" }
-                        }, {
-                            headers: {
-                                "Authorization": `Bearer ${nvidiaKey}`,
-                                "Content-Type": "application/json",
-                            },
-                            timeout: 12000 // 12s timeout
-                        });
-
-                        if (response.status === 200) {
-                            const data = response.data;
-                            const content = data.choices?.[0]?.message?.content;
-                            if (content) {
-                                try {
-                                    result = JSON.parse(content);
-                                } catch (parseError) {
-                                    console.error(`[WA-${sessionId}] NVIDIA Parsing Error: Failed to parse JSON:`, content);
-                                }
-                            }
-                        }
-                    } catch (e: any) {
-                        console.error(`[WA-${sessionId}] NVIDIA Parsing Error:`, e.message || e);
-                    }
-                }
-            }
-
-            // Fallback to Gemini if OpenRouter and NVIDIA fail or are not configured
-            if (!result) {
-                const geminiKey = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY;
-                const ai = new GoogleGenAI({ apiKey: geminiKey || '' });
-                const response = await ai.models.generateContent({
-                    model: "gemini-3-flash-preview",
-                    contents: `Extract commerce data from this WhatsApp message. 
-                    If it's an offer, need, or job, return JSON. 
-                    If it's noise, return { "isNoise": true }.
-                    
-                    Message: "${text}"`,
-                    config: {
-                        responseMimeType: "application/json",
-                        responseSchema: {
-                            type: Type.OBJECT,
-                            properties: {
-                                isNoise: { type: Type.BOOLEAN },
-                                type: { type: Type.STRING, enum: ["offer", "need", "job"] },
-                                item: { type: Type.STRING },
-                                price: { type: Type.STRING },
-                                location: { type: Type.STRING },
-                                contact: { type: Type.STRING },
-                                description: { type: Type.STRING }
-                            },
-                            required: ["isNoise"]
-                        }
-                    }
-                });
-                try {
-                    result = JSON.parse(response.text || '{}');
-                } catch (parseError) {
-                    console.error(`[WA-${sessionId}] Gemini Parsing Error: Failed to parse JSON:`, response.text);
-                    result = { isNoise: true };
-                }
-            }
+            const result = await llmService.generateJSON(prompt, "", {
+                timeout: 30000,
+                retries: 2
+            });
 
             if (!result || result.isNoise) return;
 
