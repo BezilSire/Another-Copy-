@@ -113,8 +113,29 @@ const App = () => {
             );
         }
         
-        // The AgenticShell is the new brain of the app
-        return <AgenticShell user={userToRender as MemberUser} onLogout={() => setIsLogoutConfirmOpen(true)} onViewProfile={handleViewProfile} onSwitchView={setCurrentView} chatTargetId={chatTargetId} onChatStarted={() => setChatTargetId(null)} onOpenRecoverySetup={() => setIsRecoverySetupOpen(true)} />;
+        if (userToRender.role === 'admin') {
+            return (
+                <AdminDashboard 
+                    user={userToRender as Admin} 
+                    onUpdateUser={updateUser} 
+                    unreadCount={unreadNotificationCount} 
+                    onViewProfile={handleViewProfile}
+                    onLogout={() => setIsLogoutConfirmOpen(true)}
+                />
+            );
+        }
+
+        return (
+            <MemberDashboard 
+                user={userToRender as MemberUser} 
+                onUpdateUser={updateUser} 
+                unreadCount={unreadNotificationCount} 
+                onLogout={() => setIsLogoutConfirmOpen(true)}
+                onViewProfile={handleViewProfile}
+                forcedView={forceView}
+                clearForcedView={() => setForceView(null)}
+            />
+        );
     }
     
     return <AuthPage />;

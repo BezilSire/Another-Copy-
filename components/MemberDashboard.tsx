@@ -22,6 +22,7 @@ import { WalletPage } from './WalletPage';
 import { MorePage } from './MorePage';
 import { ZimPulseFeed } from './ZimPulseFeed';
 import { BottomNavBar } from './BottomNavBar';
+import { AgenticShell } from './AgenticShell';
 
 interface MemberDashboardProps {
   user: MemberUser;
@@ -33,7 +34,7 @@ interface MemberDashboardProps {
   clearForcedView: () => void;
 }
 
-type MemberView = 'home' | 'wallet' | 'ledger' | 'governance' | 'ventures' | 'profile' | 'notifications' | 'more';
+type MemberView = 'home' | 'wallet' | 'ledger' | 'governance' | 'ventures' | 'profile' | 'notifications' | 'more' | 'brain';
 
 export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdateUser, unreadCount, onLogout, onViewProfile, forcedView, clearForcedView }) => {
   const [activeView, setActiveView] = useState<MemberView>('home');
@@ -47,6 +48,7 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
         if (forcedView === 'governance') setActiveView('governance');
         else if (forcedView === 'ledger') setActiveView('ledger');
         else if (forcedView === 'wallet') setActiveView('wallet');
+        else if (forcedView === 'brain') setActiveView('brain');
         clearForcedView();
     }
   }, [forcedView, clearForcedView]);
@@ -75,6 +77,16 @@ export const MemberDashboard: React.FC<MemberDashboardProps> = ({ user, onUpdate
       case 'governance': return <ProposalsPage currentUser={user} onNavigateToDetails={() => {}} />;
       case 'ventures': return <VenturesPage currentUser={user} onViewProfile={onViewProfile} onNavigateToPitchAssistant={() => setActiveView('home')} />;
       case 'more': return <MorePage user={user} onLogout={onLogout} onViewProfile={onViewProfile} onNavigate={setActiveView} />;
+      case 'brain': return (
+        <div className="fixed inset-0 z-50 bg-slate-950">
+          <AgenticShell 
+            user={user} 
+            onLogout={onLogout} 
+            onViewProfile={(id) => onViewProfile(id)} 
+            onSwitchView={() => {}} 
+          />
+        </div>
+      );
       default:
         return (
           <div className="space-y-8 animate-slide-up pb-24">

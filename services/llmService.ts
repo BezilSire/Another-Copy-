@@ -37,8 +37,8 @@ export const llmService = {
       max_tokens = 4096,
       jsonMode = false,
       tools = [],
-      timeout = 25000, // 25 seconds per attempt
-      retries = 1 // 1 retry per model
+      timeout = 20000, // 20 seconds per attempt
+      retries = 0 // 0 retries per model (just try once)
     } = options;
 
     const GLOBAL_RETRIES = 1; // Retry the entire process once if it fails
@@ -49,7 +49,7 @@ export const llmService = {
         console.log(`LLM: Chat request received (Global Attempt ${globalAttempt + 1}). Messages: ${messages.length}, Tools: ${tools.length}, JSON Mode: ${jsonMode}`);
         
         const startTime = Date.now();
-        const GLOBAL_TIMEOUT = 50000; // 50 seconds total for all attempts
+        const GLOBAL_TIMEOUT = 45000; // 45 seconds total for all attempts to stay under infrastructure limits (usually 60s)
 
         // 1. Try OpenRouter
         if (OPENROUTER_API_KEY) {

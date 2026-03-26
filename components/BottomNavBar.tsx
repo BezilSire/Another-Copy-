@@ -11,7 +11,9 @@ import { DatabaseIcon } from './icons/DatabaseIcon';
 import { BriefcaseIcon } from './icons/BriefcaseIcon';
 import { MessageSquareIcon } from './icons/MessageSquareIcon';
 
-type NavView = 'home' | 'wallet' | 'ledger' | 'governance' | 'ventures' | 'more' | 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge';
+import { SparkleIcon } from './icons/SparkleIcon';
+
+type NavView = 'home' | 'wallet' | 'ledger' | 'governance' | 'ventures' | 'more' | 'dashboard' | 'members' | 'profile' | 'notifications' | 'knowledge' | 'brain';
 
 interface BottomNavBarProps {
   user: User;
@@ -50,9 +52,9 @@ export const BottomNavBar: React.FC<BottomNavBarProps> = ({ user, activeView, on
       <nav className="max-w-2xl mx-auto flex justify-around items-center h-16 gap-1">
         <NavItem icon={<LayoutDashboardIcon />} label="Home" isActive={activeView === 'home'} onClick={() => onNavigate('home')} />
         <NavItem icon={<WalletIcon />} label="Wallet" isActive={activeView === 'wallet'} onClick={() => onNavigate('wallet')} />
+        <NavItem icon={<SparkleIcon />} label="Brain" isActive={activeView === 'brain'} onClick={() => onNavigate('brain')} />
         <NavItem icon={<BriefcaseIcon />} label="Ventures" isActive={activeView === 'ventures'} onClick={() => onNavigate('ventures')} />
         <NavItem icon={<UserCircleIcon />} label="Profile" isActive={activeView === 'profile'} onClick={() => onNavigate('profile')} />
-        <NavItem icon={<BellIcon />} label="Alerts" isActive={activeView === 'notifications'} onClick={() => onNavigate('notifications')} count={unreadCount} />
       </nav>
     </footer>
   );

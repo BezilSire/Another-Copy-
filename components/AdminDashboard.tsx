@@ -21,17 +21,20 @@ import { PayoutsAdminPage } from './PayoutsAdminPage';
 import { ReportsView } from './ReportsView';
 import { DistressCallsAdminView } from './DistressCallsAdminView';
 import { SirenIcon } from './icons/SirenIcon';
+import { AgenticShell } from './AgenticShell';
+import { SparkleIcon } from './icons/SparkleIcon';
 
 interface AdminDashboardProps {
   user: Admin;
   onUpdateUser: (data: Partial<User>) => Promise<void>;
   unreadCount: number;
   onViewProfile: (userId: string) => void;
+  onLogout: () => void;
 }
 
-type AdminView = 'overview' | 'users' | 'wallets' | 'governance' | 'ventures' | 'payouts' | 'reports' | 'distress';
+type AdminView = 'overview' | 'users' | 'wallets' | 'governance' | 'ventures' | 'payouts' | 'reports' | 'distress' | 'brain';
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUser, unreadCount, onViewProfile }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUser, unreadCount, onViewProfile, onLogout }) => {
   const [activeView, setActiveView] = useState<AdminView>('overview');
   const [economy, setEconomy] = useState<GlobalEconomy | null>(null);
   const [vaults, setVaults] = useState<TreasuryVault[]>([]);
@@ -74,6 +77,16 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
       case 'payouts': return <PayoutsAdminPage adminUser={user} payouts={[]} />;
       case 'reports': return <ReportsView reports={[]} onViewProfile={onViewProfile} onResolve={async () => {}} onDismiss={async () => {}} />;
       case 'distress': return <DistressCallsAdminView />;
+      case 'brain': return (
+        <div className="fixed inset-0 z-50 bg-slate-950">
+          <AgenticShell 
+            user={user as any} 
+            onLogout={onLogout} 
+            onViewProfile={(id) => onViewProfile(id)} 
+            onSwitchView={() => {}} 
+          />
+        </div>
+      );
       default:
         return (
           <div className="space-y-8 animate-slide-up">
@@ -177,7 +190,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
       {/* Sidebar Navigation */}
       <nav className="w-full lg:w-72 glass-panel border-r border-white/5 p-8 flex flex-col gap-8">
         <div className="flex items-center gap-3 mb-4">
-          <div className="bg-brand-gold/10 p-2 rounded-xl border border-brand-gold/20">
+          <div className="bg-brand-gold/10 p-2.5 rounded-xl border border-brand-gold/20">
             <ShieldCheckIcon className="h-7 w-7 text-brand-gold" />
           </div>
           <div>
@@ -193,6 +206,13 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
           >
             <LayoutDashboardIcon className="h-4 w-4" />
             Overview
+          </button>
+          <button 
+            onClick={() => setActiveView('brain')}
+            className={`flex items-center gap-3 px-5 py-3.5 rounded-xl transition-all text-xs font-semibold ${activeView === 'brain' ? 'bg-brand-gold text-slate-950 shadow-md' : 'text-slate-400 hover:bg-white/5 hover:text-white'}`}
+          >
+            <SparkleIcon className="h-4 w-4" />
+            Commons Brain
           </button>
           <button 
             onClick={() => setActiveView('users')}
