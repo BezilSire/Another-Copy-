@@ -161,6 +161,26 @@ SECURITY & PRIVACY RULES:
         }
       });
       
+      // Background Mining Process
+      // Periodically checks the mempool and mines blocks if transactions are pending
+      const MINING_INTERVAL = 60000; // Check every 60 seconds
+      const SYSTEM_MINER_ID = 'SYSTEM_MINER';
+      
+      setInterval(async () => {
+          try {
+              console.log("[Miner] Checking mempool for pending transactions...");
+              // minePendingTransactions will handle checking if mempool is empty
+              await api.minePendingTransactions(SYSTEM_MINER_ID);
+          } catch (error) {
+              // Silence errors if mempool is empty or other non-critical issues
+              if (error instanceof Error && (error.message.includes("No pending transactions") || error.message.includes("mempool is empty"))) {
+                  // Normal state
+              } else {
+                  console.error("[Miner] Background mining error:", error);
+              }
+          }
+      }, MINING_INTERVAL);
+
       (global as any).serverInitialized = true;
       console.log("Server: Background initialization complete.");
       return { api, whatsappService };

@@ -910,53 +910,118 @@ export const api = {
 
     reconcileAllBalances: async () => {
         const usersSnap = await getDocs(collections.users);
+        const vaultsSnap = await getDocs(collections.vaults);
         const ledgerSnap = await getDocs(collections.ledger);
         const txs = ledgerSnap.docs.map(d => d.data() as UbtTransaction);
         
-        const userMap = new Map<string, { balance: number, publicKey: string }>();
+        console.log(`[Reconcile] Starting reconciliation of ${txs.length} transactions for ${usersSnap.size} users and ${vaultsSnap.size} vaults.`);
+
+        // Map to store balances being reconstructed
+        const balanceMap = new Map<string, { balance: number, type: 'user' | 'vault' }>();
+        const publicKeyToId = new Map<string, string>();
+
+        // Initialize with current users and their initial stakes
         usersSnap.docs.forEach(doc => {
             const data = doc.data();
-            userMap.set(doc.id, { 
+            balanceMap.set(doc.id, { 
                 balance: Number(data.initialUbtStake || 0), 
-                publicKey: data.publicKey || '' 
+                type: 'user'
             });
+            if (data.publicKey) publicKeyToId.set(data.publicKey, doc.id);
+        });
+
+        // Initialize with vaults
+        vaultsSnap.docs.forEach(doc => {
+            const data = doc.data();
+            balanceMap.set(doc.id, { 
+                balance: Number(data.balance || 0), 
+                type: 'vault'
+            });
+            if (data.publicKey) publicKeyToId.set(data.publicKey, doc.id);
+        });
+
+        // Ensure all system vaults are present in the balance map
+        const systemVaults = ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE', 'SYSTEM_MINER'];
+        systemVaults.forEach(vId => {
+            if (!balanceMap.has(vId)) {
+                balanceMap.set(vId, { 
+                    balance: vId === 'GENESIS' ? 15000000 : 0, 
+                    type: 'vault' 
+                });
+            } else if (vId === 'GENESIS') {
+                // Always reset GENESIS to 15M for reconstruction
+                balanceMap.get('GENESIS')!.balance = 15000000;
+            }
+        });
+
+        // Sort transactions by timestamp to ensure correct order
+        const sortedTxs = [...txs].sort((a, b) => {
+            const timeA = a.timestamp instanceof Timestamp ? a.timestamp.toMillis() : (Number(a.timestamp) || 0);
+            const timeB = b.timestamp instanceof Timestamp ? b.timestamp.toMillis() : (Number(b.timestamp) || 0);
+            return timeA - timeB;
         });
 
         // Single pass over ledger to calculate all balances
-        txs.forEach(tx => {
+        sortedTxs.forEach(tx => {
             const amt = Number(tx.amount || 0);
+            const fee = Number(tx.fee || 0);
             
-            // Credit receiver
-            if (userMap.has(tx.receiverId)) {
-                userMap.get(tx.receiverId)!.balance += amt;
-            } else if (tx.receiverPublicKey) {
-                // Fallback: search by public key if receiverId didn't match
-                for (const [uid, userData] of userMap.entries()) {
-                    if (userData.publicKey === tx.receiverPublicKey) {
-                        userData.balance += amt;
-                        break;
-                    }
-                }
+            let senderId = tx.senderId;
+            let receiverId = tx.receiverId;
+
+            // Resolve IDs from public keys
+            // 1. Check if senderId is a public key
+            if (publicKeyToId.has(senderId)) {
+                senderId = publicKeyToId.get(senderId)!;
+            } else if (tx.senderPublicKey && publicKeyToId.has(tx.senderPublicKey)) {
+                senderId = publicKeyToId.get(tx.senderPublicKey)!;
+            }
+
+            // 2. Check if receiverId is a public key
+            if (publicKeyToId.has(receiverId)) {
+                receiverId = publicKeyToId.get(receiverId)!;
+            } else if (tx.receiverPublicKey && publicKeyToId.has(tx.receiverPublicKey)) {
+                receiverId = publicKeyToId.get(tx.receiverPublicKey)!;
             }
 
             // Debit sender
-            if (userMap.has(tx.senderId)) {
-                userMap.get(tx.senderId)!.balance -= amt;
-            } else if (tx.senderPublicKey) {
-                for (const [uid, userData] of userMap.entries()) {
-                    if (userData.publicKey === tx.senderPublicKey) {
-                        userData.balance -= amt;
-                        break;
-                    }
+            if (balanceMap.has(senderId)) {
+                const senderData = balanceMap.get(senderId)!;
+                if (tx.type === 'COINBASE') {
+                    // Coinbase sender (usually GENESIS) pays the full amount (reward + fees)
+                    senderData.balance -= amt;
+                } else {
+                    // Regular sender pays amount + fee
+                    senderData.balance -= (amt + fee);
                 }
+            }
+
+            // Credit receiver
+            if (balanceMap.has(receiverId)) {
+                const receiverData = balanceMap.get(receiverId)!;
+                // Receiver always gets the amount specified in tx.amount
+                receiverData.balance += amt;
             }
         });
 
+        console.log(`[Reconcile] Reconciliation complete. Committing updates...`);
+
+        // Commit updates in batches
         const batch = writeBatch(getDb());
-        userMap.forEach((data, uid) => {
-            batch.update(doc(collections.users, uid), { ubtBalance: data.balance });
-        });
-        await batch.commit();
+        let count = 0;
+        
+        for (const [id, data] of balanceMap.entries()) {
+            const ref = data.type === 'user' ? doc(collections.users, id) : doc(collections.vaults, id);
+            const field = data.type === 'user' ? 'ubtBalance' : 'balance';
+            batch.update(ref, { [field]: data.balance });
+            count++;
+            if (count >= 400) {
+                await batch.commit();
+                count = 0;
+            }
+        }
+        if (count > 0) await batch.commit();
+        console.log(`[Reconcile] Successfully updated ${balanceMap.size} balances.`);
     },
 
     reconcileUserBalance: async (uid: string) => {
@@ -982,12 +1047,19 @@ export const api = {
         snapshot.docs.forEach(d => {
             const tx = d.data() as UbtTransaction;
             const amt = Number(tx.amount || 0);
+            const fee = Number(tx.fee || 0);
             
             const isReceiver = tx.receiverId === uid || (userPublicKey && tx.receiverPublicKey === userPublicKey);
             const isSender = tx.senderId === uid || (userPublicKey && tx.senderPublicKey === userPublicKey);
 
             if (isReceiver) calculatedBalance += amt;
-            if (isSender) calculatedBalance -= amt;
+            if (isSender) {
+                if (tx.type === 'COINBASE') {
+                    calculatedBalance -= amt;
+                } else {
+                    calculatedBalance -= (amt + fee);
+                }
+            }
         });
 
         await updateDoc(doc(collections.users, uid), { ubtBalance: calculatedBalance });
