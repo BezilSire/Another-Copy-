@@ -24,23 +24,37 @@ import { SirenIcon } from './icons/SirenIcon';
 import { AgenticShell } from './AgenticShell';
 import { SparkleIcon } from './icons/SparkleIcon';
 
+import { ConfirmationDialog } from './ConfirmationDialog';
+
 interface AdminDashboardProps {
   user: Admin;
   onUpdateUser: (data: Partial<User>) => Promise<void>;
   unreadCount: number;
   onViewProfile: (userId: string) => void;
   onLogout: () => void;
+  forcedView: string | null;
+  clearForcedView: () => void;
 }
 
 type AdminView = 'overview' | 'users' | 'wallets' | 'governance' | 'ventures' | 'payouts' | 'reports' | 'distress' | 'brain';
 
-export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUser, unreadCount, onViewProfile, onLogout }) => {
+export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUser, unreadCount, onViewProfile, onLogout, forcedView, clearForcedView }) => {
   const [activeView, setActiveView] = useState<AdminView>('overview');
   const [economy, setEconomy] = useState<GlobalEconomy | null>(null);
   const [vaults, setVaults] = useState<TreasuryVault[]>([]);
   const [allUsers, setAllUsers] = useState<User[]>([]);
   const [isReconciling, setIsReconciling] = useState(false);
+  const [isReconcileConfirmOpen, setIsReconcileConfirmOpen] = useState(false);
   const { addToast } = useToast();
+
+  useEffect(() => {
+    if (forcedView) {
+        if (forcedView === 'users') setActiveView('users');
+        else if (forcedView === 'wallets') setActiveView('wallets');
+        else if (forcedView === 'brain') setActiveView('brain');
+        clearForcedView();
+    }
+  }, [forcedView, clearForcedView]);
 
   useEffect(() => {
     const unsubEconomy = api.listenForGlobalEconomy(setEconomy);
@@ -55,8 +69,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
   }, [user]);
 
   const handleReconcile = async () => {
-    if (!window.confirm("Are you sure you want to reconcile all balances? This will recalculate every user's balance from the ledger. This is a heavy operation.")) return;
-    
+    setIsReconcileConfirmOpen(false);
     setIsReconciling(true);
     try {
       await api.reconcileAllBalances();
@@ -125,7 +138,7 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
                   </p>
                 </div>
                 <button 
-                  onClick={handleReconcile}
+                  onClick={() => setIsReconcileConfirmOpen(true)}
                   disabled={isReconciling}
                   className="flex items-center gap-2 px-6 py-3 bg-brand-gold hover:bg-brand-gold-light text-slate-950 font-bold rounded-xl transition-all active:scale-[0.98] shadow-md disabled:opacity-50 text-xs"
                 >
@@ -134,6 +147,15 @@ export const AdminDashboard: React.FC<AdminDashboardProps> = ({ user, onUpdateUs
                 </button>
               </div>
             </div>
+
+            <ConfirmationDialog 
+              isOpen={isReconcileConfirmOpen} 
+              onClose={() => setIsReconcileConfirmOpen(false)} 
+              onConfirm={handleReconcile} 
+              title="Reconcile All Balances" 
+              message="Are you sure you want to reconcile all balances? This will recalculate every user's balance from the ledger. This is a heavy operation that may take some time." 
+              confirmButtonText="Reconcile Now" 
+            />
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                <div className="pro-card p-8 relative overflow-hidden shadow-premium">

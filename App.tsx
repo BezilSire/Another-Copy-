@@ -94,7 +94,8 @@ const App = () => {
         if (viewingProfileId) return <div className="main-container py-10"><PublicProfile userId={viewingProfileId} currentUser={userToRender} onBack={() => setViewingProfileId(null)} onStartChat={async (id) => { 
             setChatTargetId(id);
             setViewingProfileId(null);
-            setCurrentView('brain');
+            setForceView('brain');
+            setCurrentView('dashboard');
         }} onViewProfile={(id) => setViewingProfileId(id)} isAdminView={userToRender.role === 'admin'} /></div>;
         
         if (currentView === 'oracle') {
@@ -121,6 +122,8 @@ const App = () => {
                     unreadCount={unreadNotificationCount} 
                     onViewProfile={handleViewProfile}
                     onLogout={() => setIsLogoutConfirmOpen(true)}
+                    forcedView={forceView}
+                    clearForcedView={() => setForceView(null)}
                 />
             );
         }
