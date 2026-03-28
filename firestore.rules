@@ -13,6 +13,7 @@ service cloud.firestore {
              (request.auth.token.admin == true || 
               request.auth.uid == "server-admin" ||
               request.auth.token.uid == "server-admin" ||
+              request.auth.uid == "server-admin-uid" ||
               (request.auth.token.email == "bezilsire00@gmail.com" || request.auth.token.email == "bezilsire01@gmail.com") && 
               request.auth.token.email_verified == true); 
     }
@@ -119,11 +120,11 @@ service cloud.firestore {
     // --- BLOCKCHAIN DATA ---
     match /blocks/{id} {
       allow read, list: if true; 
-      allow write: if isAdmin();
+      allow write: if isAdmin() || request.auth.uid == "server-admin";
     }
     match /mempool/{id} {
       allow read, list: if isSignedIn();
-      allow write: if isMember() || isAdmin();
+      allow write: if isMember() || isAdmin() || request.auth.uid == "server-admin";
     }
 
     // --- DISTRESS CALLS ---

@@ -71,8 +71,15 @@ async function startServer() {
         const customToken = await adminAuth.createCustomToken("server-admin", { admin: true });
         const auth = getAuthInstance();
         if (auth) {
-          await signInWithCustomToken(auth, customToken);
-          console.log("Server: Client SDK authenticated as Admin.");
+          const userCredential = await signInWithCustomToken(auth, customToken);
+          console.log(`Server: Client SDK authenticated as Admin. UID: ${userCredential.user.uid}`);
+          
+          // Verify auth state is recognized by Firestore
+          const { getDbInstance } = await import("./services/firebase");
+          const db = getDbInstance();
+          if (db) {
+            console.log("Server: Firestore instance ready.");
+          }
         }
       } catch (err) {
         console.error("Server: Failed to authenticate Client SDK as Admin:", err);
@@ -81,9 +88,11 @@ async function startServer() {
       // Lazy load services
       const apiModule = await import("./services/apiService");
       const whatsappModule = await import("./services/whatsappService");
+      const miningModule = await import("./services/miningService");
       
       api = apiModule.api;
       whatsappService = whatsappModule.whatsappService;
+      const miningService = miningModule.miningService;
 
       // Store in global for debugging or other modules
       (global as any).api = api;
@@ -170,7 +179,7 @@ SECURITY & PRIVACY RULES:
           try {
               console.log("[Miner] Checking mempool for pending transactions...");
               // minePendingTransactions will handle checking if mempool is empty
-              await api.minePendingTransactions(SYSTEM_MINER_ID);
+              await miningService.minePendingTransactions(SYSTEM_MINER_ID);
           } catch (error) {
               // Silence errors if mempool is empty or other non-critical issues
               if (error instanceof Error && (error.message.includes("No pending transactions") || error.message.includes("mempool is empty"))) {

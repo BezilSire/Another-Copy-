@@ -331,45 +331,52 @@ export const api = {
         return { valid: true };
     },
 
-    minePendingTransactions: async (minerId: string, onProgress?: (nonce: number) => void) => {
-        const q = query(collections.mempool, orderBy('serverTimestamp', 'asc'), limit(50));
-        const snapshot = await getDocs(q);
-        
-        const lastBlock = await api.getLatestBlock();
-        const difficulty = await api.getDifficulty(lastBlock);
-        
-        let index = 0;
-        let previousHash = '0'.repeat(64);
-        if (lastBlock) {
-            index = lastBlock.index + 1;
-            previousHash = lastBlock.hash;
-        }
-
-        const mempoolTxs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
-        
-        // Fetch current balances for all participants to validate in-memory
-        const participants = new Set<string>();
-        mempoolTxs.forEach(tx => {
-            participants.add(tx.senderId);
-            participants.add(tx.receiverId);
-        });
-        participants.add('GENESIS'); // For block rewards
-        participants.add(minerId);
-
-        const balanceMap = new Map<string, number>();
-        const participantArray = Array.from(participants);
-        
-        // Batch fetch balances
-        for (let i = 0; i < participantArray.length; i += 10) {
-            const chunk = participantArray.slice(i, i + 10);
-            const userDocs = await api.getUsersByUids(chunk.filter(id => !['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(id)));
-            userDocs.forEach(u => balanceMap.set(u.id, u.ubtBalance || 0));
+    minePendingTransactions: async (minerId: string, onProgress?: (progress: number) => void): Promise<Block | null> => {
+        try {
+            const authInstance = getAuthInstance();
+            console.log(`[Miner] Starting mining process. Auth User: ${authInstance?.currentUser?.uid || 'NONE'}`);
             
-            const vaultDocs = await Promise.all(chunk.filter(id => ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(id)).map(id => getDoc(doc(collections.vaults, id))));
-            vaultDocs.forEach(v => {
-                if (v.exists()) balanceMap.set(v.id, v.data().balance || 0);
+            const q = query(collections.mempool, orderBy('serverTimestamp', 'asc'), limit(50));
+            const snapshot = await getDocs(q);
+            if (snapshot.empty) return null;
+            
+            const lastBlock = await api.getLatestBlock();
+            const difficulty = await api.getDifficulty(lastBlock);
+            
+            let index = 0;
+            let previousHash = '0'.repeat(64);
+            if (lastBlock) {
+                index = lastBlock.index + 1;
+                previousHash = lastBlock.hash;
+            }
+
+            const mempoolTxs = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as UbtTransaction));
+            
+            // Fetch current balances for all participants to validate in-memory
+            const participants = new Set<string>();
+            mempoolTxs.forEach(tx => {
+                participants.add(tx.senderId);
+                participants.add(tx.receiverId);
             });
-        }
+            participants.add('GENESIS'); // For block rewards
+            participants.add(minerId);
+
+            const balanceMap = new Map<string, number>();
+            const participantArray = Array.from(participants);
+            
+            const systemVaultIds = ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE', 'SYSTEM_MINER'];
+
+            // Batch fetch balances
+            for (let i = 0; i < participantArray.length; i += 10) {
+                const chunk = participantArray.slice(i, i + 10);
+                const userDocs = await api.getUsersByUids(chunk.filter(id => !systemVaultIds.includes(id)));
+                userDocs.forEach(u => balanceMap.set(u.id, u.ubtBalance || 0));
+                
+                const vaultDocs = await Promise.all(chunk.filter(id => systemVaultIds.includes(id)).map(id => getDoc(doc(collections.vaults, id))));
+                vaultDocs.forEach(v => {
+                    if (v.exists()) balanceMap.set(v.id, v.data().balance || 0);
+                });
+            }
 
         // Validate transactions and filter valid ones
         const validTxs: UbtTransaction[] = [];
@@ -451,37 +458,42 @@ export const api = {
                 if (mempoolDoc) t.delete(mempoolDoc.ref);
             });
 
-            for (const tx of transactions) {
-                const isFloatSender = ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(tx.senderId);
-                const isFloatReceiver = ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE'].includes(tx.receiverId);
-                
-                const senderRef = isFloatSender ? doc(collections.vaults, tx.senderId) : doc(collections.users, tx.senderId);
-                const receiverRef = isFloatReceiver ? doc(collections.vaults, tx.receiverId) : doc(collections.users, tx.receiverId);
-                
-                const balKey = isFloatSender ? 'balance' : 'ubtBalance';
-                const recvBalKey = isFloatReceiver ? 'balance' : 'ubtBalance';
+                for (const tx of transactions) {
+                    const isFloatSender = systemVaultIds.includes(tx.senderId);
+                    const isFloatReceiver = systemVaultIds.includes(tx.receiverId);
+                    
+                    const senderRef = isFloatSender ? doc(collections.vaults, tx.senderId) : doc(collections.users, tx.senderId);
+                    const receiverRef = isFloatReceiver ? doc(collections.vaults, tx.receiverId) : doc(collections.users, tx.receiverId);
+                    
+                    const balKey = isFloatSender ? 'balance' : 'ubtBalance';
+                    const recvBalKey = isFloatReceiver ? 'balance' : 'ubtBalance';
 
-                // Update Balances
-                if (tx.type !== 'COINBASE' && !isFloatSender) {
-                    t.update(senderRef, { [balKey]: increment(-(tx.amount + (tx.fee || 0))) });
-                } else if (tx.type === 'COINBASE') {
-                    // Coinbase sender is GENESIS (vault)
-                    t.update(senderRef, { balance: increment(-(tx.amount)) });
-                }
-                
-                if (!isFloatReceiver) {
-                    t.update(receiverRef, { [recvBalKey]: increment(tx.amount) });
-                } else if (isFloatReceiver) {
-                    t.update(receiverRef, { balance: increment(tx.amount) });
-                }
+                    // Update Balances
+                    if (tx.type !== 'COINBASE' && !isFloatSender) {
+                        t.set(senderRef, { [balKey]: increment(-(tx.amount + (tx.fee || 0))) }, { merge: true });
+                    } else if (tx.type === 'COINBASE') {
+                        // Coinbase sender is GENESIS (vault)
+                        t.set(senderRef, { balance: increment(-(tx.amount)) }, { merge: true });
+                    }
+                    
+                    if (!isFloatReceiver) {
+                        t.set(receiverRef, { [recvBalKey]: increment(tx.amount) }, { merge: true });
+                    } else if (isFloatReceiver) {
+                        t.set(receiverRef, { balance: increment(tx.amount) }, { merge: true });
+                    }
 
-                // Handle Vouch Logic
-                if (tx.type === 'VOUCH_ANCHOR') {
-                    t.update(receiverRef, { 
-                        credibility_score: increment(5), 
-                        vouchCount: increment(1) 
-                    });
-                }
+                    // Credit GENESIS for transaction fees to maintain ledger integrity
+                    if (tx.type !== 'COINBASE' && (tx.fee || 0) > 0) {
+                        t.set(doc(collections.vaults, 'GENESIS'), { balance: increment(tx.fee || 0) }, { merge: true });
+                    }
+
+                    // Handle Vouch Logic
+                    if (tx.type === 'VOUCH_ANCHOR') {
+                        t.set(receiverRef, { 
+                            credibility_score: increment(5), 
+                            vouchCount: increment(1) 
+                        }, { merge: true });
+                    }
                 
                 t.set(doc(collections.ledger, sanitizeDocId(tx.signature || tx.id)), {
                     ...tx,
@@ -494,7 +506,11 @@ export const api = {
         });
 
         return newBlock;
-    },
+    } catch (error) {
+        handleFirestoreError(error, OperationType.WRITE, 'mempool/blocks');
+        return null;
+    }
+},
 
     validateBlock: async (block: Block, previousBlock: Block | null): Promise<boolean> => {
         // 1. Check index
@@ -909,161 +925,198 @@ export const api = {
     },
 
     reconcileAllBalances: async () => {
-        const usersSnap = await getDocs(collections.users);
-        const vaultsSnap = await getDocs(collections.vaults);
-        const ledgerSnap = await getDocs(collections.ledger);
-        const txs = ledgerSnap.docs.map(d => d.data() as UbtTransaction);
-        
-        console.log(`[Reconcile] Starting reconciliation of ${txs.length} transactions for ${usersSnap.size} users and ${vaultsSnap.size} vaults.`);
-
-        // Map to store balances being reconstructed
-        const balanceMap = new Map<string, { balance: number, type: 'user' | 'vault' }>();
-        const publicKeyToId = new Map<string, string>();
-
-        // Initialize with current users and their initial stakes
-        usersSnap.docs.forEach(doc => {
-            const data = doc.data();
-            balanceMap.set(doc.id, { 
-                balance: Number(data.initialUbtStake || 0), 
-                type: 'user'
-            });
-            if (data.publicKey) publicKeyToId.set(data.publicKey, doc.id);
-        });
-
-        // Initialize with vaults
-        vaultsSnap.docs.forEach(doc => {
-            const data = doc.data();
-            balanceMap.set(doc.id, { 
-                balance: Number(data.balance || 0), 
-                type: 'vault'
-            });
-            if (data.publicKey) publicKeyToId.set(data.publicKey, doc.id);
-        });
-
-        // Ensure all system vaults are present in the balance map
-        const systemVaults = ['GENESIS', 'FLOAT', 'SYSTEM', 'DISTRESS', 'SUSTENANCE', 'VENTURE', 'SYSTEM_MINER'];
-        systemVaults.forEach(vId => {
-            if (!balanceMap.has(vId)) {
-                balanceMap.set(vId, { 
-                    balance: vId === 'GENESIS' ? 15000000 : 0, 
-                    type: 'vault' 
-                });
-            } else if (vId === 'GENESIS') {
-                // Always reset GENESIS to 15M for reconstruction
-                balanceMap.get('GENESIS')!.balance = 15000000;
-            }
-        });
-
-        // Sort transactions by timestamp to ensure correct order
-        const sortedTxs = [...txs].sort((a, b) => {
-            const timeA = a.timestamp instanceof Timestamp ? a.timestamp.toMillis() : (Number(a.timestamp) || 0);
-            const timeB = b.timestamp instanceof Timestamp ? b.timestamp.toMillis() : (Number(b.timestamp) || 0);
-            return timeA - timeB;
-        });
-
-        // Single pass over ledger to calculate all balances
-        sortedTxs.forEach(tx => {
-            const amt = Number(tx.amount || 0);
-            const fee = Number(tx.fee || 0);
+        try {
+            const authInstance = getAuthInstance();
+            console.log(`[Reconcile] Starting reconciliation. Admin: ${authInstance?.currentUser?.uid || 'NONE'}`);
             
-            let senderId = tx.senderId;
-            let receiverId = tx.receiverId;
+            const usersSnap = await getDocs(collections.users);
+            const vaultsSnap = await getDocs(collections.vaults);
+            const ledgerSnap = await getDocs(collections.ledger);
+            const txs = ledgerSnap.docs.map(d => d.data() as UbtTransaction);
+            
+            console.log(`[Reconcile] Starting reconciliation of ${txs.length} transactions for ${usersSnap.size} users and ${vaultsSnap.size} vaults.`);
 
-            // Resolve IDs from public keys
-            // 1. Check if senderId is a public key
-            if (publicKeyToId.has(senderId)) {
-                senderId = publicKeyToId.get(senderId)!;
-            } else if (tx.senderPublicKey && publicKeyToId.has(tx.senderPublicKey)) {
-                senderId = publicKeyToId.get(tx.senderPublicKey)!;
-            }
+            // Map to store balances being reconstructed
+            const balanceMap = new Map<string, { balance: number, type: 'user' | 'vault' }>();
+            const publicKeyToId = new Map<string, string>();
 
-            // 2. Check if receiverId is a public key
-            if (publicKeyToId.has(receiverId)) {
-                receiverId = publicKeyToId.get(receiverId)!;
-            } else if (tx.receiverPublicKey && publicKeyToId.has(tx.receiverPublicKey)) {
-                receiverId = publicKeyToId.get(tx.receiverPublicKey)!;
-            }
+            // Initialize all users to 0
+            usersSnap.docs.forEach(doc => {
+                const data = doc.data();
+                balanceMap.set(doc.id, { 
+                    balance: 0, 
+                    type: 'user'
+                });
+                if (data.publicKey) publicKeyToId.set(data.publicKey, doc.id);
+            });
 
-            // Debit sender
-            if (balanceMap.has(senderId)) {
-                const senderData = balanceMap.get(senderId)!;
-                if (tx.type === 'COINBASE') {
-                    // Coinbase sender (usually GENESIS) pays the full amount (reward + fees)
-                    senderData.balance -= amt;
+            // Initialize all vaults to 0
+            vaultsSnap.docs.forEach(doc => {
+                const data = doc.data();
+                balanceMap.set(doc.id, { 
+                    balance: 0, 
+                    type: 'vault'
+                });
+                if (data.publicKey) publicKeyToId.set(data.publicKey, doc.id);
+            });
+
+            // Ensure all system vaults are present in the balance map and initialized to 0
+            // Note: 'SYSTEM' is excluded as it is the infinite source/sink for minting/burning
+            const systemVaults = ['GENESIS', 'FLOAT', 'DISTRESS', 'SUSTENANCE', 'VENTURE', 'SYSTEM_MINER'];
+            systemVaults.forEach(vId => {
+                if (!balanceMap.has(vId)) {
+                    balanceMap.set(vId, { 
+                        balance: 0, 
+                        type: 'vault' 
+                    });
                 } else {
-                    // Regular sender pays amount + fee
-                    senderData.balance -= (amt + fee);
+                    balanceMap.get(vId)!.balance = 0;
+                }
+            });
+
+            // Sort transactions by timestamp to ensure correct order
+            const sortedTxs = [...txs].sort((a, b) => {
+                const timeA = a.timestamp instanceof Timestamp ? a.timestamp.toMillis() : (Number(a.timestamp) || 0);
+                const timeB = b.timestamp instanceof Timestamp ? b.timestamp.toMillis() : (Number(b.timestamp) || 0);
+                return timeA - timeB;
+            });
+
+            // Single pass over ledger to calculate all balances
+            sortedTxs.forEach(tx => {
+                const amt = Number(tx.amount || 0);
+                const fee = Number(tx.fee || 0);
+                
+                let senderId = tx.senderId;
+                let receiverId = tx.receiverId;
+
+                // Resolve IDs from public keys
+                if (publicKeyToId.has(senderId)) {
+                    senderId = publicKeyToId.get(senderId)!;
+                } else if (tx.senderPublicKey && publicKeyToId.has(tx.senderPublicKey)) {
+                    senderId = publicKeyToId.get(tx.senderPublicKey)!;
+                }
+
+                if (publicKeyToId.has(receiverId)) {
+                    receiverId = publicKeyToId.get(receiverId)!;
+                } else if (tx.receiverPublicKey && publicKeyToId.has(tx.receiverPublicKey)) {
+                    receiverId = publicKeyToId.get(tx.receiverPublicKey)!;
+                }
+
+                // Debit sender (except SYSTEM which is the minting source)
+                if (senderId !== 'SYSTEM' && balanceMap.has(senderId)) {
+                    const senderData = balanceMap.get(senderId)!;
+                    if (tx.type === 'COINBASE') {
+                        senderData.balance -= amt;
+                    } else {
+                        senderData.balance -= (amt + fee);
+                    }
+                }
+
+                // Credit receiver (except SYSTEM which is the minting source)
+                if (receiverId !== 'SYSTEM' && balanceMap.has(receiverId)) {
+                    const receiverData = balanceMap.get(receiverId)!;
+                    receiverData.balance += amt;
+                }
+
+                // Credit GENESIS for transaction fees to maintain ledger integrity
+                if (tx.type !== 'COINBASE' && fee > 0) {
+                    const genesisData = balanceMap.get('GENESIS');
+                    if (genesisData) {
+                        genesisData.balance += fee;
+                    }
+                }
+            });
+
+            console.log(`[Reconcile] Reconciliation complete. Committing updates...`);
+
+            // Commit updates in batches
+            let batch = writeBatch(getDb());
+            let count = 0;
+            let circulatingUbt = 0;
+            let totalUbt = 0;
+            
+            for (const [id, data] of balanceMap.entries()) {
+                const ref = data.type === 'user' ? doc(collections.users, id) : doc(collections.vaults, id);
+                const field = data.type === 'user' ? 'ubtBalance' : 'balance';
+                
+                if (data.type === 'user') {
+                    circulatingUbt += data.balance;
+                }
+                totalUbt += data.balance;
+
+                // Use set with merge: true instead of update to handle missing documents
+                batch.set(ref, { [field]: data.balance }, { merge: true });
+                count++;
+                
+                if (count >= 400) {
+                    await batch.commit();
+                    batch = writeBatch(getDb());
+                    count = 0;
                 }
             }
 
-            // Credit receiver
-            if (balanceMap.has(receiverId)) {
-                const receiverData = balanceMap.get(receiverId)!;
-                // Receiver always gets the amount specified in tx.amount
-                receiverData.balance += amt;
-            }
-        });
-
-        console.log(`[Reconcile] Reconciliation complete. Committing updates...`);
-
-        // Commit updates in batches
-        const batch = writeBatch(getDb());
-        let count = 0;
-        
-        for (const [id, data] of balanceMap.entries()) {
-            const ref = data.type === 'user' ? doc(collections.users, id) : doc(collections.vaults, id);
-            const field = data.type === 'user' ? 'ubtBalance' : 'balance';
-            batch.update(ref, { [field]: data.balance });
+            // Update economy stats
+            const econRef = doc(collections.globals, 'economy');
+            batch.set(econRef, { 
+                circulating_ubt: circulatingUbt,
+                total_ubt_supply: totalUbt,
+                last_reconciliation: serverTimestamp()
+            }, { merge: true });
             count++;
-            if (count >= 400) {
-                await batch.commit();
-                count = 0;
-            }
+
+            if (count > 0) await batch.commit();
+            console.log(`[Reconcile] Successfully updated ${balanceMap.size} balances. Circulating: ${circulatingUbt}, Total: ${totalUbt}`);
+        } catch (error) {
+            handleFirestoreError(error, OperationType.WRITE, 'reconcileAllBalances');
+            throw error;
         }
-        if (count > 0) await batch.commit();
-        console.log(`[Reconcile] Successfully updated ${balanceMap.size} balances.`);
     },
 
     reconcileUserBalance: async (uid: string) => {
-        const userDoc = await getDoc(doc(collections.users, uid));
-        if (!userDoc.exists()) throw new Error("User not found");
-        
-        const userData = userDoc.data();
-        const userPublicKey = userData.publicKey;
-        const initialStake = Number(userData.initialUbtStake || 0);
-
-        // Fetch all transactions where this user is either sender or receiver (by ID or Public Key)
-        const q = query(collections.ledger, or(
-            where('participants', 'array-contains', uid),
-            where('senderId', '==', uid),
-            where('receiverId', '==', uid),
-            where('senderPublicKey', '==', userPublicKey),
-            where('receiverPublicKey', '==', userPublicKey)
-        ));
-        
-        const snapshot = await getDocs(q);
-        let calculatedBalance = initialStake;
-        
-        snapshot.docs.forEach(d => {
-            const tx = d.data() as UbtTransaction;
-            const amt = Number(tx.amount || 0);
-            const fee = Number(tx.fee || 0);
+        try {
+            const userDoc = await getDoc(doc(collections.users, uid));
+            if (!userDoc.exists()) throw new Error("User not found");
             
-            const isReceiver = tx.receiverId === uid || (userPublicKey && tx.receiverPublicKey === userPublicKey);
-            const isSender = tx.senderId === uid || (userPublicKey && tx.senderPublicKey === userPublicKey);
+            const userData = userDoc.data();
+            const userPublicKey = userData.publicKey;
+            const initialStake = Number(userData.initialUbtStake || 0);
 
-            if (isReceiver) calculatedBalance += amt;
-            if (isSender) {
-                if (tx.type === 'COINBASE') {
-                    calculatedBalance -= amt;
-                } else {
-                    calculatedBalance -= (amt + fee);
+            // Fetch all transactions where this user is either sender or receiver
+            const q = query(collections.ledger, or(
+                where('participants', 'array-contains', uid),
+                where('senderId', '==', uid),
+                where('receiverId', '==', uid),
+                where('senderPublicKey', '==', userPublicKey),
+                where('receiverPublicKey', '==', userPublicKey)
+            ));
+            
+            const snapshot = await getDocs(q);
+            let calculatedBalance = 0;
+            
+            snapshot.docs.forEach(d => {
+                const tx = d.data() as UbtTransaction;
+                const amt = Number(tx.amount || 0);
+                const fee = Number(tx.fee || 0);
+                
+                const isReceiver = tx.receiverId === uid || (userPublicKey && tx.receiverPublicKey === userPublicKey);
+                const isSender = tx.senderId === uid || (userPublicKey && tx.senderPublicKey === userPublicKey);
+
+                if (isReceiver) calculatedBalance += amt;
+                if (isSender) {
+                    if (tx.type === 'COINBASE') {
+                        calculatedBalance -= amt;
+                    } else {
+                        calculatedBalance -= (amt + fee);
+                    }
                 }
-            }
-        });
+            });
 
-        await updateDoc(doc(collections.users, uid), { ubtBalance: calculatedBalance });
-        return calculatedBalance;
+            await setDoc(doc(collections.users, uid), { ubtBalance: calculatedBalance }, { merge: true });
+            return calculatedBalance;
+        } catch (error) {
+            handleFirestoreError(error, OperationType.WRITE, `users/${uid}/reconcile`);
+            throw error;
+        }
     },
 
     // Fix: Added searchUsers for directory and dispatching
