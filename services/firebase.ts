@@ -20,23 +20,11 @@ const getFirebaseConfig = () => {
     firebaseConfig = {};
     if (isNode) {
         try {
-            // Use dynamic import for Node.js modules if needed, but since this is a sync function
-            // and we're in a Node environment, we can try to use the global require if available
-            // or just skip it if we can't do it synchronously.
-            // However, in many modern Node environments, we can't easily do sync dynamic imports.
-            // Let's try to use the process.cwd() and fs if we can get them.
-            // A better way is to just use the environment variables which should be set.
-            // But if we really need the file, we might need to make this async or use a different approach.
-            
-            // For now, let's try to use the fact that we might be in a CommonJS environment or use a hack.
-            // Actually, I'll just use the environment variables for now, as they should be set by the platform.
-            // If they are not, we might have issues anyway.
-            
-            // Wait, I'll try to use the 'fs' module if it's available globally or via require.
+            // In Node.js environment, we can use fs and path directly if they are available
             // @ts-ignore
-            const fs = typeof require !== 'undefined' ? require('fs') : null;
+            const fs = require('fs');
             // @ts-ignore
-            const path = typeof require !== 'undefined' ? require('path') : null;
+            const path = require('path');
             
             if (fs && path) {
                 const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
@@ -44,7 +32,9 @@ const getFirebaseConfig = () => {
                     firebaseConfig = JSON.parse(fs.readFileSync(configPath, 'utf8'));
                 }
             }
-        } catch (e) {}
+        } catch (e) {
+            // If require fails (e.g. in some ESM environments), we might need to skip
+        }
     } else {
         try {
             // In Vite environment (client-side)
@@ -79,7 +69,7 @@ const getConfig = () => {
     return {
         apiKey: getEnvVar('VITE_FIREBASE_API_KEY') || fbConfig.apiKey,
         authDomain: getEnvVar('VITE_FIREBASE_AUTH_DOMAIN') || fbConfig.authDomain,
-        projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID') || fbConfig.projectId,
+        projectId: getEnvVar('VITE_FIREBASE_PROJECT_ID') || getEnvVar('GOOGLE_CLOUD_PROJECT') || fbConfig.projectId,
         storageBucket: getEnvVar('VITE_FIREBASE_STORAGE_BUCKET') || fbConfig.storageBucket,
         messagingSenderId: getEnvVar('VITE_FIREBASE_MESSAGING_SENDER_ID') || fbConfig.messagingSenderId,
         appId: getEnvVar('VITE_FIREBASE_APP_ID') || fbConfig.appId,

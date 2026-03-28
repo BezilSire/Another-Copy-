@@ -1,52 +1,48 @@
-import { initializeApp, getApps, getApp, App } from 'firebase-admin/app';
-import { getFirestore, Firestore } from 'firebase-admin/firestore';
-import { getAuth, Auth } from 'firebase-admin/auth';
+import { initializeApp as initializeAdminApp, getApps as getAdminApps, getApp as getAdminAppInstance, App as AdminApp } from 'firebase-admin/app';
+import { getFirestore as getAdminFirestore, Firestore as AdminFirestore } from 'firebase-admin/firestore';
+import { getAuth as getAdminAuthInstance, Auth as AdminAuth } from 'firebase-admin/auth';
+import { getDbInstance } from './firebase.js'; 
 import * as fs from 'fs';
 import * as path from 'path';
 
-let adminApp: App | null = null;
-let adminDb: Firestore | null = null;
-let adminAuth: Auth | null = null;
+let adminApp: AdminApp | null = null;
+let adminDb: any = null;
+let adminAuth: AdminAuth | null = null;
+
+const getConfig = () => {
+    try {
+        const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
+        if (fs.existsSync(configPath)) {
+            return JSON.parse(fs.readFileSync(configPath, 'utf8'));
+        }
+    } catch (e) {}
+    return {};
+};
 
 export const getAdminApp = () => {
     if (adminApp) return adminApp;
     
-    let projectId = process.env.VITE_FIREBASE_PROJECT_ID || 
-                    process.env.FIREBASE_PROJECT_ID || 
-                    process.env.GOOGLE_CLOUD_PROJECT ||
-                    process.env.GCP_PROJECT;
+    const config = getConfig();
+    let projectId = process.env.FIREBASE_PROJECT_ID || 
+                    process.env.VITE_FIREBASE_PROJECT_ID || 
+                    config.projectId;
     
-    // Fallback to config file if available
-    try {
-        const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-        if (fs.existsSync(configPath)) {
-            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            if (config.projectId && (!projectId || projectId.includes('TODO'))) {
-                projectId = config.projectId;
-            }
-        }
-    } catch (e) {}
-    
-    // If projectId is a placeholder or missing, let it auto-detect from the environment
     if (!projectId || projectId.includes('TODO')) {
         projectId = undefined;
     }
     
-    const apps = getApps();
+    const apps = getAdminApps();
     if (!apps.length) {
-        console.log(`Firebase Admin: Initializing... Project ID: ${projectId || 'auto-detect'}`);
         try {
-            adminApp = initializeApp({
+            adminApp = initializeAdminApp({
                 projectId: projectId
             });
-            console.log("Firebase Admin: Initialization successful.");
         } catch (error) {
-            console.error("Firebase Admin: Initialization failed:", error);
-            // Fallback to default initialization
-            adminApp = initializeApp();
+            console.error("Admin: Failed to initialize with projectId, trying default:", error);
+            adminApp = initializeAdminApp();
         }
     } else {
-        adminApp = getApp();
+        adminApp = getAdminAppInstance();
     }
     return adminApp;
 };
@@ -54,34 +50,26 @@ export const getAdminApp = () => {
 export const getAdminAuth = () => {
     if (adminAuth) return adminAuth;
     const app = getAdminApp();
-    adminAuth = getAuth(app);
+    adminAuth = getAdminAuthInstance(app);
     return adminAuth;
 };
 
+/**
+ * Returns a Firestore instance.
+ * We use the Admin SDK Firestore to bypass security rules on the server.
+ */
 export const getAdminDb = () => {
     if (adminDb) return adminDb;
-    
     const app = getAdminApp();
+    const config = getConfig();
+    const databaseId = config.firestoreDatabaseId || '(default)';
     
-    // Use the named database if provided
-    let databaseId = process.env.VITE_FIREBASE_FIRESTORE_DATABASE_ID || process.env.VITE_FIREBASE_DATABASE_ID || process.env.FIREBASE_DATABASE_ID;
-    
-    // Fallback to config file
     try {
-        const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
-        if (fs.existsSync(configPath)) {
-            const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
-            if (config.firestoreDatabaseId && !databaseId) {
-                databaseId = config.firestoreDatabaseId;
-            }
-        }
-    } catch (e) {}
-    
-    if (databaseId && databaseId !== '(default)') {
-        adminDb = getFirestore(app, databaseId);
-    } else {
-        adminDb = getFirestore(app);
+        adminDb = getAdminFirestore(app, databaseId);
+        console.log(`Admin: Firestore initialized for database: ${databaseId}`);
+    } catch (error) {
+        console.error("Admin: Failed to initialize Firestore with databaseId, trying default:", error);
+        adminDb = getAdminFirestore(app);
     }
-    
     return adminDb;
 };

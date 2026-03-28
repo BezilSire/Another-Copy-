@@ -110,6 +110,9 @@ export function handleFirestoreError(error: unknown, operationType: OperationTyp
 }
 
 const getDb = () => {
+    // DO NOT swap with adminDb here because it breaks Client SDK functions like collection()
+    // Instead, we rely on the Client SDK being authenticated as an admin on the server
+    // via the custom token trick in server.ts
     const d = getDbInstance();
     if (!d) throw new Error("Firestore not configured");
     return d;
@@ -134,7 +137,7 @@ const collections = {
     get activity() { return collection(getDb(), 'activity'); },
     get proposals() { return collection(getDb(), 'proposals'); },
     get payouts() { return collection(getDb(), 'payouts'); },
-    get vaults() { return collection(getDb(), 'treasury_vaults'); },
+    get vaults() { return collection(getDb(), 'vaults'); },
     get ledger() { return collection(getDb(), 'ledger'); },
     get resources() { return collection(getDb(), 'resources'); },
     get disputes() { return collection(getDb(), 'disputes'); },
@@ -961,8 +964,7 @@ export const api = {
             });
 
             // Ensure all system vaults are present in the balance map and initialized to 0
-            // Note: 'SYSTEM' is excluded as it is the infinite source/sink for minting/burning
-            const systemVaults = ['GENESIS', 'FLOAT', 'DISTRESS', 'SUSTENANCE', 'VENTURE', 'SYSTEM_MINER'];
+            const systemVaults = ['GENESIS', 'FLOAT', 'DISTRESS', 'SUSTENANCE', 'VENTURE', 'SYSTEM_MINER', 'SYSTEM', 'PROTOCOL_ORIGIN'];
             systemVaults.forEach(vId => {
                 if (!balanceMap.has(vId)) {
                     balanceMap.set(vId, { 
@@ -1002,20 +1004,30 @@ export const api = {
                     receiverId = publicKeyToId.get(tx.receiverPublicKey)!;
                 }
 
-                // Debit sender (except SYSTEM which is the minting source)
-                if (senderId !== 'SYSTEM' && balanceMap.has(senderId)) {
-                    const senderData = balanceMap.get(senderId)!;
-                    if (tx.type === 'COINBASE') {
-                        senderData.balance -= amt;
+                // Debit sender (except SYSTEM and PROTOCOL_ORIGIN which are the minting sources)
+                if (senderId !== 'SYSTEM' && senderId !== 'PROTOCOL_ORIGIN') {
+                    const senderData = balanceMap.get(senderId);
+                    if (senderData) {
+                        if (tx.type === 'COINBASE') {
+                            senderData.balance -= amt;
+                        } else {
+                            senderData.balance -= (amt + fee);
+                        }
                     } else {
-                        senderData.balance -= (amt + fee);
+                        console.warn(`[Reconcile] Unknown sender ${senderId} in transaction ${tx.id}. Tracking debt to maintain supply integrity.`);
+                        balanceMap.set(senderId, { balance: -(amt + fee), type: 'user' });
                     }
                 }
 
-                // Credit receiver (except SYSTEM which is the minting source)
-                if (receiverId !== 'SYSTEM' && balanceMap.has(receiverId)) {
-                    const receiverData = balanceMap.get(receiverId)!;
-                    receiverData.balance += amt;
+                // Credit receiver (except SYSTEM which is the burning sink)
+                if (receiverId !== 'SYSTEM') {
+                    const receiverData = balanceMap.get(receiverId);
+                    if (receiverData) {
+                        receiverData.balance += amt;
+                    } else {
+                        console.warn(`[Reconcile] Unknown receiver ${receiverId} in transaction ${tx.id}. Creating entry.`);
+                        balanceMap.set(receiverId, { balance: amt, type: 'user' });
+                    }
                 }
 
                 // Credit GENESIS for transaction fees to maintain ledger integrity
@@ -1029,43 +1041,85 @@ export const api = {
 
             console.log(`[Reconcile] Reconciliation complete. Committing updates...`);
 
-            // Commit updates in batches
-            let batch = writeBatch(getDb());
-            let count = 0;
-            let circulatingUbt = 0;
-            let totalUbt = 0;
-            
-            for (const [id, data] of balanceMap.entries()) {
-                const ref = data.type === 'user' ? doc(collections.users, id) : doc(collections.vaults, id);
-                const field = data.type === 'user' ? 'ubtBalance' : 'balance';
-                
-                if (data.type === 'user') {
-                    circulatingUbt += data.balance;
+            // Calculate expected supply from ledger
+            let expectedSupply = 0;
+            sortedTxs.forEach(tx => {
+                if (tx.senderId === 'SYSTEM' || tx.senderId === 'PROTOCOL_ORIGIN') {
+                    expectedSupply += Number(tx.amount || 0);
+                } else if (tx.receiverId === 'SYSTEM') {
+                    expectedSupply -= Number(tx.amount || 0);
                 }
-                totalUbt += data.balance;
+            });
 
-                // Use set with merge: true instead of update to handle missing documents
-                batch.set(ref, { [field]: data.balance }, { merge: true });
-                count++;
-                
-                if (count >= 400) {
-                    await batch.commit();
-                    batch = writeBatch(getDb());
-                    count = 0;
+            // Commit updates
+            const isNode = typeof process !== 'undefined' && process.versions && process.versions.node;
+            const adminDb = isNode ? (global as any).adminDb : null;
+
+            if (adminDb) {
+                // Use Admin SDK on server for reliable writes
+                let batch = adminDb.batch();
+                let count = 0;
+                let circulatingUbt = 0;
+                let totalUbt = 0;
+
+                for (const [id, data] of balanceMap.entries()) {
+                    const ref = data.type === 'user' ? adminDb.collection('users').doc(id) : adminDb.collection('vaults').doc(id);
+                    const field = data.type === 'user' ? 'ubtBalance' : 'balance';
+                    
+                    if (data.type === 'user') circulatingUbt += data.balance;
+                    totalUbt += data.balance;
+
+                    batch.set(ref, { [field]: data.balance }, { merge: true });
+                    count++;
+                    
+                    if (count >= 400) {
+                        await batch.commit();
+                        batch = adminDb.batch();
+                        count = 0;
+                    }
                 }
+
+                const econRef = adminDb.collection('globals').doc('economy');
+                batch.set(econRef, { 
+                    circulating_ubt: circulatingUbt,
+                    total_ubt_supply: totalUbt,
+                    last_reconciliation: new Date()
+                }, { merge: true });
+                await batch.commit();
+                console.log(`[Reconcile] Admin SDK: Successfully updated ${balanceMap.size} balances.`);
+            } else {
+                // Use Client SDK on frontend
+                let batch = writeBatch(getDb());
+                let count = 0;
+                let circulatingUbt = 0;
+                let totalUbt = 0;
+                
+                for (const [id, data] of balanceMap.entries()) {
+                    const ref = data.type === 'user' ? doc(collections.users, id) : doc(collections.vaults, id);
+                    const field = data.type === 'user' ? 'ubtBalance' : 'balance';
+                    
+                    if (data.type === 'user') circulatingUbt += data.balance;
+                    totalUbt += data.balance;
+
+                    batch.set(ref, { [field]: data.balance }, { merge: true });
+                    count++;
+                    
+                    if (count >= 400) {
+                        await batch.commit();
+                        batch = writeBatch(getDb());
+                        count = 0;
+                    }
+                }
+
+                const econRef = doc(collections.globals, 'economy');
+                batch.set(econRef, { 
+                    circulating_ubt: circulatingUbt,
+                    total_ubt_supply: totalUbt,
+                    last_reconciliation: serverTimestamp()
+                }, { merge: true });
+                await batch.commit();
+                console.log(`[Reconcile] Client SDK: Successfully updated ${balanceMap.size} balances.`);
             }
-
-            // Update economy stats
-            const econRef = doc(collections.globals, 'economy');
-            batch.set(econRef, { 
-                circulating_ubt: circulatingUbt,
-                total_ubt_supply: totalUbt,
-                last_reconciliation: serverTimestamp()
-            }, { merge: true });
-            count++;
-
-            if (count > 0) await batch.commit();
-            console.log(`[Reconcile] Successfully updated ${balanceMap.size} balances. Circulating: ${circulatingUbt}, Total: ${totalUbt}`);
         } catch (error) {
             handleFirestoreError(error, OperationType.WRITE, 'reconcileAllBalances');
             throw error;

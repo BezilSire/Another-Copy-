@@ -14,38 +14,49 @@ export const AuthPage: React.FC = () => {
   const [mnemonic, setMnemonic] = useState('');
   const [isPasswordVisible, setIsPasswordVisible] = useState(false);
   const [isResetMode, setIsResetMode] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleGoogleLogin = async () => {
+    setError(null);
     try {
       await loginWithGoogle();
-    } catch (err) {}
+    } catch (err: any) {
+      setError(err.message || "Google Login Failed");
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     try {
       await login({ email, password });
     } catch (err: any) {
       console.error("Login component error:", err);
+      setError(err.message || "Login Failed");
     }
   };
 
   const handleRestore = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     try {
       await restoreWallet(mnemonic, email, password);
     } catch (err: any) {
       console.error("Restore component error:", err);
+      setError(err.message || "Restore Failed");
     }
   };
 
   const handleReset = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
     try {
       await sendPasswordReset(email);
       setIsResetMode(false);
+      setError("Password reset email sent.");
     } catch (err: any) {
       console.error("Reset component error:", err);
+      setError(err.message || "Reset Failed");
     }
   };
 
@@ -63,6 +74,12 @@ export const AuthPage: React.FC = () => {
           <h2 className="text-3xl font-bold text-center text-white tracking-tight leading-none">Ubuntium Global Commons</h2>
           <p className="text-xs font-medium text-slate-400 mt-2 tracking-wide">Sign In</p>
         </div>
+
+        {error && (
+          <div className={`mb-6 p-3 rounded-xl text-xs font-medium border ${error.includes('sent') ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
+            {error}
+          </div>
+        )}
 
         {isResetMode ? (
           <form onSubmit={handleReset} className="space-y-6">

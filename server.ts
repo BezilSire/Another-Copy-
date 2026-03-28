@@ -43,6 +43,23 @@ async function startServer() {
     res.json({ status: "ok", uptime: process.uptime(), initialized: !!(global as any).serverInitialized });
   });
 
+  app.get("/api/debug/auth", async (req, res) => {
+    try {
+      const { getAuthInstance } = await import("./services/firebase");
+      const auth = getAuthInstance();
+      res.json({
+        currentUser: auth?.currentUser ? {
+          uid: auth.currentUser.uid,
+          email: auth.currentUser.email,
+          emailVerified: auth.currentUser.emailVerified
+        } : null,
+        initialized: !!(global as any).serverInitialized
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Start listening immediately to satisfy infrastructure health checks
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server: Listening on http://localhost:${PORT}`);
@@ -67,12 +84,22 @@ async function startServer() {
         const { getAuthInstance } = await import("./services/firebase");
         const { signInWithCustomToken } = await import("firebase/auth");
         
+        console.log("Server: Attempting to authenticate Client SDK as Admin...");
         const adminAuth = getAdminAuth();
         const customToken = await adminAuth.createCustomToken("server-admin", { admin: true });
+        console.log("Server: Custom token created successfully.");
+        
         const auth = getAuthInstance();
         if (auth) {
-          const userCredential = await signInWithCustomToken(auth, customToken);
-          console.log(`Server: Client SDK authenticated as Admin. UID: ${userCredential.user.uid}`);
+          try {
+            const userCredential = await signInWithCustomToken(auth, customToken);
+            console.log(`Server: Client SDK authenticated as Admin. UID: ${userCredential.user.uid}`);
+          } catch (authErr: any) {
+            console.error("Server: signInWithCustomToken failed:", authErr.message);
+            if (authErr.code === 'auth/operation-not-allowed') {
+              console.error("Server: Custom token sign-in is not enabled in Firebase Console.");
+            }
+          }
           
           // Verify auth state is recognized by Firestore
           const { getDbInstance } = await import("./services/firebase");
@@ -80,12 +107,17 @@ async function startServer() {
           if (db) {
             console.log("Server: Firestore instance ready.");
           }
+        } else {
+          console.error("Server: Auth instance is null (mock?).");
         }
       } catch (err) {
         console.error("Server: Failed to authenticate Client SDK as Admin:", err);
       }
 
       // Lazy load services
+      const { getAdminDb } = await import("./services/firebaseAdmin");
+      (global as any).adminDb = getAdminDb();
+      
       const apiModule = await import("./services/apiService");
       const whatsappModule = await import("./services/whatsappService");
       const miningModule = await import("./services/miningService");

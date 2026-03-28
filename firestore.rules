@@ -1,149 +1,173 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    
-    // --- HELPER FUNCTIONS ---
-    function isSignedIn() { return request.auth != null; }
-    function isGuest() { return isSignedIn() && request.auth.token.firebase.sign_in_provider == 'anonymous'; }
-    function isMember() { return isSignedIn() && !isGuest(); }
-    
-    // Improved robust Admin check
-    function isAdmin() { 
-      return isSignedIn() && 
-             (request.auth.token.admin == true || 
-              request.auth.uid == "server-admin" ||
-              request.auth.token.uid == "server-admin" ||
-              request.auth.uid == "server-admin-uid" ||
-              (request.auth.token.email == "bezilsire00@gmail.com" || request.auth.token.email == "bezilsire01@gmail.com") && 
-              request.auth.token.email_verified == true); 
-    }
-    
-    function isOwner(uid) { return isSignedIn() && request.auth.uid == uid; }
 
-    // --- IDENTITY & WALLETS ---
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - name: string (required)
+    //   - email: string (required, email format)
+    //   - role: string (required, enum: admin, agent, member)
+    //   - status: string (required, enum: active, inactive)
+    //   - ubtBalance: number (optional)
+    //   - publicKey: string (optional)
+    //
+    // Collection: vaults
+    // Document ID: {vaultId}
+    // Fields:
+    //   - name: string (required)
+    //   - balance: number (required)
+    //   - type: string (required)
+    //
+    // Collection: ledger
+    // Document ID: {txId}
+    // Fields:
+    //   - senderId: string (required)
+    //   - receiverId: string (required)
+    //   - amount: number (required)
+    //   - type: string (required)
+    //   - timestamp: timestamp (required)
+    //
+    // Collection: mempool/blocks
+    // Document ID: {blockId}
+    // Fields:
+    //   - transactions: list (required)
+    //   - minerId: string (required)
+    //   - timestamp: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+        (request.auth.uid == "server-admin" ||
+         request.auth.token.admin == true ||
+         request.auth.token.email == "bezilsire00@gmail.com" ||
+         (request.auth.token.email == "bezilsire00@gmail.com" && request.auth.token.email_verified == true) ||
+         (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && 
+          get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin'));
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$");
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidUser(data) {
+      return isAdmin() || (
+             data.keys().hasAll(['name', 'email', 'role', 'status']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             isValidEmail(data.email) &&
+             data.role in ['admin', 'agent', 'member'] &&
+             data.status in ['active', 'inactive']
+      );
+    }
+
+    function isValidLedger(data) {
+      return data.keys().hasAll(['senderId', 'receiverId', 'amount', 'type']) &&
+             data.senderId is string && data.receiverId is string &&
+             data.amount is number && data.amount >= 0;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    // Users collection
     match /users/{userId} {
-      allow get: if true; 
-      allow read, list: if isSignedIn(); 
-      allow create: if isMember() && request.auth.uid == userId;
-      allow update: if isOwner(userId) || isAdmin();
-      
-      match /private/data {
-        allow read, write: if request.auth.uid == userId || isAdmin();
-      }
-
-      match /notifications/{id} { allow read, write: if isOwner(userId) || isAdmin(); }
-      match /transactions/{id} { allow read, list: if isOwner(userId) || isAdmin(); allow create: if isMember(); }
-      match /vaults/{id} { allow read, write, list: if isOwner(userId) || isAdmin(); }
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isOwner(userId) || isAdmin());
+      allow update: if isAuthenticated() && isValidUser(request.resource.data) && 
+                    (isOwner(userId) || isAdmin()) &&
+                    (request.resource.data.role == resource.data.role || isAdmin());
     }
 
-    // --- GOVERNANCE ---
-    match /candidates/{candidateId} {
-      allow read, list: if true; 
-      allow create: if isMember();
-      allow update: if isMember() && (request.resource.data.diff(resource.data).affectedKeys().hasOnly(['votes', 'voteCount', 'status']));
-      allow delete: if isAdmin() || (isMember() && resource.data.userId == request.auth.uid);
+    // Vaults collection
+    match /vaults/{vaultId} {
+      allow read: if true;
+      allow write: if isAdmin();
     }
 
-    // --- TREASURY & LEDGER ---
-    match /treasury_vaults/{vaultId} {
-      allow read, list: if isSignedIn(); 
-      allow write, update, delete: if isAdmin();
-    }
-    match /ledger/{docId} {
-      allow read, list: if true; 
-      allow create: if isMember() || isAdmin();
-      allow write, update: if isAdmin();
-    }
-    match /globals/{docId} {
-      allow read: if true; 
-      allow write, update: if isAdmin();
-    }
-    match /multisig_proposals/{id} {
-      allow read, list: if isSignedIn(); 
-      allow write, update: if isAdmin();
-    }
-
-    // --- BRIDGE / ORACLE ---
-    match /pending_ubt_purchases/{docId} {
-      allow read, list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isMember() || isAdmin();
+    // Ledger collection
+    match /ledger/{txId} {
+      allow read: if true;
+      allow create: if isAuthenticated() && isValidLedger(request.resource.data);
       allow update, delete: if isAdmin();
     }
 
-    // --- COMMUNITY ---
+    // Mempool
+    match /mempool/{txId} {
+      allow read: if true;
+      allow write: if isAuthenticated() || isAdmin();
+    }
+
+    match /mempool/{document=**} {
+      allow read: if true;
+      allow write: if isAuthenticated() || isAdmin();
+    }
+
+    // Blocks
+    match /blocks/{blockHash} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Globals / Economy
+    match /globals/{docId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // Posts
     match /posts/{postId} {
-      allow read, list: if isSignedIn();
-      allow create: if isMember();
-      allow update: if isMember() && (resource.data.authorId == request.auth.uid || isAdmin() || request.resource.data.diff(resource.data).affectedKeys().hasOnly(['upvotes', 'repostCount', 'commentCount', 'isPinned', 'content']));
-      allow delete: if isAdmin() || (isMember() && resource.data.authorId == request.auth.uid);
-      
-      match /comments/{id} { allow read, list: if isSignedIn(); allow write: if isMember(); }
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.authorId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (resource.data.authorId == request.auth.uid || isAdmin());
     }
-    
-    // --- ECOSYSTEM MODULES ---
-    match /members/{id} { 
-      allow read, list: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid); 
-      allow create: if isMember() || isAdmin(); 
-      allow update: if isAdmin() || (isSignedIn() && resource.data.uid == request.auth.uid);
-      allow delete: if isAdmin(); 
-    }
-    
-    match /proposals/{id} { allow read, list: if isSignedIn(); allow create, update: if isMember() || isAdmin(); }
-    match /ventures/{id} { allow read, list: if isSignedIn(); allow create: if isMember() || isAdmin(); allow update: if (isMember() && resource.data.ownerId == request.auth.uid) || isAdmin(); allow delete: if isAdmin() || (isMember() && resource.data.ownerId == request.auth.uid); match /distributions/{id} { allow read, list: if isSignedIn(); allow write: if isAdmin(); } }
-    match /payouts/{id} { allow read, list: if isAdmin() || (isMember() && resource.data.userId == request.auth.uid); allow create: if isMember(); allow update: if isAdmin(); }
-    match /broadcasts/{id} { allow read, list: if isSignedIn(); allow write: if isAdmin(); }
-    match /price_verifications/{id} { allow read, list: if isAdmin(); allow create: if isMember(); }
-    match /vouchers/{id} { allow read, list: if isMember() || isAdmin(); allow write: if isAdmin(); }
-    match /activity/{id} { allow read, list: if isSignedIn(); allow write: if isMember() || isAdmin(); }
-    match /reports/{id} { allow read, list: if isAdmin() || isMember(); allow write: if isMember() || isAdmin(); }
-    match /vouches/{id} { allow read, list: if isSignedIn(); allow write: if isMember() || isAdmin(); }
-    match /resources/{id} { allow read, list: if isSignedIn(); allow write: if isAdmin(); }
-    match /disputes/{id} { allow read, list: if isSignedIn(); allow write: if isMember() || isAdmin(); }
 
-    // --- SIMULATIONS ---
+    // Simulations
     match /simulations/{simId} {
-      allow read, list: if isSignedIn() && (resource.data.userId == request.auth.uid || request.query.filters.userId == request.auth.uid || isAdmin());
-      allow create: if isMember();
-      allow update, delete: if isSignedIn() && (resource.data.userId == request.auth.uid || isAdmin());
-
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+      
       match /agents/{agentId} {
-        allow read, list: if isSignedIn();
-        allow write: if isMember() || isAdmin();
+        allow read, write: if isAuthenticated();
       }
-
       match /messages/{msgId} {
-        allow read, list: if isSignedIn();
-        allow write: if isMember() || isAdmin();
+        allow read, write: if isAuthenticated();
       }
     }
 
-    // --- BLOCKCHAIN DATA ---
-    match /blocks/{id} {
-      allow read, list: if true; 
-      allow write: if isAdmin() || request.auth.uid == "server-admin";
-    }
-    match /mempool/{id} {
-      allow read, list: if isSignedIn();
-      allow write: if isMember() || isAdmin() || request.auth.uid == "server-admin";
-    }
-
-    // --- DISTRESS CALLS ---
+    // Distress Calls
     match /distress_calls/{callId} {
-      allow read, list: if isAdmin() || (isSignedIn() && resource.data.userId == request.auth.uid);
-      allow create: if isMember();
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
       allow update: if isAdmin();
     }
 
-    // --- WHATSAPP & ZIM PULSE ---
-    match /whatsapp_sessions/{sessionId} {
+    // Default deny
+    match /{document=**} {
       allow read, write: if isAdmin();
-      match /{allPaths=**} {
-        allow read, write: if isAdmin();
-      }
-    }
-    match /zim_pulse/{docId} {
-      allow read, list: if isSignedIn();
-      allow write: if isAdmin();
     }
   }
 }
